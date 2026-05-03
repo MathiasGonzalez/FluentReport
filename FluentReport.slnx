@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FluentReport/FluentReport.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FluentReport.Tests/FluentReport.Tests.csproj" />
+  </Folder>
+</Solution>
