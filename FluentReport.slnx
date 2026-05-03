@@ -5,4 +5,7 @@
   <Folder Name="/tests/">
     <Project Path="tests/FluentReport.Tests/FluentReport.Tests.csproj" />
   </Folder>
+  <Folder Name="/samples/">
+    <Project Path="samples/FluentReport.Samples/FluentReport.Samples.csproj" />
+  </Folder>
 </Solution>
