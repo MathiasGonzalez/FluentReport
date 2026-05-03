@@ -5,9 +5,10 @@ namespace FluentReport.Elements;
 
 public enum ImageFit { Contain, Cover, Fill, FitWidth, FitHeight }
 
-public class ImageElement : ElementBase
+public class ImageElement : ElementBase, IDisposable
 {
     private readonly SKBitmap? _bitmap;
+    private bool _disposed;
     public float? FixedWidth { get; set; }
     public float? FixedHeight { get; set; }
     public ImageFit Fit { get; set; } = ImageFit.Contain;
@@ -37,5 +38,15 @@ public class ImageElement : ElementBase
         var destRect = new SKRect(position.X, position.Y, position.X + size.Width, position.Y + size.Height);
         using var paint = new SKPaint { IsAntialias = true };
         context.Canvas.DrawBitmap(_bitmap, destRect, paint);
+    }
+
+    public void Dispose()
+    {
+        if (!_disposed)
+        {
+            _bitmap?.Dispose();
+            _disposed = true;
+        }
+        GC.SuppressFinalize(this);
     }
 }

@@ -32,7 +32,7 @@ public class BorderElement : ElementBase
             {
                 Color = Border.Color.ToSkColor(),
                 StrokeWidth = Border.Width,
-                IsStroke = true,
+                Style = SKPaintStyle.Stroke,
                 IsAntialias = true
             };
 

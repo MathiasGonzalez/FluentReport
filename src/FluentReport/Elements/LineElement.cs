@@ -24,7 +24,7 @@ public class LineElement : ElementBase
             Color = Color.ToSkColor(),
             StrokeWidth = Thickness,
             IsAntialias = true,
-            IsStroke = true
+            Style = SKPaintStyle.Stroke
         };
         if (Direction == LineDirection.Horizontal)
             context.Canvas.DrawLine(position.X, position.Y, position.X + size.Width, position.Y, paint);

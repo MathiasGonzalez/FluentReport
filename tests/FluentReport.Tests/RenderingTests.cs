@@ -66,7 +66,7 @@ public class RenderingTests
     }
 
     [Fact]
-    public void GeneratePdf_WithPageBreak_ShouldProduceLargerOutput()
+    public void GeneratePdf_WithPageBreak_ShouldProduceLargerOutputThanWithout()
     {
         var bytesWithBreak = Document.Create(container =>
         {
@@ -83,7 +83,23 @@ public class RenderingTests
             });
         }).GeneratePdf();
 
+        var bytesWithoutBreak = Document.Create(container =>
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.MarginAll(40);
+                page.Content().Column(col =>
+                {
+                    col.Item().Text("Page 1");
+                    col.Item().Text("Page 2");
+                });
+            });
+        }).GeneratePdf();
+
         Assert.NotEmpty(bytesWithBreak);
+        Assert.True(bytesWithBreak.Length > bytesWithoutBreak.Length,
+            "PDF with page break should be larger than PDF without page break");
     }
 
     [Fact]

@@ -41,60 +41,109 @@ public class TextElement : ElementBase
         _spans.Add(new TextSpan { IsTotalPages = true, Style = style ?? Style });
     }
 
-    private string GetFullText(RenderContext? ctx = null)
+    private static string ResolveSpanText(TextSpan span, RenderContext? ctx)
     {
-        var sb = new System.Text.StringBuilder();
-        foreach (var span in _spans)
-        {
-            if (span.IsCurrentPage) sb.Append(ctx?.CurrentPage.ToString() ?? "?");
-            else if (span.IsTotalPages) sb.Append(ctx?.TotalPages.ToString() ?? "?");
-            else sb.Append(span.StaticText ?? "");
-        }
-        return sb.ToString();
+        if (span.IsCurrentPage) return ctx?.CurrentPage.ToString() ?? "?";
+        if (span.IsTotalPages) return ctx?.TotalPages.ToString() ?? "?";
+        return span.StaticText ?? "";
     }
 
-    private static (SKFont Font, SKPaint Paint) CreateFontAndPaint(TextStyle style)
-    {
-        var typeface = SKTypeface.FromFamilyName(
+    private static SKTypeface CreateTypeface(TextStyle style)
+        => SKTypeface.FromFamilyName(
             style.FontFamily,
             style.Bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
             SKFontStyleWidth.Normal,
             style.Italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright
         ) ?? SKTypeface.Default;
 
-        var font = new SKFont(typeface, style.FontSize);
-        var paint = new SKPaint { Color = style.Color.ToSkColor(), IsAntialias = true };
-        return (font, paint);
-    }
-
     public override Size Measure(MeasureContext context)
     {
-        var text = GetFullText();
-        var style = _spans.Count > 0 ? _spans[0].Style : Style;
-        var (font, paint) = CreateFontAndPaint(style);
-        using var _ = font;
-        using var __ = paint;
+        if (_spans.Count == 0) return Size.Zero;
 
-        var lines = WrapText(text, font, context.AvailableWidth);
-        var lineHeight = style.FontSize * style.LineSpacing;
-        float width = 0;
-        foreach (var line in lines)
+        if (_spans.Count == 1)
         {
-            var w = font.MeasureText(line, paint);
-            if (w > width) width = w;
+            // Single span: full word-wrap support
+            var span = _spans[0];
+            var text = ResolveSpanText(span, null);
+            using var typeface = CreateTypeface(span.Style);
+            using var font = new SKFont(typeface, span.Style.FontSize);
+            using var paint = new SKPaint { Color = span.Style.Color.ToSkColor(), IsAntialias = true };
+
+            var lines = WrapText(text, font, context.AvailableWidth);
+            var lineHeight = span.Style.FontSize * span.Style.LineSpacing;
+            float width = 0;
+            foreach (var line in lines)
+            {
+                var w = font.MeasureText(line, paint);
+                if (w > width) width = w;
+            }
+            return new Size(Math.Min(width, context.AvailableWidth), lines.Count * lineHeight);
         }
-        width = Math.Min(width, context.AvailableWidth);
-        return new Size(width, lines.Count * lineHeight);
+        else
+        {
+            // Multiple spans: render inline; measure total width as sum of each span
+            float totalWidth = 0;
+            float maxLineHeight = 0;
+            foreach (var span in _spans)
+            {
+                var text = ResolveSpanText(span, null);
+                using var typeface = CreateTypeface(span.Style);
+                using var font = new SKFont(typeface, span.Style.FontSize);
+                using var paint = new SKPaint { Color = span.Style.Color.ToSkColor(), IsAntialias = true };
+
+                totalWidth += font.MeasureText(text, paint);
+                var lh = span.Style.FontSize * span.Style.LineSpacing;
+                if (lh > maxLineHeight) maxLineHeight = lh;
+            }
+            return new Size(Math.Min(totalWidth, context.AvailableWidth), maxLineHeight);
+        }
     }
 
     public override void Render(RenderContext context, Position position, Size size)
     {
-        var text = GetFullText(context);
-        var style = _spans.Count > 0 ? _spans[0].Style : Style;
-        var (font, paint) = CreateFontAndPaint(style);
-        using var _ = font;
-        using var __ = paint;
+        if (_spans.Count == 0) return;
 
+        if (_spans.Count == 1)
+        {
+            // Single span: full word-wrap, alignment, and justify support
+            var span = _spans[0];
+            var text = ResolveSpanText(span, context);
+            using var typeface = CreateTypeface(span.Style);
+            using var font = new SKFont(typeface, span.Style.FontSize);
+            using var paint = new SKPaint { Color = span.Style.Color.ToSkColor(), IsAntialias = true };
+
+            RenderWrappedText(context.Canvas, text, span.Style, font, paint, position, size);
+        }
+        else
+        {
+            // Multiple spans: render each span inline with its own style
+            float maxFontSize = _spans.Max(s => s.Style.FontSize);
+            float x = position.X;
+            float y = position.Y + maxFontSize; // baseline
+
+            foreach (var span in _spans)
+            {
+                var text = ResolveSpanText(span, context);
+                using var typeface = CreateTypeface(span.Style);
+                using var font = new SKFont(typeface, span.Style.FontSize);
+                using var paint = new SKPaint { Color = span.Style.Color.ToSkColor(), IsAntialias = true };
+
+                context.Canvas.DrawText(text, x, y, SKTextAlign.Left, font, paint);
+
+                if (span.Style.Underline)
+                {
+                    var textWidth = font.MeasureText(text, paint);
+                    using var underlinePaint = new SKPaint { Color = span.Style.Color.ToSkColor(), StrokeWidth = 1, Style = SKPaintStyle.Stroke };
+                    context.Canvas.DrawLine(x, y + 2, x + textWidth, y + 2, underlinePaint);
+                }
+
+                x += font.MeasureText(text, paint);
+            }
+        }
+    }
+
+    private static void RenderWrappedText(SKCanvas canvas, string text, TextStyle style, SKFont font, SKPaint paint, Position position, Size size)
+    {
         var lines = WrapText(text, font, size.Width);
         var lineHeight = style.FontSize * style.LineSpacing;
         var y = position.Y + style.FontSize;
@@ -113,17 +162,17 @@ public class TextElement : ElementBase
                     x = position.X + size.Width - lineWidth;
                     break;
                 case TextAlignment.Justify when line != lines[^1]:
-                    DrawJustified(context.Canvas, line, font, paint, position.X, y, size.Width);
+                    DrawJustified(canvas, line, font, paint, position.X, y, size.Width);
                     y += lineHeight;
                     continue;
             }
 
-            context.Canvas.DrawText(line, x, y, SKTextAlign.Left, font, paint);
+            canvas.DrawText(line, x, y, SKTextAlign.Left, font, paint);
 
             if (style.Underline)
             {
-                using var underlinePaint = new SKPaint { Color = style.Color.ToSkColor(), StrokeWidth = 1 };
-                context.Canvas.DrawLine(x, y + 2, x + lineWidth, y + 2, underlinePaint);
+                using var underlinePaint = new SKPaint { Color = style.Color.ToSkColor(), StrokeWidth = 1, Style = SKPaintStyle.Stroke };
+                canvas.DrawLine(x, y + 2, x + lineWidth, y + 2, underlinePaint);
             }
 
             y += lineHeight;

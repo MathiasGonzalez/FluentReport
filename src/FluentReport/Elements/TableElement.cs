@@ -32,7 +32,7 @@ public class TableElement : ElementBase
         if (Columns.Count == 0) return Array.Empty<float>();
         var fixedTotal = Columns.Where(c => !c.IsRelative).Sum(c => c.FixedWidth ?? 0);
         var relTotal = Columns.Where(c => c.IsRelative).Sum(c => c.RelativeWidth);
-        var remaining = availableWidth - fixedTotal;
+        var remaining = Math.Max(0f, availableWidth - fixedTotal);
         return Columns.Select(c => c.IsRelative
             ? (relTotal > 0 ? remaining * (c.RelativeWidth / relTotal) : 0)
             : (c.FixedWidth ?? 0)).ToArray();
@@ -110,7 +110,7 @@ public class TableElement : ElementBase
                     {
                         Color = BorderColor.ToSkColor(),
                         StrokeWidth = BorderWidth,
-                        IsStroke = true
+                        Style = SKPaintStyle.Stroke
                     };
                     ctx.Canvas.DrawRect(x, y, colWidths[col], rowHeight, borderPaint);
                 }

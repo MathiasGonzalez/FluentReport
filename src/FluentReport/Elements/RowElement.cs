@@ -52,7 +52,7 @@ public class RowElement : ElementBase
     private float GetItemWidth(RowItem item, float availableWidth, float fixedTotal, float relativeTotal, float spacing)
     {
         if (!item.IsRelative) return item.FixedWidth ?? 0;
-        var remaining = availableWidth - fixedTotal - spacing;
+        var remaining = Math.Max(0f, availableWidth - fixedTotal - spacing);
         return relativeTotal > 0 ? remaining * (item.RelativeWidth / relativeTotal) : 0;
     }
 }

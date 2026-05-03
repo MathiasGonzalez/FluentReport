@@ -104,7 +104,20 @@ public class DocumentRenderer
     {
         if (content == null) return new();
         var resolved = content is LazyElement lazy ? lazy.Built : content;
-        if (resolved is ColumnElement column) return column.Items.ToList();
+        if (resolved is ColumnElement column)
+        {
+            // Preserve column spacing by inserting spacers between items
+            if (column.Spacing <= 0) return column.Items.ToList();
+            var items = new List<IElement>();
+            bool first = true;
+            foreach (var item in column.Items)
+            {
+                if (!first) items.Add(new SpacerElement(column.Spacing));
+                first = false;
+                items.Add(item);
+            }
+            return items;
+        }
         return new List<IElement> { content };
     }
 
@@ -119,9 +132,13 @@ public class DocumentRenderer
             var resolved = element is LazyElement lazy ? lazy.Built : element;
             if (resolved is PageBreakElement)
             {
-                pages.Add(currentPage);
-                currentPage = new();
-                usedHeight = 0;
+                // Only start a new page if the current page has content
+                if (currentPage.Count > 0)
+                {
+                    pages.Add(currentPage);
+                    currentPage = new();
+                    usedHeight = 0;
+                }
                 continue;
             }
 
