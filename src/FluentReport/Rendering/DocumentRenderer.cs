@@ -11,6 +11,146 @@ public class DocumentRenderer
 
     public DocumentRenderer(DocumentSettings settings) => _settings = settings;
 
+    /// <summary>
+    /// Renders a single logical page (0-based index) to an <see cref="SKImage"/>.
+    /// The caller is responsible for disposing the returned image.
+    /// </summary>
+    public SKImage RenderPageToImage(int pageIndex, float scale = 1f)
+    {
+        if (scale <= 0)
+            throw new ArgumentOutOfRangeException(nameof(scale), scale, "Scale must be greater than zero.");
+
+        int total = CountTotalPages();
+
+        if (pageIndex < 0 || pageIndex >= total)
+            throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page index {pageIndex} is out of range (0–{total - 1}).");
+
+        // Iterate only until the requested page to avoid paging the whole document.
+        int visitedPageCount = 0;
+        int currentPageNumber = 0;
+
+        foreach (var pageSettings in _settings.Pages)
+        {
+            var contentWidth = pageSettings.ContentWidth;
+            var contentHeight = pageSettings.ContentHeight;
+
+            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight);
+            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight);
+            var contentAreaHeight = contentHeight - headerHeight - footerHeight;
+
+            var contentElements = GetContentElements(pageSettings.ContentElement);
+            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight);
+
+            if (pages.Count == 0) pages.Add(new List<(IElement, Size)>());
+
+            foreach (var pageContent in pages)
+            {
+                currentPageNumber++;
+                if (visitedPageCount == pageIndex)
+                    return RenderPageToImageCore(pageSettings, pageContent, currentPageNumber, total, scale);
+                visitedPageCount++;
+            }
+        }
+
+        // Unreachable: bounds are validated above via CountTotalPages().
+        throw new InvalidOperationException($"Page index {pageIndex} could not be located.");
+    }
+
+    /// <summary>Returns the total number of logical pages that would be rendered.</summary>
+    public int GetPageCount() => CountTotalPages();
+
+    /// <summary>
+    /// Renders all logical pages to PNG byte arrays in a single pagination pass,
+    /// avoiding the O(n²) cost of calling <see cref="RenderPageToImage"/> in a loop.
+    /// </summary>
+    internal IReadOnlyList<byte[]> RenderAllPages(float scale)
+    {
+        int total = CountTotalPages();
+        var result = new List<byte[]>();
+        int currentPage = 0;
+
+        foreach (var pageSettings in _settings.Pages)
+        {
+            var contentWidth = pageSettings.ContentWidth;
+            var contentHeight = pageSettings.ContentHeight;
+
+            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight);
+            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight);
+            var contentAreaHeight = contentHeight - headerHeight - footerHeight;
+
+            var contentElements = GetContentElements(pageSettings.ContentElement);
+            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight);
+
+            if (pages.Count == 0) pages.Add(new List<(IElement, Size)>());
+
+            foreach (var pageContent in pages)
+            {
+                currentPage++;
+                using var image = RenderPageToImageCore(pageSettings, pageContent, currentPage, total, scale);
+                using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+                result.Add(data.ToArray());
+            }
+        }
+
+        return result;
+    }
+
+    private static SKImage RenderPageToImageCore(
+        PageSettings pageSettings,
+        List<(IElement, Size)> pageContent,
+        int logicalPageNumber,
+        int totalPages,
+        float scale)
+    {
+        int width = (int)Math.Ceiling(pageSettings.Size.Width * scale);
+        int height = (int)Math.Ceiling(pageSettings.Size.Height * scale);
+
+        var imageInfo = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(imageInfo)
+            ?? throw new InvalidOperationException(
+                $"Failed to create SKSurface ({width}×{height}). The requested dimensions may be too large or insufficient memory is available.");
+        var canvas = surface.Canvas;
+        canvas.Clear(SKColors.White);
+
+        if (scale != 1f)
+            canvas.Scale(scale, scale);
+
+        var contentHeight = pageSettings.ContentHeight;
+        var renderCtx = new RenderContext
+        {
+            Canvas = canvas,
+            AvailableWidth = pageSettings.ContentWidth,
+            AvailableHeight = contentHeight,
+            CurrentPage = logicalPageNumber,
+            TotalPages = totalPages
+        };
+
+        float headerHeight = MeasureElement(pageSettings.HeaderElement, pageSettings.ContentWidth, contentHeight);
+        float footerHeight = MeasureElement(pageSettings.FooterElement, pageSettings.ContentWidth, contentHeight);
+        float y = pageSettings.MarginTop;
+
+        if (pageSettings.HeaderElement != null)
+        {
+            var hs = pageSettings.HeaderElement.Measure(new MeasureContext { AvailableWidth = pageSettings.ContentWidth, AvailableHeight = contentHeight });
+            pageSettings.HeaderElement.Render(renderCtx, new Position(pageSettings.MarginLeft, y), new Size(pageSettings.ContentWidth, hs.Height));
+            y += hs.Height;
+        }
+
+        foreach (var (element, size) in pageContent)
+        {
+            element.Render(renderCtx, new Position(pageSettings.MarginLeft, y), size);
+            y += size.Height;
+        }
+
+        if (pageSettings.FooterElement != null)
+        {
+            var footerY = pageSettings.Size.Height - pageSettings.MarginBottom - footerHeight;
+            pageSettings.FooterElement.Render(renderCtx, new Position(pageSettings.MarginLeft, footerY), new Size(pageSettings.ContentWidth, footerHeight));
+        }
+
+        return surface.Snapshot();
+    }
+
     public void RenderToStream(Stream stream)
     {
         int totalPages = CountTotalPages();

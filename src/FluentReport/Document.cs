@@ -37,4 +37,22 @@ public class Document
         GeneratePdf(ms);
         return ms.ToArray();
     }
+
+    /// <summary>
+    /// Renders every logical page to a PNG byte array.
+    /// Useful for visual / snapshot testing.
+    /// </summary>
+    /// <param name="scale">
+    /// Pixel-per-point scale factor (default 1.0 = 1 px per pt, 2.0 = 2× hi-dpi).
+    /// Must be greater than zero.
+    /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="scale"/> is ≤ 0.</exception>
+    public IReadOnlyList<byte[]> GenerateImages(float scale = 1f)
+    {
+        if (scale <= 0)
+            throw new ArgumentOutOfRangeException(nameof(scale), scale, "Scale must be greater than zero.");
+
+        var renderer = new DocumentRenderer(_settings);
+        return renderer.RenderAllPages(scale);
+    }
 }
