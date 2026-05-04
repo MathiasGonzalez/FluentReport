@@ -1,6 +1,7 @@
 using FluentReport;
 using FluentReport.Core;
 using SkiaSharp;
+using System.Globalization;
 
 string outputDir = args.Length > 0 ? args[0] : "output";
 Directory.CreateDirectory(outputDir);
@@ -209,11 +210,13 @@ var lineas = new[]
     new { Cant = 3m,  Desc = "Soporte técnico (horas)",    PUnit =  3000m, Iva = "10%", Total =  9000m },
 };
 
-decimal netoIva22 = Math.Round(35000m / 1.22m, 2);  // ≈ 28,688.52
-decimal iva22     = 35000m - netoIva22;              // ≈  6,311.48
-decimal netoIva10 = Math.Round(9000m  / 1.10m, 2);  // ≈  8,181.82
-decimal iva10     = 9000m - netoIva10;               // ≈    818.18
-decimal total     = 44000m;
+decimal bruto22  = lineas.Where(l => l.Iva == "22%").Sum(l => l.Total);
+decimal bruto10  = lineas.Where(l => l.Iva == "10%").Sum(l => l.Total);
+decimal netoIva22 = Math.Round(bruto22 / 1.22m, 2);
+decimal iva22     = bruto22 - netoIva22;
+decimal netoIva10 = Math.Round(bruto10 / 1.10m, 2);
+decimal iva10     = bruto10 - netoIva10;
+decimal total     = lineas.Sum(l => l.Total);
 
 // QR code placeholder (gray checkerboard PNG – replace with a real QR byte[] in production)
 byte[] qrBytes = GenerarQrPlaceholder(80);
@@ -284,22 +287,22 @@ File.WriteAllBytes(Path.Combine(outputDir, "05-invoice.pdf"),
 
                     table.Header(h =>
                     {
-                        h.Cell().Background("#2E86C1").Padding(5).Text("Cant.").Bold().AlignCenter();
-                        h.Cell().Background("#2E86C1").Padding(5).Text("Descripción").Bold();
-                        h.Cell().Background("#2E86C1").Padding(5).Text("P.Unit.").Bold().AlignRight();
-                        h.Cell().Background("#2E86C1").Padding(5).Text("IVA").Bold().AlignCenter();
-                        h.Cell().Background("#2E86C1").Padding(5).Text("Total").Bold().AlignRight();
+                        h.Cell().Background("#2E86C1").Padding(5).Text("Cant.").Bold().AlignCenter().Color("#FFFFFF");
+                        h.Cell().Background("#2E86C1").Padding(5).Text("Descripción").Bold().Color("#FFFFFF");
+                        h.Cell().Background("#2E86C1").Padding(5).Text("P.Unit.").Bold().AlignRight().Color("#FFFFFF");
+                        h.Cell().Background("#2E86C1").Padding(5).Text("IVA").Bold().AlignCenter().Color("#FFFFFF");
+                        h.Cell().Background("#2E86C1").Padding(5).Text("Total").Bold().AlignRight().Color("#FFFFFF");
                     });
 
                     bool alt = false;
                     foreach (var l in lineas)
                     {
                         string bg = alt ? "#F5F5F5" : "#FFFFFF";
-                        table.Cell().Background(bg).Padding(4).Text($"{l.Cant:F2}").AlignRight();
+                        table.Cell().Background(bg).Padding(4).Text(Fmt(l.Cant, "F2")).AlignRight();
                         table.Cell().Background(bg).Padding(4).Text(l.Desc);
-                        table.Cell().Background(bg).Padding(4).Text($"$ {l.PUnit:N2}").AlignRight();
+                        table.Cell().Background(bg).Padding(4).Text($"$ {Fmt(l.PUnit)}").AlignRight();
                         table.Cell().Background(bg).Padding(4).Text(l.Iva).AlignCenter();
-                        table.Cell().Background(bg).Padding(4).Text($"$ {l.Total:N2}").AlignRight();
+                        table.Cell().Background(bg).Padding(4).Text($"$ {Fmt(l.Total)}").AlignRight();
                         alt = !alt;
                     }
                 });
@@ -308,12 +311,12 @@ File.WriteAllBytes(Path.Combine(outputDir, "05-invoice.pdf"),
                 col.Item().PaddingTop(10).Column(tot =>
                 {
                     tot.Spacing(2);
-                    tot.Item().Text($"Neto IVA 10%:   $ {netoIva10:N2}").AlignRight();
-                    tot.Item().Text($"IVA 10%:         $ {iva10:N2}").AlignRight();
-                    tot.Item().Text($"Neto IVA 22%:   $ {netoIva22:N2}").AlignRight();
-                    tot.Item().Text($"IVA 22%:         $ {iva22:N2}").AlignRight();
+                    tot.Item().Text($"Neto IVA 10%:   $ {Fmt(netoIva10)}").AlignRight();
+                    tot.Item().Text($"IVA 10%:         $ {Fmt(iva10)}").AlignRight();
+                    tot.Item().Text($"Neto IVA 22%:   $ {Fmt(netoIva22)}").AlignRight();
+                    tot.Item().Text($"IVA 22%:         $ {Fmt(iva22)}").AlignRight();
                     tot.Item().Line(1, "#AAAAAA");
-                    tot.Item().Text($"TOTAL:   $ {total:N2}").FontSize(12).Bold().AlignRight();
+                    tot.Item().Text($"TOTAL:   $ {Fmt(total)}").FontSize(12).Bold().AlignRight();
                 });
 
                 // QR placeholder + legal notice
@@ -343,9 +346,95 @@ File.WriteAllBytes(Path.Combine(outputDir, "05-invoice.pdf"),
     }).GeneratePdf());
 
 Console.WriteLine("Generated 05-invoice.pdf");
+
+// Sample 6: Thermal printer (80 mm) invoice – based on UruFacturaSDK CfeDocumentoTermico
+// 80 mm ≈ 227 points; height chosen generously to fit all content
+File.WriteAllBytes(Path.Combine(outputDir, "06-thermal-invoice.pdf"),
+    Document.Create(c =>
+    {
+        c.Page(page =>
+        {
+            page.Size(227, 700);
+            page.MarginAll(5);
+
+            page.Content().Column(col =>
+            {
+                col.Spacing(3);
+
+                // Header
+                col.Item().Text(emisorNombre).FontSize(9).Bold().AlignCenter();
+                col.Item().Text($"RUT: {emisorRut}").FontSize(7).AlignCenter();
+                col.Item().Text(emisorDomicilio).FontSize(7).AlignCenter();
+                col.Item().Line(0.5f);
+
+                // Document type and number
+                col.Item().Text(tipoDocumento).FontSize(8).Bold().AlignCenter();
+                col.Item().Text($"N° {serieNumero}").FontSize(8).Bold().AlignCenter();
+                col.Item().Text($"Fecha: {fechaEmision}").FontSize(7).AlignCenter();
+                col.Item().Line(0.5f);
+
+                // Receptor
+                col.Item().Text($"Cliente: {receptorNombre}").FontSize(7);
+                col.Item().Text($"RUT: {receptorRut}").FontSize(7);
+                col.Item().Line(0.5f);
+
+                // Line items
+                foreach (var l in lineas)
+                {
+                    col.Item().Text(l.Desc).FontSize(7);
+                    col.Item().Row(row =>
+                    {
+                        row.RelativeItem().Text(
+                            $"  {Fmt(l.Cant, "F2")} x $ {Fmt(l.PUnit)} ({l.Iva})"
+                        ).FontSize(7);
+                        row.FixedItem(50).Text($"$ {Fmt(l.Total)}").FontSize(7).AlignRight();
+                    });
+                }
+
+                col.Item().Line(0.5f);
+
+                // Totals
+                if (bruto10 > 0)
+                {
+                    col.Item().Row(r =>
+                    {
+                        r.RelativeItem().Text("IVA 10%:").FontSize(7);
+                        r.FixedItem(55).Text($"$ {Fmt(iva10)}").FontSize(7).AlignRight();
+                    });
+                }
+                if (bruto22 > 0)
+                {
+                    col.Item().Row(r =>
+                    {
+                        r.RelativeItem().Text("IVA 22%:").FontSize(7);
+                        r.FixedItem(55).Text($"$ {Fmt(iva22)}").FontSize(7).AlignRight();
+                    });
+                }
+                col.Item().Row(r =>
+                {
+                    r.RelativeItem().Text("TOTAL:").FontSize(8).Bold();
+                    r.FixedItem(55).Text($"$ {Fmt(total)}").FontSize(8).Bold().AlignRight();
+                });
+
+                col.Item().Line(0.5f);
+
+                // QR placeholder
+                col.Item().PaddingTop(4).AlignCenter().Image(GenerarQrPlaceholder(70));
+                col.Item().Text("Verifique en efactura.dgi.gub.uy").FontSize(6).AlignCenter();
+            });
+        });
+    }).GeneratePdf());
+
+Console.WriteLine("Generated 06-thermal-invoice.pdf");
 Console.WriteLine($"\nAll sample PDFs written to: {Path.GetFullPath(outputDir)}");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+
+/// <summary>
+/// Formats a decimal value using InvariantCulture for deterministic output across locales.
+/// </summary>
+static string Fmt(decimal value, string format = "N2") =>
+    value.ToString(format, CultureInfo.InvariantCulture);
 
 /// <summary>
 /// Creates a checkerboard PNG that mimics a QR code placeholder.
@@ -353,6 +442,9 @@ Console.WriteLine($"\nAll sample PDFs written to: {Path.GetFullPath(outputDir)}"
 /// </summary>
 static byte[] GenerarQrPlaceholder(int size)
 {
+    if (size <= 0)
+        throw new ArgumentOutOfRangeException(nameof(size), "Size must be greater than zero.");
+
     using var bitmap = new SKBitmap(size, size);
     using var canvas = new SKCanvas(bitmap);
 
