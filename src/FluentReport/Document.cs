@@ -10,6 +10,8 @@ public class Document
 
     private Document(DocumentSettings settings) => _settings = settings;
 
+    public DocumentSettings Settings => _settings;
+
     public static Document Create(Action<DocumentBuilder> configure)
     {
         var builder = new DocumentBuilder();

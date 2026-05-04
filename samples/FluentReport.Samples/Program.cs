@@ -1,5 +1,6 @@
 using FluentReport;
 using FluentReport.Core;
+using FluentReport.Excel;
 using FluentReport.Samples;
 using FluentReport.Styling;
 using SkiaSharp;
@@ -429,7 +430,131 @@ File.WriteAllBytes(Path.Combine(outputDir, "06-thermal-invoice.pdf"),
     }).GeneratePdf());
 
 Console.WriteLine("Generated 06-thermal-invoice.pdf");
-Console.WriteLine($"\nAll sample PDFs written to: {Path.GetFullPath(outputDir)}");
+
+// ── Excel samples ────────────────────────────────────────────────────────────
+
+// Excel Sample 1: simple hello world
+File.WriteAllBytes(Path.Combine(outputDir, "07-hello-world.xlsx"),
+    Document.Create(c =>
+    {
+        c.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.MarginAll(40);
+            page.Content().Column(col =>
+            {
+                col.Item().Text("Hello, FluentReport Excel!").FontSize(18).Bold().AlignCenter();
+                col.Item().Spacer(10);
+                col.Item().Text("This spreadsheet was generated with FluentReport.Excel.");
+            });
+        });
+    }).GenerateExcel());
+
+Console.WriteLine("Generated 07-hello-world.xlsx");
+
+// Excel Sample 2: report with table
+File.WriteAllBytes(Path.Combine(outputDir, "08-report-with-table.xlsx"),
+    Document.Create(c =>
+    {
+        c.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.MarginAll(40);
+
+            page.Header().Column(col =>
+            {
+                col.Item().Text("Sales Report").FontSize(16).Bold().AlignCenter();
+                col.Item().Line(1, "#AAAAAA");
+            });
+
+            page.Content().Column(col =>
+            {
+                col.Spacing(6);
+                col.Item().Text("Q1 2025 – Summary").FontSize(12).Bold();
+
+                col.Item().Table(table =>
+                {
+                    table.ColumnsDefinition(cols =>
+                    {
+                        cols.RelativeColumn(2);
+                        cols.RelativeColumn(1);
+                        cols.RelativeColumn(1);
+                    });
+                    table.Header(h =>
+                    {
+                        h.Cell().Background("#4472C4").Padding(4).Text("Region").Bold().Color("#FFFFFF");
+                        h.Cell().Background("#4472C4").Padding(4).Text("Units").Bold().Color("#FFFFFF");
+                        h.Cell().Background("#4472C4").Padding(4).Text("Revenue").Bold().Color("#FFFFFF");
+                    });
+                    table.BorderEachCell(1);
+
+                    var rows = new[] {
+                        ("North", "1 200", "$48 000"),
+                        ("South", "850",   "$34 000"),
+                        ("East",  "1 050", "$42 000"),
+                        ("West",  "920",   "$36 800"),
+                    };
+                    foreach (var (region, units, revenue) in rows)
+                    {
+                        table.Cell().Padding(4).Text(region);
+                        table.Cell().Padding(4).Text(units);
+                        table.Cell().Padding(4).Text(revenue);
+                    }
+                });
+            });
+
+            page.Footer().AlignCenter().Text(x =>
+            {
+                x.Span("Page ");
+                x.CurrentPageNumber();
+                x.Span(" of ");
+                x.TotalPages();
+            });
+        });
+    }).GenerateExcel());
+
+Console.WriteLine("Generated 08-report-with-table.xlsx");
+
+// Excel Sample 3: multi-sheet via PageBreak
+File.WriteAllBytes(Path.Combine(outputDir, "09-multi-sheet.xlsx"),
+    Document.Create(c =>
+    {
+        c.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.MarginAll(40);
+            page.Content().Column(col =>
+            {
+                col.Item().Text("Sheet 1 – Introduction").FontSize(14).Bold();
+                col.Item().Spacer(8);
+                col.Item().Text("This content is on the first worksheet.");
+                col.Item().PageBreak();
+                col.Item().Text("Sheet 2 – Data").FontSize(14).Bold();
+                col.Item().Spacer(8);
+                col.Item().Table(table =>
+                {
+                    table.ColumnsDefinition(cols =>
+                    {
+                        cols.RelativeColumn(1);
+                        cols.RelativeColumn(1);
+                    });
+                    table.Header(h =>
+                    {
+                        h.Cell().Background("#CCCCCC").Padding(4).Text("Product").Bold();
+                        h.Cell().Background("#CCCCCC").Padding(4).Text("Price").Bold();
+                    });
+                    table.BorderEachCell(1);
+                    table.Cell().Padding(4).Text("Widget A");
+                    table.Cell().Padding(4).Text("$9.99");
+                    table.Cell().Padding(4).Text("Widget B");
+                    table.Cell().Padding(4).Text("$14.99");
+                });
+            });
+        });
+    }).GenerateExcel());
+
+Console.WriteLine("Generated 09-multi-sheet.xlsx");
+Console.WriteLine($"\nAll sample files written to: {Path.GetFullPath(outputDir)}");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

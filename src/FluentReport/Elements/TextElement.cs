@@ -16,6 +16,7 @@ public class TextElement : ElementBase
 {
     private readonly List<TextSpan> _spans = new();
     public TextStyle Style { get; } = new();
+    public IReadOnlyList<TextSpan> Spans => _spans;
 
     public TextElement(string text)
     {
