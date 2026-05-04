@@ -1,5 +1,7 @@
 using FluentReport;
 using FluentReport.Core;
+using FluentReport.Samples;
+using FluentReport.Styling;
 using SkiaSharp;
 using System.Globalization;
 
@@ -237,24 +239,24 @@ File.WriteAllBytes(Path.Combine(outputDir, "05-invoice.pdf"),
                     // Emisor info (left, 3 relative units)
                     row.RelativeItem(3).Column(emisor =>
                     {
-                        emisor.Item().Text(emisorNombre).FontSize(14).Bold();
-                        emisor.Item().Text(emisorNombreComercial).FontSize(10);
-                        emisor.Item().Text($"RUT: {emisorRut}");
-                        emisor.Item().Text(emisorDomicilio);
-                        emisor.Item().Text(emisorCiudad);
+                        emisor.Item().Text(emisorNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeTitle).Bold().Color(FacturaUY.TextPrimary);
+                        emisor.Item().Text(emisorNombreComercial).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextSecondary);
+                        emisor.Item().Text($"RUT: {emisorRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        emisor.Item().Text(emisorDomicilio).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        emisor.Item().Text(emisorCiudad).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
                     });
 
                     // Document type box (right, 2 relative units)
-                    row.RelativeItem(2).AlignRight().Border(1).Padding(8).Column(box =>
+                    row.RelativeItem(2).AlignRight().Border(1, FacturaUY.DocBoxBorder).Background(FacturaUY.DocBoxBackground).Padding(8).Column(box =>
                     {
-                        box.Item().Text(tipoDocumento).FontSize(12).Bold().AlignCenter();
-                        box.Item().Text($"N° {serieNumero}").FontSize(11).Bold().AlignCenter();
-                        box.Item().Text($"Fecha: {fechaEmision}").AlignCenter();
+                        box.Item().Text(tipoDocumento).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSubtitle).Bold().AlignCenter().Color(FacturaUY.HeaderBackground);
+                        box.Item().Text($"N° {serieNumero}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSubtitle).Bold().AlignCenter().Color(FacturaUY.HeaderBackground);
+                        box.Item().Text($"Fecha: {fechaEmision}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignCenter().Color(FacturaUY.TextSecondary);
                     });
                 });
 
                 hdr.Item().Spacer(6);
-                hdr.Item().Line(1, "#AAAAAA");
+                hdr.Item().Line(1, FacturaUY.LineSeparator);
             });
 
             // ── Content ───────────────────────────────────────────────────
@@ -265,13 +267,13 @@ File.WriteAllBytes(Path.Combine(outputDir, "05-invoice.pdf"),
                 // Receptor
                 col.Item().PaddingVertical(5).Column(rec =>
                 {
-                    rec.Item().Text("Receptor:").Bold();
-                    rec.Item().Text(receptorNombre);
-                    rec.Item().Text($"RUT: {receptorRut}");
-                    rec.Item().Text(receptorDireccion);
+                    rec.Item().Text("Receptor:").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.TextPrimary);
+                    rec.Item().Text(receptorNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                    rec.Item().Text($"RUT: {receptorRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                    rec.Item().Text(receptorDireccion).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
                 });
 
-                col.Item().Line(0.5f, "#DDDDDD");
+                col.Item().Line(0.5f, FacturaUY.LineSeparator);
 
                 // Line-item detail table
                 col.Item().PaddingTop(8).Table(table =>
@@ -287,22 +289,22 @@ File.WriteAllBytes(Path.Combine(outputDir, "05-invoice.pdf"),
 
                     table.Header(h =>
                     {
-                        h.Cell().Background("#2E86C1").Padding(5).Text("Cant.").Bold().AlignCenter().Color("#FFFFFF");
-                        h.Cell().Background("#2E86C1").Padding(5).Text("Descripción").Bold().Color("#FFFFFF");
-                        h.Cell().Background("#2E86C1").Padding(5).Text("P.Unit.").Bold().AlignRight().Color("#FFFFFF");
-                        h.Cell().Background("#2E86C1").Padding(5).Text("IVA").Bold().AlignCenter().Color("#FFFFFF");
-                        h.Cell().Background("#2E86C1").Padding(5).Text("Total").Bold().AlignRight().Color("#FFFFFF");
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Cant.").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignCenter().Color(FacturaUY.HeaderText);
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Descripción").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderText);
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("P.Unit.").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignRight().Color(FacturaUY.HeaderText);
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("IVA").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignCenter().Color(FacturaUY.HeaderText);
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Total").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignRight().Color(FacturaUY.HeaderText);
                     });
 
                     bool alt = false;
                     foreach (var l in lineas)
                     {
-                        string bg = alt ? "#F5F5F5" : "#FFFFFF";
-                        table.Cell().Background(bg).Padding(4).Text(Fmt(l.Cant, "F2")).AlignRight();
-                        table.Cell().Background(bg).Padding(4).Text(l.Desc);
-                        table.Cell().Background(bg).Padding(4).Text($"$ {Fmt(l.PUnit)}").AlignRight();
-                        table.Cell().Background(bg).Padding(4).Text(l.Iva).AlignCenter();
-                        table.Cell().Background(bg).Padding(4).Text($"$ {Fmt(l.Total)}").AlignRight();
+                        string bg = alt ? FacturaUY.RowAlt : FacturaUY.RowBase;
+                        table.Cell().Background(bg).Padding(4).Text(Fmt(l.Cant, "F2")).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignRight().Color(FacturaUY.TextPrimary);
+                        table.Cell().Background(bg).Padding(4).Text(l.Desc).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        table.Cell().Background(bg).Padding(4).Text($"$ {Fmt(l.PUnit)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignRight().Color(FacturaUY.TextPrimary);
+                        table.Cell().Background(bg).Padding(4).Text(l.Iva).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignCenter().Color(FacturaUY.TextSecondary);
+                        table.Cell().Background(bg).Padding(4).Text($"$ {Fmt(l.Total)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignRight().Color(FacturaUY.TextPrimary);
                         alt = !alt;
                     }
                 });
@@ -311,12 +313,12 @@ File.WriteAllBytes(Path.Combine(outputDir, "05-invoice.pdf"),
                 col.Item().PaddingTop(10).Column(tot =>
                 {
                     tot.Spacing(2);
-                    tot.Item().Text($"Neto IVA 10%:   $ {Fmt(netoIva10)}").AlignRight();
-                    tot.Item().Text($"IVA 10%:         $ {Fmt(iva10)}").AlignRight();
-                    tot.Item().Text($"Neto IVA 22%:   $ {Fmt(netoIva22)}").AlignRight();
-                    tot.Item().Text($"IVA 22%:         $ {Fmt(iva22)}").AlignRight();
-                    tot.Item().Line(1, "#AAAAAA");
-                    tot.Item().Text($"TOTAL:   $ {Fmt(total)}").FontSize(12).Bold().AlignRight();
+                    tot.Item().Text($"Neto IVA 10%:   $ {Fmt(netoIva10)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignRight().Color(FacturaUY.TextPrimary);
+                    tot.Item().Text($"IVA 10%:         $ {Fmt(iva10)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignRight().Color(FacturaUY.TextPrimary);
+                    tot.Item().Text($"Neto IVA 22%:   $ {Fmt(netoIva22)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignRight().Color(FacturaUY.TextPrimary);
+                    tot.Item().Text($"IVA 22%:         $ {Fmt(iva22)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignRight().Color(FacturaUY.TextPrimary);
+                    tot.Item().Line(1, FacturaUY.LineSeparator);
+                    tot.Item().Text($"TOTAL:   $ {Fmt(total)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSubtitle).Bold().AlignRight().Color(FacturaUY.TextPrimary);
                 });
 
                 // QR placeholder + legal notice
@@ -326,21 +328,22 @@ File.WriteAllBytes(Path.Combine(outputDir, "05-invoice.pdf"),
 
                     row.RelativeItem().PaddingLeft(10).Column(info =>
                     {
-                        info.Item().Text("Representación impresa de CFE").Italic().FontSize(8);
-                        info.Item().Text("Verifique la vigencia en: efactura.dgi.gub.uy").FontSize(8);
-                        info.Item().Text("Ambiente: Producción").FontSize(8);
-                        info.Item().Text("Aceptado por DGI").FontSize(8).Color("#1A7A1A");
+                        info.Item().Text("Representación impresa de CFE").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Italic().Color(FacturaUY.TextSecondary);
+                        info.Item().Text("Verifique la vigencia en: efactura.dgi.gub.uy").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Color(FacturaUY.TextSecondary);
+                        info.Item().Text("Ambiente: Producción").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Color(FacturaUY.TextSecondary);
+                        info.Item().Text("Aceptado por DGI").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Bold().Color(FacturaUY.DgiAccepted);
                     });
                 });
             });
 
             // ── Footer ────────────────────────────────────────────────────
+            Action<TextStyle> footerStyle = s => { s.FontFamily = FacturaUY.FontPrimary; s.FontSize = FacturaUY.FontSizeLegal; };
             page.Footer().AlignCenter().Text(x =>
             {
-                x.Span("Generado con FluentReport  –  Página ");
-                x.CurrentPageNumber();
-                x.Span(" de ");
-                x.TotalPages();
+                x.Span("Generado con FluentReport  –  Página ", footerStyle);
+                x.CurrentPageNumber(footerStyle);
+                x.Span(" de ", footerStyle);
+                x.TotalPages(footerStyle);
             });
         });
     }).GeneratePdf());
@@ -362,32 +365,32 @@ File.WriteAllBytes(Path.Combine(outputDir, "06-thermal-invoice.pdf"),
                 col.Spacing(3);
 
                 // Header
-                col.Item().Text(emisorNombre).FontSize(9).Bold().AlignCenter();
-                col.Item().Text($"RUT: {emisorRut}").FontSize(7).AlignCenter();
-                col.Item().Text(emisorDomicilio).FontSize(7).AlignCenter();
+                col.Item().Text(emisorNombre).FontFamily(FacturaUY.FontPrimary).FontSize(9).Bold().AlignCenter().Color(FacturaUY.TextPrimary);
+                col.Item().Text($"RUT: {emisorRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).AlignCenter().Color(FacturaUY.TextPrimary);
+                col.Item().Text(emisorDomicilio).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).AlignCenter().Color(FacturaUY.TextPrimary);
                 col.Item().Line(0.5f);
 
                 // Document type and number
-                col.Item().Text(tipoDocumento).FontSize(8).Bold().AlignCenter();
-                col.Item().Text($"N° {serieNumero}").FontSize(8).Bold().AlignCenter();
-                col.Item().Text($"Fecha: {fechaEmision}").FontSize(7).AlignCenter();
+                col.Item().Text(tipoDocumento).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).Bold().AlignCenter().Color(FacturaUY.TextPrimary);
+                col.Item().Text($"N° {serieNumero}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).Bold().AlignCenter().Color(FacturaUY.TextPrimary);
+                col.Item().Text($"Fecha: {fechaEmision}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).AlignCenter().Color(FacturaUY.TextSecondary);
                 col.Item().Line(0.5f);
 
                 // Receptor
-                col.Item().Text($"Cliente: {receptorNombre}").FontSize(7);
-                col.Item().Text($"RUT: {receptorRut}").FontSize(7);
+                col.Item().Text($"Cliente: {receptorNombre}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Color(FacturaUY.TextPrimary);
+                col.Item().Text($"RUT: {receptorRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Color(FacturaUY.TextPrimary);
                 col.Item().Line(0.5f);
 
                 // Line items
                 foreach (var l in lineas)
                 {
-                    col.Item().Text(l.Desc).FontSize(7);
+                    col.Item().Text(l.Desc).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Color(FacturaUY.TextPrimary);
                     col.Item().Row(row =>
                     {
                         row.RelativeItem().Text(
                             $"  {Fmt(l.Cant, "F2")} x $ {Fmt(l.PUnit)} ({l.Iva})"
-                        ).FontSize(7);
-                        row.FixedItem(50).Text($"$ {Fmt(l.Total)}").FontSize(7).AlignRight();
+                        ).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Color(FacturaUY.TextSecondary);
+                        row.FixedItem(50).Text($"$ {Fmt(l.Total)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).AlignRight().Color(FacturaUY.TextPrimary);
                     });
                 }
 
@@ -398,29 +401,29 @@ File.WriteAllBytes(Path.Combine(outputDir, "06-thermal-invoice.pdf"),
                 {
                     col.Item().Row(r =>
                     {
-                        r.RelativeItem().Text("IVA 10%:").FontSize(7);
-                        r.FixedItem(55).Text($"$ {Fmt(iva10)}").FontSize(7).AlignRight();
+                        r.RelativeItem().Text("IVA 10%:").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Color(FacturaUY.TextPrimary);
+                        r.FixedItem(55).Text($"$ {Fmt(iva10)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).AlignRight().Color(FacturaUY.TextPrimary);
                     });
                 }
                 if (bruto22 > 0)
                 {
                     col.Item().Row(r =>
                     {
-                        r.RelativeItem().Text("IVA 22%:").FontSize(7);
-                        r.FixedItem(55).Text($"$ {Fmt(iva22)}").FontSize(7).AlignRight();
+                        r.RelativeItem().Text("IVA 22%:").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Color(FacturaUY.TextPrimary);
+                        r.FixedItem(55).Text($"$ {Fmt(iva22)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).AlignRight().Color(FacturaUY.TextPrimary);
                     });
                 }
                 col.Item().Row(r =>
                 {
-                    r.RelativeItem().Text("TOTAL:").FontSize(8).Bold();
-                    r.FixedItem(55).Text($"$ {Fmt(total)}").FontSize(8).Bold().AlignRight();
+                    r.RelativeItem().Text("TOTAL:").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).Bold().Color(FacturaUY.TextPrimary);
+                    r.FixedItem(55).Text($"$ {Fmt(total)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).Bold().AlignRight().Color(FacturaUY.TextPrimary);
                 });
 
                 col.Item().Line(0.5f);
 
                 // QR placeholder
                 col.Item().PaddingTop(4).AlignCenter().Image(GenerarQrPlaceholder(70));
-                col.Item().Text("Verifique en efactura.dgi.gub.uy").FontSize(6).AlignCenter();
+                col.Item().Text("Verifique en efactura.dgi.gub.uy").FontFamily(FacturaUY.FontPrimary).FontSize(6).AlignCenter().Color(FacturaUY.TextSecondary);
             });
         });
     }).GeneratePdf());
