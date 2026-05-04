@@ -29,12 +29,12 @@ jobs:
       - name: Test
         run: dotnet test --no-build --configuration Release --verbosity normal
 
-      - name: Generate sample PDFs
-        run: dotnet run --project samples/FluentReport.Samples --configuration Release -- sample-pdfs
+      - name: Generate sample files (PDF + Excel)
+        run: dotnet run --project samples/FluentReport.Samples --configuration Release -- sample-files
 
-      - name: Upload sample PDFs
+      - name: Upload sample files
         uses: actions/upload-artifact@v4
         with:
-          name: sample-pdfs
-          path: sample-pdfs/
+          name: sample-files
+          path: sample-files/
           if-no-files-found: error
