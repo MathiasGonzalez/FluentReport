@@ -27,6 +27,12 @@ public class TextElement : ElementBase
     {
     }
 
+    /// <summary>
+    /// Optional override for typeface creation. When non-null, called instead of the default
+    /// system font lookup. Intended for test fixtures that need deterministic font rendering.
+    /// </summary>
+    internal static Func<TextStyle, SKTypeface>? TypefaceFactory { get; set; }
+
     public void AddSpan(string text, TextStyle? style = null)
     {
         _spans.Add(new TextSpan { StaticText = text, Style = style ?? Style });
@@ -50,12 +56,17 @@ public class TextElement : ElementBase
     }
 
     private static SKTypeface CreateTypeface(TextStyle style)
-        => SKTypeface.FromFamilyName(
+    {
+        if (TypefaceFactory != null)
+            return TypefaceFactory(style);
+
+        return SKTypeface.FromFamilyName(
             style.FontFamily,
             style.Bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
             SKFontStyleWidth.Normal,
             style.Italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright
         ) ?? SKTypeface.Default;
+    }
 
     public override Size Measure(MeasureContext context)
     {

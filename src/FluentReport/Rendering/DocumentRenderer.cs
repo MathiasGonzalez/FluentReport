@@ -11,6 +11,101 @@ public class DocumentRenderer
 
     public DocumentRenderer(DocumentSettings settings) => _settings = settings;
 
+    /// <summary>
+    /// Renders a single logical page (0-based index) to an <see cref="SKImage"/>.
+    /// The caller is responsible for disposing the returned image.
+    /// </summary>
+    public SKImage RenderPageToImage(int pageIndex, float scale = 1f)
+    {
+        // Collect all logical pages in document order
+        var allPages = CollectLogicalPages();
+
+        if (pageIndex < 0 || pageIndex >= allPages.Count)
+            throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page index {pageIndex} is out of range (0–{allPages.Count - 1}).");
+
+        var (pageSettings, pageContent, totalPages, logicalPageNumber) = allPages[pageIndex];
+
+        int width = (int)Math.Ceiling(pageSettings.Size.Width * scale);
+        int height = (int)Math.Ceiling(pageSettings.Size.Height * scale);
+
+        var imageInfo = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
+        using var surface = SKSurface.Create(imageInfo);
+        var canvas = surface.Canvas;
+        canvas.Clear(SKColors.White);
+
+        if (scale != 1f)
+            canvas.Scale(scale, scale);
+
+        var renderCtx = new RenderContext
+        {
+            Canvas = canvas,
+            AvailableWidth = pageSettings.ContentWidth,
+            AvailableHeight = pageSettings.ContentHeight,
+            CurrentPage = logicalPageNumber,
+            TotalPages = totalPages
+        };
+
+        var contentHeight = pageSettings.ContentHeight;
+        float headerHeight = MeasureElement(pageSettings.HeaderElement, pageSettings.ContentWidth, contentHeight);
+        float footerHeight = MeasureElement(pageSettings.FooterElement, pageSettings.ContentWidth, contentHeight);
+
+        float y = pageSettings.MarginTop;
+
+        if (pageSettings.HeaderElement != null)
+        {
+            var hs = pageSettings.HeaderElement.Measure(new MeasureContext { AvailableWidth = pageSettings.ContentWidth, AvailableHeight = contentHeight });
+            pageSettings.HeaderElement.Render(renderCtx, new Position(pageSettings.MarginLeft, y), new Size(pageSettings.ContentWidth, hs.Height));
+            y += hs.Height;
+        }
+
+        foreach (var (element, size) in pageContent)
+        {
+            element.Render(renderCtx, new Position(pageSettings.MarginLeft, y), size);
+            y += size.Height;
+        }
+
+        if (pageSettings.FooterElement != null)
+        {
+            var footerY = pageSettings.Size.Height - pageSettings.MarginBottom - footerHeight;
+            pageSettings.FooterElement.Render(renderCtx, new Position(pageSettings.MarginLeft, footerY), new Size(pageSettings.ContentWidth, footerHeight));
+        }
+
+        return surface.Snapshot();
+    }
+
+    /// <summary>Returns the total number of logical pages that would be rendered.</summary>
+    public int GetPageCount() => CollectLogicalPages().Count;
+
+    private List<(PageSettings PageSettings, List<(IElement, Size)> Content, int TotalPages, int LogicalPageNumber)> CollectLogicalPages()
+    {
+        int total = CountTotalPages();
+        var result = new List<(PageSettings, List<(IElement, Size)>, int, int)>();
+        int currentPage = 0;
+
+        foreach (var pageSettings in _settings.Pages)
+        {
+            var contentWidth = pageSettings.ContentWidth;
+            var contentHeight = pageSettings.ContentHeight;
+
+            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight);
+            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight);
+            var contentAreaHeight = contentHeight - headerHeight - footerHeight;
+
+            var contentElements = GetContentElements(pageSettings.ContentElement);
+            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight);
+
+            if (pages.Count == 0) pages.Add(new List<(IElement, Size)>());
+
+            foreach (var pageContent in pages)
+            {
+                currentPage++;
+                result.Add((pageSettings, pageContent, total, currentPage));
+            }
+        }
+
+        return result;
+    }
+
     public void RenderToStream(Stream stream)
     {
         int totalPages = CountTotalPages();
