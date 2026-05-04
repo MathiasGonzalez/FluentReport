@@ -28,11 +28,11 @@ public class TableHeaderBuilder
 
     internal TableHeaderBuilder(TableElement table) => _table = table;
 
-    public ContainerBuilder Cell()
+    public ContainerBuilder Cell(int colSpan = 1)
     {
         var cb = new ContainerBuilder();
         var lazy = new LazyElement(cb);
-        _table.HeaderCells.Add(new TableCell { Content = lazy, IsHeader = true });
+        _table.HeaderCells.Add(new TableCell { Content = lazy, IsHeader = true, ColumnSpan = Math.Max(1, colSpan) });
         return cb;
     }
 }
@@ -55,11 +55,11 @@ public class TableBuilder
         return this;
     }
 
-    public ContainerBuilder Cell()
+    public ContainerBuilder Cell(int colSpan = 1)
     {
         var cb = new ContainerBuilder();
         var lazy = new LazyElement(cb);
-        _table.DataCells.Add(new TableCell { Content = lazy });
+        _table.DataCells.Add(new TableCell { Content = lazy, ColumnSpan = Math.Max(1, colSpan) });
         return cb;
     }
 

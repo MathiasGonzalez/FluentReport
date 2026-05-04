@@ -139,6 +139,42 @@ public class ContainerBuilder
         return this;
     }
 
+    /// <summary>
+    /// Renders each item in <paramref name="items"/> using the provided template, stacked vertically.
+    /// </summary>
+    /// <typeparam name="T">Type of each data item.</typeparam>
+    /// <param name="items">Collection of data items to render.</param>
+    /// <param name="itemTemplate">
+    /// Delegate that configures a <see cref="ContainerBuilder"/> for each item.
+    /// </param>
+    /// <param name="spacing">Vertical gap between items, in points.</param>
+    public ContainerBuilder List<T>(IEnumerable<T> items, Action<ContainerBuilder, T> itemTemplate, float spacing = 0)
+    {
+        var elements = items.Select(item =>
+        {
+            var cb = new ContainerBuilder();
+            itemTemplate(cb, item);
+            return (IElement)new LazyElement(cb);
+        });
+        _child = new ListElement(elements, spacing);
+        return this;
+    }
+
+    /// <summary>Adds a chart element and returns a <see cref="ChartBuilder"/> for configuration.</summary>
+    public ChartBuilder Chart()
+    {
+        var chart = new ChartElement();
+        _child = chart;
+        return new ChartBuilder(chart, this);
+    }
+
+    /// <summary>Renders a nested <see cref="Document"/> inline.</summary>
+    public ContainerBuilder Subreport(Document nested)
+    {
+        _child = new SubreportElement(nested);
+        return this;
+    }
+
     internal virtual IElement Build()
     {
         IElement element = _child ?? new SpacerElement();

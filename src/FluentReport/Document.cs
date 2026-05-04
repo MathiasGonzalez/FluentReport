@@ -39,6 +39,14 @@ public class Document
     }
 
     /// <summary>
+    /// Creates a <see cref="Document"/> directly from pre-built <see cref="DocumentSettings"/>.
+    /// Intended for use by format translation layers (e.g. RDLC, HTML) that construct settings
+    /// programmatically rather than through the fluent builder API.
+    /// </summary>
+    public static Document FromSettings(DocumentSettings settings)
+        => new(settings);
+
+    /// <summary>
     /// Renders every logical page to a PNG byte array.
     /// Useful for visual / snapshot testing.
     /// </summary>
