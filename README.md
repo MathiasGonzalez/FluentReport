@@ -165,7 +165,6 @@ Document.Create(container =>
 | `Spacer(...)` | Inserta una fila vacía |
 | `Image(...)` | Ignorado (no soportado en el renderer Excel) |
 | Numeración de páginas | Escribe "1" para página actual y "?" para total de páginas |
-```
 
 ## API Reference
 
