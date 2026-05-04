@@ -8,8 +8,13 @@ namespace FluentReport.Samples;
 internal static class FacturaUY
 {
     // ── Fuentes ──────────────────────────────────────────────────────────────
-    /// <summary>Fuente principal utilizada en documentos comerciales en Uruguay.</summary>
-    public const string FontPrimary = "Arial";
+    /// <summary>
+    /// Fuente principal utilizada en documentos comerciales en Uruguay.
+    /// Liberation Sans es métricamente compatible con Arial y está disponible
+    /// en sistemas Linux (usada por CI). En Windows y macOS el sistema resuelve
+    /// "Arial" directamente; en Linux se mapea a Liberation Sans vía fontconfig.
+    /// </summary>
+    public const string FontPrimary = "Liberation Sans";
 
     // ── Tamaños de texto ─────────────────────────────────────────────────────
     public const float FontSizeTitle    = 13f;

@@ -368,18 +368,18 @@ File.WriteAllBytes(Path.Combine(outputDir, "06-thermal-invoice.pdf"),
                 col.Item().Text(emisorNombre).FontFamily(FacturaUY.FontPrimary).FontSize(9).Bold().AlignCenter().Color(FacturaUY.TextPrimary);
                 col.Item().Text($"RUT: {emisorRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).AlignCenter().Color(FacturaUY.TextPrimary);
                 col.Item().Text(emisorDomicilio).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).AlignCenter().Color(FacturaUY.TextPrimary);
-                col.Item().Line(0.5f);
+                col.Item().Line(0.5f, FacturaUY.LineSeparator);
 
                 // Document type and number
                 col.Item().Text(tipoDocumento).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).Bold().AlignCenter().Color(FacturaUY.TextPrimary);
                 col.Item().Text($"N° {serieNumero}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).Bold().AlignCenter().Color(FacturaUY.TextPrimary);
                 col.Item().Text($"Fecha: {fechaEmision}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).AlignCenter().Color(FacturaUY.TextSecondary);
-                col.Item().Line(0.5f);
+                col.Item().Line(0.5f, FacturaUY.LineSeparator);
 
                 // Receptor
                 col.Item().Text($"Cliente: {receptorNombre}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Color(FacturaUY.TextPrimary);
                 col.Item().Text($"RUT: {receptorRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Color(FacturaUY.TextPrimary);
-                col.Item().Line(0.5f);
+                col.Item().Line(0.5f, FacturaUY.LineSeparator);
 
                 // Line items
                 foreach (var l in lineas)
@@ -394,7 +394,7 @@ File.WriteAllBytes(Path.Combine(outputDir, "06-thermal-invoice.pdf"),
                     });
                 }
 
-                col.Item().Line(0.5f);
+                col.Item().Line(0.5f, FacturaUY.LineSeparator);
 
                 // Totals
                 if (bruto10 > 0)
@@ -419,7 +419,7 @@ File.WriteAllBytes(Path.Combine(outputDir, "06-thermal-invoice.pdf"),
                     r.FixedItem(55).Text($"$ {Fmt(total)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).Bold().AlignRight().Color(FacturaUY.TextPrimary);
                 });
 
-                col.Item().Line(0.5f);
+                col.Item().Line(0.5f, FacturaUY.LineSeparator);
 
                 // QR placeholder
                 col.Item().PaddingTop(4).AlignCenter().Image(GenerarQrPlaceholder(70));
