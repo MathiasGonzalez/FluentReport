@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/ci.yml/badge.svg)](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/ci.yml)
 [![Publish to NuGet](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/nuget.yml/badge.svg)](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/nuget.yml)
+[![NuGet FluentReport](https://img.shields.io/nuget/v/FluentReport.svg?label=FluentReport)](https://www.nuget.org/packages/FluentReport)
+[![NuGet FluentReport.Excel](https://img.shields.io/nuget/v/FluentReport.Excel.svg?label=FluentReport.Excel)](https://www.nuget.org/packages/FluentReport.Excel)
 
 Librería .NET 10 para generar PDFs y Excel usando una API fluent en C#. Usa SkiaSharp como motor de renderizado PDF y ClosedXML para Excel. Funciona en Linux sin dependencias nativas adicionales.
 
@@ -18,16 +20,16 @@ Librería .NET 10 para generar PDFs y Excel usando una API fluent en C#. Usa Ski
 
 ## Instalación
 
-Agrega la referencia al proyecto principal:
+Instala el paquete principal desde NuGet ([FluentReport](https://www.nuget.org/packages/FluentReport)):
 
-```xml
-<ProjectReference Include="src/FluentReport/FluentReport.csproj" />
+```shell
+dotnet add package FluentReport
 ```
 
-Para generar Excel, agrega además el renderer de Excel:
+Para generar Excel, instala además el renderer ([FluentReport.Excel](https://www.nuget.org/packages/FluentReport.Excel)):
 
-```xml
-<ProjectReference Include="src/FluentReport.Excel/FluentReport.Excel.csproj" />
+```shell
+dotnet add package FluentReport.Excel
 ```
 
 ## Uso rápido
@@ -309,6 +311,6 @@ samples/
 
 ## Dependencias
 
-- [SkiaSharp](https://github.com/mono/SkiaSharp) 3.116.1 — renderizado PDF
+- [SkiaSharp](https://www.nuget.org/packages/SkiaSharp) 3.116.1 — renderizado PDF
 - SkiaSharp.NativeAssets.Linux.NoDependencies — soporte Linux sin libfontconfig
-- [ClosedXML](https://github.com/ClosedXML/ClosedXML) 0.102.2 — renderizado Excel (solo FluentReport.Excel)
+- [ClosedXML](https://www.nuget.org/packages/ClosedXML) 0.102.2 — renderizado Excel (solo FluentReport.Excel)
