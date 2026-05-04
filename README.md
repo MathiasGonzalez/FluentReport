@@ -4,6 +4,7 @@
 [![Publish to NuGet](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/nuget.yml/badge.svg)](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/nuget.yml)
 [![NuGet FluentReport](https://img.shields.io/nuget/v/FluentReport.svg?label=FluentReport)](https://www.nuget.org/packages/FluentReport)
 [![NuGet FluentReport.Excel](https://img.shields.io/nuget/v/FluentReport.Excel.svg?label=FluentReport.Excel)](https://www.nuget.org/packages/FluentReport.Excel)
+[![NuGet FluentReport.Rdlc](https://img.shields.io/nuget/v/FluentReport.Rdlc.svg?label=FluentReport.Rdlc)](https://www.nuget.org/packages/FluentReport.Rdlc)
 
 Librería .NET 10 para generar PDFs y Excel usando una API fluent en C#. Usa SkiaSharp como motor de renderizado PDF y ClosedXML para Excel. Funciona en Linux sin dependencias nativas adicionales.
 
@@ -16,6 +17,7 @@ Librería .NET 10 para generar PDFs y Excel usando una API fluent en C#. Usa Ski
 - Numeración de páginas dinámica
 - Salto de página automático cuando el contenido supera la página
 - **Renderer Excel** (`FluentReport.Excel`): genera `.xlsx` directamente desde el mismo fluent API
+- **Importador RDLC** (`FluentReport.Rdlc`): convierte archivos `.rdlc` (SSRS) en documentos PDF/Excel
 - Compatible con Linux (SkiaSharp.NativeAssets.Linux.NoDependencies)
 
 ## Instalación
@@ -30,6 +32,12 @@ Para generar Excel, instala además el renderer ([FluentReport.Excel](https://ww
 
 ```shell
 dotnet add package FluentReport.Excel
+```
+
+Para importar reportes `.rdlc` existentes ([FluentReport.Rdlc](https://www.nuget.org/packages/FluentReport.Rdlc)):
+
+```shell
+dotnet add package FluentReport.Rdlc
 ```
 
 ## Uso rápido
@@ -171,6 +179,97 @@ Document.Create(container =>
 | `Image(...)` | Ignorado (no soportado en el renderer Excel) |
 | Numeración de páginas | Escribe "1" para página actual y "?" para total de páginas |
 
+## RDLC – Importar reportes existentes
+
+`FluentReport.Rdlc` permite convertir archivos `.rdlc` (Visual Studio / SSRS) en documentos FluentReport listos para renderizar como PDF o Excel.
+
+```csharp
+using FluentReport.Rdlc;
+
+var doc = Document.FromRdlc(
+    "reportes/catalogo.rdlc",
+    datasets: new Dictionary<string, IEnumerable<object>>
+    {
+        ["Productos"] = productos.Cast<object>()
+    },
+    parameters: new Dictionary<string, object>
+    {
+        ["Empresa"] = "Acme Corp."
+    });
+
+doc.GeneratePdf("catalogo.pdf");
+```
+
+Elementos RDLC soportados: `Textbox`, `Line`, `Image`, `Tablix` (con datos y `ColSpan`), `PageHeader`, `PageFooter`, márgenes y tamaño de página.
+
+Expresiones soportadas: `=Fields!X.Value`, `=Parameters!X.Value` y literales.
+
+> 📄 **Documentación completa, limitaciones y ejemplos:** [`docs/rdlc-import.md`](docs/rdlc-import.md)
+
+## Nuevos elementos (API fluent)
+
+### Lista de datos — `List<T>()`
+
+Repite una plantilla por cada elemento de una colección:
+
+```csharp
+page.Content().List(pedidos, (container, pedido) =>
+{
+    container.Column(col =>
+    {
+        col.Item().Text(pedido.Descripcion).Bold();
+        col.Item().Text($"Total: {pedido.Total:C}");
+    });
+}, spacing: 8f);
+```
+
+### Gráficos — `Chart()`
+
+Genera gráficos de barras o líneas con ejes, leyenda y múltiples series:
+
+```csharp
+page.Content().Chart()
+    .Type(ChartType.Bar)
+    .Title("Ventas por Trimestre")
+    .Categories(new[] { "Q1", "Q2", "Q3", "Q4" })
+    .AddSeries("Ingresos", new double[] { 100_000, 145_000, 132_000, 198_000 })
+    .AddSeries("Costos",   new double[] { 78_000, 91_000, 85_000, 110_000 }, "#FF6666")
+    .Height(220);
+```
+
+### Documento anidado — `Subreport()`
+
+Incrusta un `Document` completo dentro de otro:
+
+```csharp
+var anexo = Document.Create(c => { /* ... */ });
+page.Content().Subreport(anexo);
+```
+
+### `ColSpan` en tablas
+
+Las celdas de encabezado y de datos pueden abarcar múltiples columnas:
+
+```csharp
+table.Header(h =>
+{
+    h.Cell(3).Background("#4472C4").Text("Encabezado extendido").Color("#FFFFFF");
+});
+```
+
+### Estilos condicionales en texto
+
+`BoldResolver`, `ItalicResolver` y `ColorResolver` permiten evaluar el estilo en tiempo de render:
+
+```csharp
+t.Span(item.Estado, s =>
+{
+    s.ColorResolver = () => item.Activo
+        ? new ReportColor(0, 150, 0)
+        : new ReportColor(200, 0, 0);
+});
+```
+
 ## API Reference
 
 ### Document
@@ -178,6 +277,9 @@ Document.Create(container =>
 | Método | Descripción |
 |--------|-------------|
 | `Document.Create(configure)` | Crea un nuevo documento |
+| `Document.FromRdlc(path, ...)` | Importa un archivo `.rdlc` *(requiere FluentReport.Rdlc)* |
+| `Document.FromRdlcStream(stream, ...)` | Importa RDLC desde un `Stream` *(requiere FluentReport.Rdlc)* |
+| `Document.FromRdlcXml(xml, ...)` | Importa RDLC desde una cadena XML *(requiere FluentReport.Rdlc)* |
 | `.GeneratePdf(filePath)` | Genera el PDF y lo guarda en disco |
 | `.GeneratePdf(stream)` | Genera el PDF y lo escribe en un stream |
 | `.GeneratePdf()` | Genera el PDF y devuelve `byte[]` |
@@ -221,6 +323,9 @@ Document.Create(container =>
 | `.AlignCenter()` | Alineación centrada |
 | `.AlignRight()` | Alineación derecha |
 | `.PageBreak()` | Salto de página explícito |
+| `.List<T>(items, template, spacing)` | Repite una plantilla por cada elemento de la colección |
+| `.Chart()` | Gráfico de barras o líneas (devuelve `ChartBuilder`) |
+| `.Subreport(document)` | Incrusta un `Document` anidado |
 
 ### TextBuilder
 
@@ -260,7 +365,7 @@ Document.Create(container =>
 |--------|-------------|
 | `.ColumnsDefinition(configure)` | Define columnas |
 | `.Header(configure)` | Define fila de encabezado |
-| `.Cell()` | Agrega una celda de datos |
+| `.Cell(colSpan)` | Agrega una celda de datos con span de columnas opcional |
 | `.BorderEachCell(width, color)` | Borde en cada celda |
 
 ### TableColumnDefinitionBuilder
@@ -299,12 +404,19 @@ src/
 │   ├── Elements/               # Elementos renderizables
 │   ├── Builders/               # Fluent API builders
 │   └── Rendering/              # Motor de renderizado con SkiaSharp
-└── FluentReport.Excel/         # Renderer Excel (opcional)
-    ├── ExcelDocumentRenderer.cs # Motor de renderizado Excel con ClosedXML
-    └── DocumentExcelExtensions.cs # Métodos de extensión GenerateExcel
+├── FluentReport.Excel/         # Renderer Excel (opcional)
+│   ├── ExcelDocumentRenderer.cs # Motor de renderizado Excel con ClosedXML
+│   └── DocumentExcelExtensions.cs # Métodos de extensión GenerateExcel
+└── FluentReport.Rdlc/          # Importador RDLC (opcional)
+    ├── RdlcDocumentFactory.cs  # Parser XML .rdlc → DocumentSettings
+    ├── RdlcExpressionEvaluator.cs # Evaluador de expresiones =Fields!/=Parameters!
+    └── DocumentRdlcExtensions.cs # Métodos de extensión FromRdlc
 tests/
-├── FluentReport.Tests/         # Tests PDF con xUnit (19 tests)
-└── FluentReport.Excel.Tests/   # Tests Excel con xUnit (12 tests)
+├── FluentReport.Tests/         # Tests PDF con xUnit
+├── FluentReport.Excel.Tests/   # Tests Excel con xUnit
+└── FluentReport.Rdlc.Tests/    # Tests RDLC con xUnit
+docs/
+└── rdlc-import.md              # Guía completa del importador RDLC
 samples/
 └── FluentReport.Samples/       # Samples PDF (01-06) y Excel (07-09)
 ```
@@ -314,3 +426,4 @@ samples/
 - [SkiaSharp](https://www.nuget.org/packages/SkiaSharp) 3.116.1 — renderizado PDF
 - SkiaSharp.NativeAssets.Linux.NoDependencies — soporte Linux sin libfontconfig
 - [ClosedXML](https://www.nuget.org/packages/ClosedXML) 0.102.2 — renderizado Excel (solo FluentReport.Excel)
+- System.Xml.Linq (BCL) — parser RDLC (solo FluentReport.Rdlc, sin dependencias adicionales)
