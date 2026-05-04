@@ -1,7 +1,6 @@
 using FluentReport.Builders;
 using FluentReport.Core;
 using FluentReport.Rendering;
-using SkiaSharp;
 
 namespace FluentReport;
 
@@ -45,18 +44,15 @@ public class Document
     /// </summary>
     /// <param name="scale">
     /// Pixel-per-point scale factor (default 1.0 = 1 px per pt, 2.0 = 2× hi-dpi).
+    /// Must be greater than zero.
     /// </param>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when <paramref name="scale"/> is ≤ 0.</exception>
     public IReadOnlyList<byte[]> GenerateImages(float scale = 1f)
     {
+        if (scale <= 0)
+            throw new ArgumentOutOfRangeException(nameof(scale), scale, "Scale must be greater than zero.");
+
         var renderer = new DocumentRenderer(_settings);
-        int count = renderer.GetPageCount();
-        var result = new List<byte[]>(count);
-        for (int i = 0; i < count; i++)
-        {
-            using var image = renderer.RenderPageToImage(i, scale);
-            using var data = image.Encode(SkiaSharp.SKEncodedImageFormat.Png, 100);
-            result.Add(data.ToArray());
-        }
-        return result;
+        return renderer.RenderAllPages(scale);
     }
 }

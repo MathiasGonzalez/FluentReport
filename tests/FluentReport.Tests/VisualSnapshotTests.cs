@@ -154,5 +154,5 @@ public class VisualSnapshotTests : IClassFixture<SnapshotFontFixture>
     }
 }
 
-[CollectionDefinition("VisualSnapshots")]
+[CollectionDefinition("VisualSnapshots", DisableParallelization = true)]
 public class VisualSnapshotCollection { }

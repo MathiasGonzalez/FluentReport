@@ -15,7 +15,10 @@
     <RepositoryType>git</RepositoryType>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
-  <ItemGroup>
+  <!-- InternalsVisibleTo is excluded when building for NuGet packaging (PackageBuild=true).
+       This prevents weakening encapsulation in the published assembly while still allowing
+       the test project to access internals during normal builds and test runs. -->
+  <ItemGroup Condition="'$(PackageBuild)' != 'true'">
     <AssemblyAttribute Include="System.Runtime.CompilerServices.InternalsVisibleTo">
       <_Parameter1>FluentReport.Tests</_Parameter1>
     </AssemblyAttribute>

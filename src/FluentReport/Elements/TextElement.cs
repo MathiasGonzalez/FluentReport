@@ -58,7 +58,7 @@ public class TextElement : ElementBase
     private static SKTypeface CreateTypeface(TextStyle style)
     {
         if (TypefaceFactory != null)
-            return TypefaceFactory(style);
+            return TypefaceFactory(style) ?? SKTypeface.Default;
 
         return SKTypeface.FromFamilyName(
             style.FontFamily,
