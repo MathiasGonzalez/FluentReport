@@ -1,5 +1,8 @@
 # FluentReport
 
+[![CI](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/ci.yml/badge.svg)](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/ci.yml)
+[![Publish to NuGet](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/nuget.yml/badge.svg)](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/nuget.yml)
+
 Librería .NET 10 para generar PDFs y Excel usando una API fluent en C#. Usa SkiaSharp como motor de renderizado PDF y ClosedXML para Excel. Funciona en Linux sin dependencias nativas adicionales.
 
 ## Características
