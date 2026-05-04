@@ -26,7 +26,7 @@ public class DocumentRenderer
             throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page index {pageIndex} is out of range (0–{total - 1}).");
 
         // Iterate only until the requested page to avoid paging the whole document.
-        int currentLogicalIndex = 0;
+        int visitedPageCount = 0;
         int currentPageNumber = 0;
 
         foreach (var pageSettings in _settings.Pages)
@@ -46,9 +46,9 @@ public class DocumentRenderer
             foreach (var pageContent in pages)
             {
                 currentPageNumber++;
-                if (currentLogicalIndex == pageIndex)
+                if (visitedPageCount == pageIndex)
                     return RenderPageToImageCore(pageSettings, pageContent, currentPageNumber, total, scale);
-                currentLogicalIndex++;
+                visitedPageCount++;
             }
         }
 
@@ -108,7 +108,7 @@ public class DocumentRenderer
         var imageInfo = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var surface = SKSurface.Create(imageInfo)
             ?? throw new InvalidOperationException(
-                $"Failed to create SKSurface ({width}×{height}). Scale must be positive.");
+                $"Failed to create SKSurface ({width}×{height}). The requested dimensions may be too large or insufficient memory is available.");
         var canvas = surface.Canvas;
         canvas.Clear(SKColors.White);
 
