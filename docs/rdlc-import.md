@@ -116,7 +116,7 @@ Los nombres de campo son **case-insensitive** (tanto en las expresiones `=Fields
 |---------------|--------------------------|-------|
 | `<Textbox>` | `TextElement` | Soporta `FontSize`, `FontWeight`, `FontStyle`, `TextDecoration`, `Color`, `TextAlign`, `BackgroundColor`, `PaddingTop/Bottom/Left/Right` |
 | `<Line>` | `LineElement` | Soporta `Color`, `BorderWidth` |
-| `<Image>` | `ImageElement` | Source = `External` (ruta de archivo) y `Database` (bytes en base64 desde campo). `Embedded` genera imagen vacía |
+| `<Image>` | `ImageElement` | Source = `External` (ruta de archivo) y `Database` (bytes en base64 desde campo). Source = `Embedded` no está soportado; la imagen se omite del output. |
 | `<Tablix>` | `TableElement` | Filas estáticas como encabezados y filas de detalle que se repiten por cada fila del dataset. Soporta `ColSpan`. Ver limitaciones. |
 | `<PageHeader>` | Header del documento | |
 | `<PageFooter>` | Footer del documento | |
@@ -217,7 +217,7 @@ doc.GeneratePdf("catalogo.pdf");
 
 2. **Tablix avanzado**: los grupos de filas/columnas (`<RowGroups>`, `<ColumnGroups>`) con jerarquía múltiple no se procesan. El parser detecta filas de detalle por la presencia de `<Group>` en `<TablixRowHierarchy>` y usa heurística de expresión como fallback; estructuras complejas pueden no renderizarse como se espera.
 
-3. **RowSpan**: el modelo (`TableCell.RowSpan`) existe pero el renderer no aplica spanning vertical. Las celdas con `RowSpan > 1` se muestran con su contenido en la primera fila y la celda extra se ignora.
+3. **RowSpan**: el modelo (`TableCell.RowSpan`) existe pero el renderer no aplica spanning vertical. La celda con `RowSpan > 1` muestra su contenido normalmente en su posición. Las celdas de las filas inferiores que deberían estar fusionadas se renderizan como celdas vacías independientes, sin combinar visualmente con la celda superior.
 
 4. **Imágenes embebidas** (`Source = "Embedded"`): el parser no extrae los bytes de la sección `<EmbeddedImages>`. La imagen se omite del output.
 
