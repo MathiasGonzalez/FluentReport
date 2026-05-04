@@ -29,9 +29,11 @@ public class TextElement : ElementBase
 
     /// <summary>
     /// Optional override for typeface creation. When non-null, called instead of the default
-    /// system font lookup. Intended for test fixtures that need deterministic font rendering.
+    /// system font lookup. Useful for embedding custom fonts or ensuring deterministic
+    /// rendering in tests and environments where system fonts are unavailable.
+    /// The factory must not return null; a null return falls back to <see cref="SKTypeface.Default"/>.
     /// </summary>
-    internal static Func<TextStyle, SKTypeface>? TypefaceFactory { get; set; }
+    public static Func<TextStyle, SKTypeface>? TypefaceFactory { get; set; }
 
     public void AddSpan(string text, TextStyle? style = null)
     {

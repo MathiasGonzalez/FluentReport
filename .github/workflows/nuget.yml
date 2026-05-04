@@ -23,11 +23,14 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore
 
+      - name: Build (Release)
+        run: dotnet build --no-restore --configuration Release
+
       - name: Pack FluentReport
-        run: dotnet pack src/FluentReport/FluentReport.csproj --no-restore --configuration Release --output ./nupkgs /p:PackageBuild=true
+        run: dotnet pack src/FluentReport/FluentReport.csproj --no-build --configuration Release --output ./nupkgs
 
       - name: Pack FluentReport.Excel
-        run: dotnet pack src/FluentReport.Excel/FluentReport.Excel.csproj --no-restore --configuration Release --output ./nupkgs /p:PackageBuild=true
+        run: dotnet pack src/FluentReport.Excel/FluentReport.Excel.csproj --no-build --configuration Release --output ./nupkgs
 
       - name: Push to NuGet
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_FLUENT_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
