@@ -10,7 +10,7 @@ namespace FluentReport.Excel;
 /// Renders a FluentReport document as an Excel (.xlsx) workbook.
 /// Each document page maps to an Excel worksheet.
 /// PageBreak elements within content produce additional worksheets.
-/// Elements without a meaningful Excel equivalent (images, spacers) are skipped.
+/// Elements without a meaningful Excel equivalent (images) are skipped.
 /// </summary>
 public class ExcelDocumentRenderer
 {
@@ -18,6 +18,12 @@ public class ExcelDocumentRenderer
 
     /// <summary>Number of virtual Excel columns used to distribute layout. Default is 10.</summary>
     public int TotalColumns { get; set; } = 10;
+
+    /// <summary>
+    /// Assumed width (in points) of one relative unit when mixing fixed and relative columns.
+    /// E.g. <c>RelativeColumn(1)</c> is treated as 150 content-points wide for proportional allocation.
+    /// </summary>
+    public double RelativeUnitWidthPt { get; set; } = 150.0;
 
     public ExcelDocumentRenderer(DocumentSettings settings) => _settings = settings;
 
@@ -39,7 +45,9 @@ public class ExcelDocumentRenderer
 
     private void WritePageToWorkbook(XLWorkbook workbook, PageSettings page, int pageIndex)
     {
-        // Flatten top-level content items so PageBreak elements can create new sheets
+        // Flatten top-level content items so PageBreak elements can create new sheets.
+        // SpacerElements are inserted between items when the column has non-zero spacing,
+        // mirroring the behavior of DocumentRenderer.GetContentElements in the PDF renderer.
         var topElements = GetTopLevelElements(page.ContentElement);
 
         var sheetGroups = new List<List<IElement>>();
@@ -83,7 +91,7 @@ public class ExcelDocumentRenderer
 
     // ── Element tree traversal ───────────────────────────────────────────────
 
-    private static void WriteElement(
+    private void WriteElement(
         IXLWorksheet sheet,
         IElement element,
         ref int row,
@@ -126,8 +134,8 @@ public class ExcelDocumentRenderer
                     WriteElement(sheet, align.Child, ref row, startCol, endCol, alignStyle);
                 break;
 
-            case LineElement:
-                WriteLineRow(sheet, ref row, startCol, endCol);
+            case LineElement line:
+                WriteLineRow(sheet, line, ref row, startCol, endCol);
                 break;
 
             case SpacerElement:
@@ -140,7 +148,7 @@ public class ExcelDocumentRenderer
         }
     }
 
-    private static void WriteColumn(
+    private void WriteColumn(
         IXLWorksheet sheet,
         ColumnElement col,
         ref int row,
@@ -148,11 +156,18 @@ public class ExcelDocumentRenderer
         int endCol,
         StyleInfo? style)
     {
+        bool first = true;
         foreach (var item in col.Items)
+        {
+            // Insert a blank row between items when the column has non-zero spacing
+            if (!first && col.Spacing > 0)
+                row++;
+            first = false;
             WriteElement(sheet, item, ref row, startCol, endCol, style);
+        }
     }
 
-    private static void WriteRow(
+    private void WriteRow(
         IXLWorksheet sheet,
         RowElement rowEl,
         ref int row,
@@ -162,10 +177,14 @@ public class ExcelDocumentRenderer
     {
         if (rowEl.Items.Count == 0) return;
 
-        int availableCols = endCol - startCol;
+        // Reserve 1 virtual column as a gap between items when Spacing > 0
+        bool hasSpacing = rowEl.Spacing > 0 && rowEl.Items.Count > 1;
+        int spacingCols = hasSpacing ? rowEl.Items.Count - 1 : 0;
+        int contentCols = Math.Max(rowEl.Items.Count, endCol - startCol - spacingCols);
+
         int[] colWidths = DistributeColumns(
             rowEl.Items.Select(i => (i.IsRelative, i.IsRelative ? i.RelativeWidth : i.FixedWidth ?? 1f)).ToList(),
-            availableCols);
+            contentCols);
 
         int startRow = row;
         int maxRow = row;
@@ -174,18 +193,21 @@ public class ExcelDocumentRenderer
         for (int i = 0; i < rowEl.Items.Count; i++)
         {
             var item = rowEl.Items[i];
-            if (item.Element == null) { colOffset += colWidths[i]; continue; }
-
-            int itemRow = startRow;
-            WriteElement(sheet, item.Element, ref itemRow, colOffset, colOffset + colWidths[i], style);
-            if (itemRow > maxRow) maxRow = itemRow;
+            if (item.Element != null)
+            {
+                int itemRow = startRow;
+                WriteElement(sheet, item.Element, ref itemRow, colOffset, colOffset + colWidths[i], style);
+                if (itemRow > maxRow) maxRow = itemRow;
+            }
             colOffset += colWidths[i];
+            if (hasSpacing && i < rowEl.Items.Count - 1)
+                colOffset++; // skip gap column
         }
 
         row = maxRow;
     }
 
-    private static void WriteTable(
+    private void WriteTable(
         IXLWorksheet sheet,
         TableElement table,
         ref int row,
@@ -228,22 +250,23 @@ public class ExcelDocumentRenderer
                 var cell = cells[idx];
                 int cellEndCol = colOffset + colWidths[c] - 1; // inclusive
 
-                IXLCell xlCell;
                 if (colWidths[c] > 1)
-                {
                     sheet.Range(row, colOffset, row, cellEndCol).Merge();
-                }
-                xlCell = sheet.Cell(row, colOffset);
 
+                var xlCell = sheet.Cell(row, colOffset);
                 xlCell.Value = ExtractText(cell.Content);
 
                 var textStyle = ExtractTextStyle(cell.Content);
                 if (textStyle != null)
-                {
                     ApplyTextStyle(xlCell, textStyle);
-                }
+
                 if (isHeader)
                     xlCell.Style.Font.Bold = true;
+
+                // Apply alignment from an AlignElement wrapper on the cell content
+                var cellAlignment = ExtractHorizontalAlignment(cell.Content);
+                if (cellAlignment.HasValue)
+                    xlCell.Style.Alignment.Horizontal = MapHorizontalAlignment(cellAlignment.Value);
 
                 var bg = ExtractBackgroundColor(cell.Content);
                 if (bg.HasValue)
@@ -269,29 +292,56 @@ public class ExcelDocumentRenderer
         int endCol,
         StyleInfo? style)
     {
-        var sb = new System.Text.StringBuilder();
-        foreach (var span in text.Spans)
+        if (endCol - startCol > 1)
+            sheet.Range(row, startCol, row, endCol - 1).Merge();
+
+        var cell = sheet.Cell(row, startCol);
+
+        if (text.Spans.Count > 1)
         {
-            sb.Append(span.IsCurrentPage ? "1"
+            // Multi-span: use ClosedXML rich text to preserve per-span formatting
+            var richText = cell.CreateRichText();
+            bool hasContent = false;
+            foreach (var span in text.Spans)
+            {
+                string spanText = span.IsCurrentPage ? "1"
+                    : span.IsTotalPages ? "?"
+                    : span.StaticText ?? "";
+                if (spanText.Length == 0) continue;
+                hasContent = true;
+
+                var rich = richText.AddText(spanText)
+                    .SetBold(span.Style.Bold)
+                    .SetItalic(span.Style.Italic)
+                    .SetUnderline(span.Style.Underline
+                        ? XLFontUnderlineValues.Single
+                        : XLFontUnderlineValues.None)
+                    .SetFontSize(span.Style.FontSize)
+                    .SetFontColor(ToXLColor(span.Style.Color));
+                if (!string.IsNullOrEmpty(span.Style.FontFamily))
+                    rich.SetFontName(span.Style.FontFamily);
+            }
+            _ = hasContent; // used to track whether any span added text
+            cell.Style.Alignment.Horizontal = MapTextAlignment(text.Style.Alignment);
+            cell.Style.Alignment.WrapText = true;
+        }
+        else
+        {
+            // Single span: apply cell-level styling
+            var sb = new System.Text.StringBuilder();
+            foreach (var span in text.Spans)
+            {
+                sb.Append(span.IsCurrentPage ? "1"
                     : span.IsTotalPages ? "?"
                     : span.StaticText ?? "");
+            }
+            cell.Value = sb.ToString();
+
+            var textStyle = text.Spans.Count > 0 ? text.Spans[0].Style : text.Style;
+            ApplyTextStyle(cell, textStyle);
         }
 
-        string cellText = sb.ToString();
-
-        IXLCell cell;
-        if (endCol - startCol > 1)
-        {
-            sheet.Range(row, startCol, row, endCol - 1).Merge();
-        }
-        cell = sheet.Cell(row, startCol);
-        cell.Value = cellText;
-
-        // Text style from first span (or element-level style)
-        var textStyle = text.Spans.Count > 0 ? text.Spans[0].Style : text.Style;
-        ApplyTextStyle(cell, textStyle);
-
-        // Override with wrapper style
+        // Apply wrapper style overrides (work for both rich text and plain text)
         if (style?.Bold == true) cell.Style.Font.Bold = true;
         if (style?.BackgroundColor.HasValue == true)
             cell.Style.Fill.BackgroundColor = ToXLColor(style.BackgroundColor.Value);
@@ -303,7 +353,7 @@ public class ExcelDocumentRenderer
         row++;
     }
 
-    private static void WriteBorderElement(
+    private void WriteBorderElement(
         IXLWorksheet sheet,
         BorderElement border,
         ref int row,
@@ -323,13 +373,16 @@ public class ExcelDocumentRenderer
             WriteElement(sheet, border.Child, ref row, startCol, endCol, newStyle);
     }
 
-    private static void WriteLineRow(IXLWorksheet sheet, ref int row, int startCol, int endCol)
+    private static void WriteLineRow(IXLWorksheet sheet, LineElement line, ref int row, int startCol, int endCol)
     {
+        var color = ToXLColor(line.Color);
+        var borderStyle = line.Thickness >= 2 ? XLBorderStyleValues.Medium : XLBorderStyleValues.Thin;
+
         for (int c = startCol; c < endCol; c++)
         {
             var cell = sheet.Cell(row, c);
-            cell.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
-            cell.Style.Border.BottomBorderColor = XLColor.Black;
+            cell.Style.Border.BottomBorder = borderStyle;
+            cell.Style.Border.BottomBorderColor = color;
         }
         row++;
     }
@@ -373,6 +426,22 @@ public class ExcelDocumentRenderer
             BorderElement b => b.BackgroundColor,
             PaddingElement p => ExtractBackgroundColor(p.Child),
             AlignElement a => ExtractBackgroundColor(a.Child),
+            _ => null
+        };
+    }
+
+    /// <summary>
+    /// Extracts the <see cref="HorizontalAlignment"/> from an <see cref="AlignElement"/> wrapper,
+    /// if present. Used to honour <c>.AlignCenter()</c>/<c>.AlignRight()</c> on table cells.
+    /// </summary>
+    private static HorizontalAlignment? ExtractHorizontalAlignment(IElement? element)
+    {
+        if (element == null) return null;
+        return Resolve(element) switch
+        {
+            AlignElement a => a.Alignment,
+            PaddingElement p => ExtractHorizontalAlignment(p.Child),
+            BorderElement b => ExtractHorizontalAlignment(b.Child),
             _ => null
         };
     }
@@ -428,19 +497,75 @@ public class ExcelDocumentRenderer
 
     // ── Column distribution ──────────────────────────────────────────────────
 
-    private static int[] DistributeColumns(List<(bool isRelative, float weight)> items, int totalCols)
+    /// <summary>
+    /// Distributes <paramref name="totalCols"/> virtual Excel columns across items.
+    /// Fixed-width items (points) and relative-weight items are normalized to a common
+    /// unit before proportional distribution: 1 relative unit = <see cref="RelativeUnitWidthPt"/> pts.
+    /// Uses the Hare-Niemeyer (largest-remainder) method so the sum always equals
+    /// <paramref name="totalCols"/> and each item receives at least 1 column.
+    /// </summary>
+    private int[] DistributeColumns(List<(bool isRelative, float weight)> items, int totalCols)
     {
         if (items.Count == 0) return [];
-        double totalWeight = items.Sum(i => (double)i.weight);
-        var result = new int[items.Count];
-        int allocated = 0;
-        for (int i = 0; i < items.Count - 1; i++)
+
+        // Normalize: fixed items keep their point value;
+        // relative items are scaled by RelativeUnitWidthPt so both types are in the same unit.
+        var normalizedWeights = items
+            .Select(i => i.isRelative ? (double)i.weight * RelativeUnitWidthPt : (double)i.weight)
+            .ToList();
+
+        return DistributeProportional(normalizedWeights, totalCols);
+    }
+
+    /// <summary>
+    /// Proportional allocation using the Hare-Niemeyer (largest-remainder) method.
+    /// Guarantees the result sums to exactly <paramref name="totalCols"/> and each
+    /// slot receives at least 1 column (stealing from the largest allocation when needed).
+    /// </summary>
+    private static int[] DistributeProportional(List<double> weights, int totalCols)
+    {
+        int n = weights.Count;
+        if (n == 0) return [];
+
+        // Ensure we can give at least 1 column per item
+        if (totalCols < n) totalCols = n;
+
+        double total = weights.Sum();
+        var alloc = new int[n];
+
+        if (total <= 0)
         {
-            result[i] = Math.Max(1, (int)Math.Round(items[i].weight / totalWeight * totalCols));
-            allocated += result[i];
+            // Equal distribution
+            int each = totalCols / n;
+            for (int i = 0; i < n; i++) alloc[i] = each;
+            alloc[0] += totalCols - each * n;
+            return alloc;
         }
-        result[^1] = Math.Max(1, totalCols - allocated);
-        return result;
+
+        // Floor allocations
+        var exact = weights.Select(w => w / total * totalCols).ToArray();
+        var floors = exact.Select(v => (int)v).ToArray();
+        int remaining = totalCols - floors.Sum();
+
+        // Distribute leftover columns to items with the largest remainders
+        var byRemainder = Enumerable.Range(0, n)
+            .OrderByDescending(i => exact[i] - floors[i]);
+        foreach (int i in byRemainder.Take(remaining))
+            floors[i]++;
+
+        // Enforce minimum 1 per item (steal from the item with most columns)
+        for (int i = 0; i < n; i++)
+        {
+            while (floors[i] < 1)
+            {
+                int maxIdx = Array.IndexOf(floors, floors.Max());
+                if (floors[maxIdx] <= 1) { floors[i] = 1; break; } // nothing left to steal
+                floors[maxIdx]--;
+                floors[i]++;
+            }
+        }
+
+        return floors;
     }
 
     // ── Utilities ────────────────────────────────────────────────────────────
@@ -448,12 +573,28 @@ public class ExcelDocumentRenderer
     private static IElement Resolve(IElement element) =>
         element is LazyElement lazy ? lazy.Built : element;
 
+    /// <summary>
+    /// Returns the top-level items of the content element, inserting
+    /// <see cref="SpacerElement"/> instances between items when the column has
+    /// non-zero spacing — mirroring the PDF renderer's <c>GetContentElements</c>.
+    /// </summary>
     private static List<IElement> GetTopLevelElements(IElement? content)
     {
         if (content == null) return [];
         var resolved = Resolve(content);
         if (resolved is ColumnElement column)
-            return column.Items.ToList();
+        {
+            if (column.Spacing <= 0) return column.Items.ToList();
+            var items = new List<IElement>();
+            bool first = true;
+            foreach (var item in column.Items)
+            {
+                if (!first) items.Add(new SpacerElement(column.Spacing));
+                first = false;
+                items.Add(item);
+            }
+            return items;
+        }
         return [content];
     }
 }
@@ -466,3 +607,4 @@ internal record StyleInfo
     public bool Bold { get; init; }
     public HorizontalAlignment? Alignment { get; init; }
 }
+

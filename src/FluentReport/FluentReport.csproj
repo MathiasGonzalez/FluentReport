@@ -4,7 +4,20 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <!-- NuGet package metadata -->
+    <PackageId>FluentReport</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Mathías González Benítez</Authors>
+    <Description>A fluent API for generating PDF reports in .NET 10 using SkiaSharp.</Description>
+    <PackageTags>pdf;report;fluent;skiasharp</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/MathiasGonzalez/FluentReport</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="SkiaSharp" Version="3.116.1" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.116.1" />
