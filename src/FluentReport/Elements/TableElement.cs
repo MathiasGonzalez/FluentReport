@@ -14,7 +14,9 @@ public class TableColumnDefinition
 public class TableCell
 {
     public IElement? Content { get; set; }
+    /// <summary>Number of columns this cell spans. Default is 1.</summary>
     public int ColumnSpan { get; set; } = 1;
+    /// <summary>Number of rows this cell spans. Rendering currently treats this as 1; the model is preserved for future use.</summary>
     public int RowSpan { get; set; } = 1;
     public bool IsHeader { get; set; }
 }
@@ -38,31 +40,72 @@ public class TableElement : ElementBase
             : (c.FixedWidth ?? 0)).ToArray();
     }
 
-    private float[] GetRowHeights(float[] colWidths, IList<TableCell> cells, MeasureContext ctx)
+    /// <summary>
+    /// Partitions a flat list of cells into rows, respecting <see cref="TableCell.ColumnSpan"/>.
+    /// Each element is <c>(cell, startColumnIndex, effectiveSpan)</c>.
+    /// </summary>
+    private List<List<(TableCell Cell, int StartCol, int Span)>> PartitionIntoRows(IList<TableCell> cells, int cols)
     {
-        var cols = Columns.Count;
-        if (cols == 0) return Array.Empty<float>();
-        var rowCount = (int)Math.Ceiling((double)cells.Count / cols);
-        var heights = new float[rowCount];
-        for (int i = 0; i < cells.Count; i++)
+        var rows = new List<List<(TableCell, int, int)>>();
+        var row = new List<(TableCell, int, int)>();
+        int colIdx = 0;
+
+        foreach (var cell in cells)
         {
-            var row = i / cols;
-            var col = i % cols;
-            if (col >= colWidths.Length) continue;
-            var cell = cells[i];
-            var s = cell.Content?.Measure(new MeasureContext { AvailableWidth = colWidths[col], AvailableHeight = ctx.AvailableHeight }) ?? Size.Zero;
-            if (s.Height > heights[row]) heights[row] = s.Height;
+            // Start a new row when the current row is full.
+            if (colIdx >= cols)
+            {
+                rows.Add(row);
+                row = new List<(TableCell, int, int)>();
+                colIdx = 0;
+            }
+
+            int span = Math.Max(1, Math.Min(cell.ColumnSpan, cols - colIdx));
+            row.Add((cell, colIdx, span));
+            colIdx += span;
+
+            // If this cell fills the row exactly, seal the row.
+            if (colIdx >= cols)
+            {
+                rows.Add(row);
+                row = new List<(TableCell, int, int)>();
+                colIdx = 0;
+            }
         }
-        return heights;
+
+        if (row.Count > 0)
+            rows.Add(row);
+
+        return rows;
     }
 
     public override Size Measure(MeasureContext context)
     {
         var colWidths = GetColumnWidths(context.AvailableWidth);
-        var headerHeights = GetRowHeights(colWidths, HeaderCells, context);
-        var dataHeights = GetRowHeights(colWidths, DataCells, context);
-        var totalHeight = headerHeights.Sum() + dataHeights.Sum();
+        var cols = Columns.Count;
+        if (cols == 0) return new(context.AvailableWidth, 0);
+
+        float totalHeight = 0;
+        totalHeight += MeasureRows(HeaderCells, colWidths, cols, context.AvailableHeight);
+        totalHeight += MeasureRows(DataCells, colWidths, cols, context.AvailableHeight);
         return new(context.AvailableWidth, totalHeight);
+    }
+
+    private float MeasureRows(IList<TableCell> cells, float[] colWidths, int cols, float availableHeight)
+    {
+        float total = 0;
+        foreach (var row in PartitionIntoRows(cells, cols))
+        {
+            float rowHeight = 0;
+            foreach (var (cell, startCol, span) in row)
+            {
+                float cellWidth = SumWidths(colWidths, startCol, span);
+                var s = cell.Content?.Measure(new MeasureContext { AvailableWidth = cellWidth, AvailableHeight = availableHeight }) ?? Size.Zero;
+                if (s.Height > rowHeight) rowHeight = s.Height;
+            }
+            total += rowHeight;
+        }
+        return total;
     }
 
     public override void Render(RenderContext context, Position position, Size size)
@@ -72,36 +115,30 @@ public class TableElement : ElementBase
         if (cols == 0) return;
 
         float y = position.Y;
-        y = RenderRows(context, position, size, HeaderCells, colWidths, y, cols);
-        RenderRows(context, position, size, DataCells, colWidths, y, cols);
+        y = RenderRows(context, position, size, HeaderCells, colWidths, cols, y);
+        RenderRows(context, position, size, DataCells, colWidths, cols, y);
     }
 
-    private float RenderRows(RenderContext ctx, Position position, Size size, IList<TableCell> cells, float[] colWidths, float y, int cols)
+    private float RenderRows(RenderContext ctx, Position position, Size size, IList<TableCell> cells, float[] colWidths, int cols, float y)
     {
-        if (cells.Count == 0) return y;
-        var rowCount = (int)Math.Ceiling((double)cells.Count / cols);
-        for (int row = 0; row < rowCount; row++)
+        foreach (var row in PartitionIntoRows(cells, cols))
         {
+            // Measure row height first
             float rowHeight = 0;
-            for (int col = 0; col < cols; col++)
+            foreach (var (cell, startCol, span) in row)
             {
-                int idx = row * cols + col;
-                if (idx >= cells.Count) break;
-                var cell = cells[idx];
-                if (col >= colWidths.Length) continue;
-                var s = cell.Content?.Measure(new MeasureContext { AvailableWidth = colWidths[col], AvailableHeight = size.Height }) ?? Size.Zero;
+                float cellWidth = SumWidths(colWidths, startCol, span);
+                var s = cell.Content?.Measure(new MeasureContext { AvailableWidth = cellWidth, AvailableHeight = size.Height }) ?? Size.Zero;
                 if (s.Height > rowHeight) rowHeight = s.Height;
             }
 
-            float x = position.X;
-            for (int col = 0; col < cols; col++)
+            // Render each cell in the row
+            foreach (var (cell, startCol, span) in row)
             {
-                int idx = row * cols + col;
-                if (idx >= cells.Count) break;
-                var cell = cells[idx];
-                if (col >= colWidths.Length) continue;
-                var cellPos = new Position(x, y);
-                var cellSize = new Size(colWidths[col], rowHeight);
+                float cellX = position.X + SumWidths(colWidths, 0, startCol);
+                float cellWidth = SumWidths(colWidths, startCol, span);
+                var cellPos = new Position(cellX, y);
+                var cellSize = new Size(cellWidth, rowHeight);
                 cell.Content?.Render(ctx, cellPos, cellSize);
 
                 if (BorderWidth > 0)
@@ -112,13 +149,20 @@ public class TableElement : ElementBase
                         StrokeWidth = BorderWidth,
                         Style = SKPaintStyle.Stroke
                     };
-                    ctx.Canvas.DrawRect(x, y, colWidths[col], rowHeight, borderPaint);
+                    ctx.Canvas.DrawRect(cellX, y, cellWidth, rowHeight, borderPaint);
                 }
-
-                x += colWidths[col];
             }
+
             y += rowHeight;
         }
         return y;
+    }
+
+    private static float SumWidths(float[] colWidths, int startCol, int span)
+    {
+        float total = 0;
+        for (int c = startCol; c < startCol + span && c < colWidths.Length; c++)
+            total += colWidths[c];
+        return total;
     }
 }

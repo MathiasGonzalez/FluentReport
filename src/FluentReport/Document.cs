@@ -39,6 +39,22 @@ public class Document
     }
 
     /// <summary>
+    /// Creates a <see cref="Document"/> directly from pre-built <see cref="DocumentSettings"/>.
+    /// Intended for use by format translation layers (e.g. RDLC, HTML) that construct settings
+    /// programmatically rather than through the fluent builder API.
+    /// </summary>
+    /// <param name="settings">Pre-built document settings. Must not be <c>null</c> and must contain at least one page.</param>
+    /// <exception cref="ArgumentNullException">Thrown when <paramref name="settings"/> is <c>null</c>.</exception>
+    /// <exception cref="ArgumentException">Thrown when <paramref name="settings"/> contains no pages.</exception>
+    public static Document FromSettings(DocumentSettings settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        if (settings.Pages.Count == 0)
+            throw new ArgumentException("DocumentSettings must contain at least one page.", nameof(settings));
+        return new(settings);
+    }
+
+    /// <summary>
     /// Renders every logical page to a PNG byte array.
     /// Useful for visual / snapshot testing.
     /// </summary>

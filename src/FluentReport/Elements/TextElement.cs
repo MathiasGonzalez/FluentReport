@@ -64,9 +64,9 @@ public class TextElement : ElementBase
 
         return SKTypeface.FromFamilyName(
             style.FontFamily,
-            style.Bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
+            style.EffectiveBold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
             SKFontStyleWidth.Normal,
-            style.Italic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright
+            style.EffectiveItalic ? SKFontStyleSlant.Italic : SKFontStyleSlant.Upright
         ) ?? SKTypeface.Default;
     }
 
@@ -81,7 +81,7 @@ public class TextElement : ElementBase
             var text = ResolveSpanText(span, null);
             using var typeface = CreateTypeface(span.Style);
             using var font = new SKFont(typeface, span.Style.FontSize);
-            using var paint = new SKPaint { Color = span.Style.Color.ToSkColor(), IsAntialias = true };
+            using var paint = new SKPaint { Color = span.Style.EffectiveColor.ToSkColor(), IsAntialias = true };
 
             var lines = WrapText(text, font, context.AvailableWidth);
             var lineHeight = span.Style.FontSize * span.Style.LineSpacing;
@@ -103,7 +103,7 @@ public class TextElement : ElementBase
                 var text = ResolveSpanText(span, null);
                 using var typeface = CreateTypeface(span.Style);
                 using var font = new SKFont(typeface, span.Style.FontSize);
-                using var paint = new SKPaint { Color = span.Style.Color.ToSkColor(), IsAntialias = true };
+                using var paint = new SKPaint { Color = span.Style.EffectiveColor.ToSkColor(), IsAntialias = true };
 
                 totalWidth += font.MeasureText(text, paint);
                 var lh = span.Style.FontSize * span.Style.LineSpacing;
@@ -124,7 +124,7 @@ public class TextElement : ElementBase
             var text = ResolveSpanText(span, context);
             using var typeface = CreateTypeface(span.Style);
             using var font = new SKFont(typeface, span.Style.FontSize);
-            using var paint = new SKPaint { Color = span.Style.Color.ToSkColor(), IsAntialias = true };
+            using var paint = new SKPaint { Color = span.Style.EffectiveColor.ToSkColor(), IsAntialias = true };
 
             RenderWrappedText(context.Canvas, text, span.Style, font, paint, position, size);
         }
@@ -140,14 +140,14 @@ public class TextElement : ElementBase
                 var text = ResolveSpanText(span, context);
                 using var typeface = CreateTypeface(span.Style);
                 using var font = new SKFont(typeface, span.Style.FontSize);
-                using var paint = new SKPaint { Color = span.Style.Color.ToSkColor(), IsAntialias = true };
+                using var paint = new SKPaint { Color = span.Style.EffectiveColor.ToSkColor(), IsAntialias = true };
 
                 context.Canvas.DrawText(text, x, y, SKTextAlign.Left, font, paint);
 
                 if (span.Style.Underline)
                 {
                     var textWidth = font.MeasureText(text, paint);
-                    using var underlinePaint = new SKPaint { Color = span.Style.Color.ToSkColor(), StrokeWidth = 1, Style = SKPaintStyle.Stroke };
+                    using var underlinePaint = new SKPaint { Color = span.Style.EffectiveColor.ToSkColor(), StrokeWidth = 1, Style = SKPaintStyle.Stroke };
                     context.Canvas.DrawLine(x, y + 2, x + textWidth, y + 2, underlinePaint);
                 }
 
@@ -185,7 +185,7 @@ public class TextElement : ElementBase
 
             if (style.Underline)
             {
-                using var underlinePaint = new SKPaint { Color = style.Color.ToSkColor(), StrokeWidth = 1, Style = SKPaintStyle.Stroke };
+                using var underlinePaint = new SKPaint { Color = style.EffectiveColor.ToSkColor(), StrokeWidth = 1, Style = SKPaintStyle.Stroke };
                 canvas.DrawLine(x, y + 2, x + lineWidth, y + 2, underlinePaint);
             }
 
