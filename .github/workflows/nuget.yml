@@ -32,5 +32,8 @@ jobs:
       - name: Pack FluentReport.Excel
         run: dotnet pack src/FluentReport.Excel/FluentReport.Excel.csproj --no-build --configuration Release --output ./nupkgs
 
+      - name: Pack FluentReport.Rdlc
+        run: dotnet pack src/FluentReport.Rdlc/FluentReport.Rdlc.csproj --no-build --configuration Release --output ./nupkgs
+
       - name: Push to NuGet
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_FLUENT_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
