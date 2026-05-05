@@ -3,6 +3,10 @@ name: Publish to NuGet
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - 'src/**'
+      - 'README.md'
+      - 'LICENSE'
 
 jobs:
   publish:
