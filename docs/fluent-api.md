@@ -5,7 +5,7 @@ Esta guía documenta **todas las clases y métodos** disponibles para construir 
 > **Namespaces de uso frecuente**
 >
 > ```csharp
-> using FluentReport;            // Document, PageSizes
+> using FluentReport;            // Document
 > using FluentReport.Core;       // PageSize, PageSizes
 > using FluentReport.Elements;   // ChartType (para gráficos)
 > using FluentReport.Styling;    // ReportColor, TextStyle (para estilos condicionales)
@@ -179,9 +179,9 @@ Un `ContainerBuilder` admite **exactamente un elemento hijo**; la última llamad
 | `.Table(Action<TableBuilder>)` | `ContainerBuilder` | Tabla de datos |
 | `.Image(string path)` | `ContainerBuilder` | Imagen desde ruta de archivo |
 | `.Image(byte[] bytes)` | `ContainerBuilder` | Imagen desde bytes |
-| `.Spacer(float size = 0)` | `ContainerBuilder` | Espacio vacío (flexible si `size = 0`, fijo si `size > 0`) |
+| `.Spacer(float size = 0)` | `ContainerBuilder` | Espacio vacío de altura exacta `size` pt (si `size = 0`, no ocupa espacio) |
 | `.Line(float thickness = 1, string? colorHex = null)` | `ContainerBuilder` | Línea horizontal |
-| `.PageBreak()` | `ContainerBuilder` | Salto de página explícito |
+| `.PageBreak()` | `ContainerBuilder` | Salto de página explícito *(solo surte efecto en elementos de primer nivel del contenido de la página o ítems directos de `Content().Column(...)`; anidar dentro de otro contenedor no genera un salto)* |
 | `.List<T>(items, template, spacing)` | `ContainerBuilder` | Repite una plantilla por cada elemento de la colección |
 | `.Chart()` | `ChartBuilder` | Gráfico de barras o líneas |
 | `.Subreport(Document nested)` | `ContainerBuilder` | Incrusta un `Document` completo como elemento inline |
@@ -289,7 +289,7 @@ col.Item().Text(x =>
 });
 ```
 
-> **Nota:** Los spans de un `DynamicTextBuilder` se renderizan en línea (inline). El word-wrap automático solo aplica a spans de texto único (`.Text(string)`).
+> **Nota:** El word-wrap automático aplica a cualquier elemento de texto de span único, ya sea creado con `.Text(string)` o con `.Text(x => x.Span(...))`. El texto con múltiples spans se renderiza en línea (inline) sin word-wrap.
 
 ---
 
@@ -356,7 +356,7 @@ page.Content().Row(row =>
 
 ## 9. TableBuilder
 
-Genera una tabla con columnas de ancho relativo o fijo, cabecera repetida y soporte de `ColSpan`.
+Genera una tabla con columnas de ancho relativo o fijo y soporte de `ColSpan`.
 
 | Método | Devuelve | Descripción |
 |--------|----------|-------------|
