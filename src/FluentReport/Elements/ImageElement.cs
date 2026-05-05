@@ -21,7 +21,8 @@ public class ImageElement : ElementBase, IDisposable
 
     public ImageElement(byte[] imageBytes)
     {
-        _bitmap = SKBitmap.Decode(imageBytes);
+        if (imageBytes.Length > 0)
+            _bitmap = SKBitmap.Decode(imageBytes);
     }
 
     public override Size Measure(MeasureContext context)

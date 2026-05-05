@@ -36,13 +36,14 @@ public sealed class RdlcDocumentFactory
     private readonly IDictionary<string, IEnumerable<object>>? _datasets;
     private readonly RdlcExpressionEvaluator _evaluator;
     private XNamespace _ns = XNamespace.None;
+    private Dictionary<string, byte[]> _embeddedImages = new(StringComparer.OrdinalIgnoreCase);
 
     public RdlcDocumentFactory(
         IDictionary<string, IEnumerable<object>>? datasets = null,
         IDictionary<string, object>? parameters = null)
     {
         _datasets = datasets;
-        _evaluator = new RdlcExpressionEvaluator(parameters);
+        _evaluator = new RdlcExpressionEvaluator(parameters, datasets);
     }
 
     // ── Public entry points ──────────────────────────────────────────────────
@@ -69,6 +70,9 @@ public sealed class RdlcDocumentFactory
         _ns = DetectNamespace(xdoc);
         var root = xdoc.Root ?? throw new InvalidOperationException("RDLC XML has no root element.");
 
+        // Pre-load embedded images so BuildImage can reference them by name.
+        _embeddedImages = ParseEmbeddedImages(root);
+
         // Support both SSRS 2008+ (<ReportSections>) and SSRS 2005 (<Body>/<Page> directly).
         var sections = root.Element(_ns + "ReportSections")
             ?.Elements(_ns + "ReportSection")
@@ -88,6 +92,42 @@ public sealed class RdlcDocumentFactory
         return rootNs; // accept any namespace (2005, 2008, or future)
     }
 
+    /// <summary>
+    /// Reads the <c>&lt;EmbeddedImages&gt;</c> section of the RDLC and returns a map from
+    /// image name → decoded PNG/JPEG bytes, ready to pass to <see cref="ImageElement"/>.
+    /// </summary>
+    private Dictionary<string, byte[]> ParseEmbeddedImages(XElement root)
+    {
+        var result = new Dictionary<string, byte[]>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var imgEl in root
+            .Elements(_ns + "EmbeddedImages")
+            .Elements(_ns + "EmbeddedImage"))
+        {
+            var name = imgEl.Attribute("Name")?.Value;
+            var b64  = imgEl.Element(_ns + "ImageData")?.Value;
+
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(b64))
+                continue;
+
+            try
+            {
+                // Base64 data in RDLC files is typically split across multiple lines;
+                // remove all whitespace before decoding.
+                var clean = b64.ReplaceLineEndings(string.Empty)
+                               .Replace(" ", string.Empty)
+                               .Replace("\t", string.Empty);
+                result[name] = Convert.FromBase64String(clean);
+            }
+            catch
+            {
+                // Ignore malformed entries — the image will simply be skipped.
+            }
+        }
+
+        return result;
+    }
+
     // ── Page configuration ────────────────────────────────────────────────────
 
     private PageSettings BuildPageSettings(XElement section, XElement reportRoot)
@@ -104,25 +144,20 @@ public sealed class RdlcDocumentFactory
 
         if (headerEl != null)
         {
-            var items = BuildReportItems(headerEl.Element(_ns + "ReportItems"), null);
-            if (items.Count > 0)
-                page.HeaderElement = BuildColumn(items);
+            float hdrWidth = ParseUnit(headerEl.Element(_ns + "Width")?.Value);
+            page.HeaderElement = BuildBodyLayout(headerEl.Element(_ns + "ReportItems"), hdrWidth, null);
         }
 
         if (footerEl != null)
         {
-            var items = BuildReportItems(footerEl.Element(_ns + "ReportItems"), null);
-            if (items.Count > 0)
-                page.FooterElement = BuildColumn(items);
+            float ftrWidth = ParseUnit(footerEl.Element(_ns + "Width")?.Value);
+            page.FooterElement = BuildBodyLayout(footerEl.Element(_ns + "ReportItems"), ftrWidth, null);
         }
 
         // Body content
         var bodyEl = section.Element(_ns + "Body") ?? reportRoot.Element(_ns + "Body");
-        var bodyItems = BuildReportItems(bodyEl?.Element(_ns + "ReportItems"), null);
-
-        page.ContentElement = bodyItems.Count > 0
-            ? BuildColumn(bodyItems)
-            : new SpacerElement();
+        float bodyWidth = ParseUnit(bodyEl?.Element(_ns + "Width")?.Value);
+        page.ContentElement = BuildBodyLayout(bodyEl?.Element(_ns + "ReportItems"), bodyWidth, null);
 
         return page;
     }
@@ -149,44 +184,127 @@ public sealed class RdlcDocumentFactory
 
     // ── ReportItems dispatcher ────────────────────────────────────────────────
 
+    /// <summary>
+    /// Builds a single RDLC element from its XML node, dispatching by local name.
+    /// Returns <c>null</c> for unsupported element types.
+    /// </summary>
+    private IElement? BuildSingleElement(XElement child, object? dataRow)
+        => child.Name.LocalName switch
+        {
+            "Textbox" => BuildTextbox(child, dataRow),
+            "Line"    => BuildLine(child),
+            "Image"   => BuildImage(child, dataRow),
+            "Tablix"  => BuildTablix(child),
+            _         => null
+        };
+
+    /// <summary>
+    /// Builds a flat vertical list of elements from a <c>&lt;ReportItems&gt;</c> node.
+    /// Used for Tablix cell contents where items have no meaningful absolute position.
+    /// </summary>
     private List<IElement> BuildReportItems(XElement? reportItemsEl, object? dataRow)
     {
         if (reportItemsEl == null) return new List<IElement>();
 
-        // Sort children by Top position so the vertical layout matches the design-time order.
         var children = reportItemsEl.Elements()
             .OrderBy(e => ParseUnit(e.Element(_ns + "Top")?.Value))
             .ThenBy(e => ParseUnit(e.Element(_ns + "Left")?.Value))
             .ToList();
 
         var elements = new List<IElement>();
-
         foreach (var child in children)
         {
-            IElement? el = child.Name.LocalName switch
-            {
-                "Textbox" => BuildTextbox(child, dataRow),
-                "Line"    => BuildLine(child),
-                "Image"   => BuildImage(child, dataRow),
-                "Tablix"  => BuildTablix(child),
-                _         => null
-            };
-
+            var el = BuildSingleElement(child, dataRow);
             if (el != null) elements.Add(el);
         }
-
         return elements;
+    }
+
+    /// <summary>
+    /// Builds an absolutely-positioned layout from a body/header/footer
+    /// <c>&lt;ReportItems&gt;</c> node.
+    /// Items that share the same <c>Top</c> value (within a 2 pt tolerance) are grouped
+    /// into a <see cref="RowElement"/> so that side-by-side panels are rendered correctly.
+    /// </summary>
+    private IElement BuildBodyLayout(XElement? reportItemsEl, float containerWidth, object? dataRow)
+    {
+        if (reportItemsEl == null) return new SpacerElement();
+
+        var positioned = reportItemsEl.Elements()
+            .Select(e => (
+                el:     e,
+                top:    ParseUnit(e.Element(_ns + "Top")?.Value),
+                left:   ParseUnit(e.Element(_ns + "Left")?.Value),
+                width:  ParseUnit(e.Element(_ns + "Width")?.Value)
+            ))
+            .OrderBy(i => i.top)
+            .ThenBy(i => i.left)
+            .ToList();
+
+        if (positioned.Count == 0) return new SpacerElement();
+
+        // Group items into horizontal bands: items whose Top values are within 2 pt.
+        const float topTolerance = 2f;
+        var bands = new List<List<(XElement el, float top, float left, float width)>>();
+
+        foreach (var item in positioned)
+        {
+            var last = bands.Count > 0 ? bands[^1] : null;
+            if (last != null && Math.Abs(item.top - last[0].top) <= topTolerance)
+                last.Add(item);
+            else
+                bands.Add(new List<(XElement, float, float, float)> { item });
+        }
+
+        var col = new ColumnElement();
+
+        foreach (var band in bands)
+        {
+            if (band.Count == 1)
+            {
+                // Single item — render inline, no horizontal offset needed.
+                var built = BuildSingleElement(band[0].el, dataRow);
+                if (built != null) col.Items.Add(built);
+                continue;
+            }
+
+            // Multiple items in the same band → side-by-side row.
+            // Use Left positions to insert spacers between items.
+            var row = new RowElement();
+            float prevRight = band.Min(i => i.left); // skip leading indent
+
+            foreach (var item in band.OrderBy(i => i.left))
+            {
+                float gap = item.left - prevRight;
+                if (gap > 0.5f)
+                    row.Items.Add(new RowItem { Element = new SpacerElement(), FixedWidth = gap });
+
+                var built = BuildSingleElement(item.el, dataRow);
+                float w = item.width > 0 ? item.width
+                          : containerWidth > 0 ? Math.Max(1f, containerWidth - item.left)
+                          : 1f;
+                row.Items.Add(new RowItem { Element = built ?? new SpacerElement(), FixedWidth = w });
+                prevRight = item.left + w;
+            }
+
+            col.Items.Add(row);
+        }
+
+        return col;
     }
 
     // ── Element builders ──────────────────────────────────────────────────────
 
     private IElement BuildTextbox(XElement el, object? row)
     {
-        var value = _evaluator.Evaluate(el.Element(_ns + "Value")?.Value, row);
         var styleEl = el.Element(_ns + "Style");
 
-        var text = new TextElement(value);
-        ApplyTextStyle(text.Style, styleEl);
+        // RDLC textboxes use either a legacy direct <Value> child
+        // or the modern <Paragraphs>/<Paragraph>/<TextRuns>/<TextRun>/<Value> structure.
+        var paragraphsEl = el.Element(_ns + "Paragraphs");
+        TextElement text = paragraphsEl != null
+            ? BuildTextFromParagraphs(paragraphsEl, row, styleEl)
+            : BuildTextFromDirectValue(el, row, styleEl);
 
         float paddingTop    = ParseUnit(styleEl?.Element(_ns + "PaddingTop")?.Value);
         float paddingBottom = ParseUnit(styleEl?.Element(_ns + "PaddingBottom")?.Value);
@@ -220,6 +338,59 @@ public sealed class RdlcDocumentFactory
         return result;
     }
 
+    /// <summary>
+    /// Builds a <see cref="TextElement"/> from the legacy <c>&lt;Value&gt;</c> child of a textbox.
+    /// </summary>
+    private TextElement BuildTextFromDirectValue(XElement el, object? row, XElement? styleEl)
+    {
+        var value = _evaluator.Evaluate(el.Element(_ns + "Value")?.Value, row);
+        var text = new TextElement(value);
+        ApplyTextStyle(text.Style, styleEl);
+        return text;
+    }
+
+    /// <summary>
+    /// Builds a <see cref="TextElement"/> from a <c>&lt;Paragraphs&gt;</c> structure, creating
+    /// one span per <c>&lt;TextRun&gt;</c> so mixed styles within a single textbox are preserved.
+    /// </summary>
+    private TextElement BuildTextFromParagraphs(XElement paragraphsEl, object? row, XElement? boxStyleEl)
+    {
+        var text = new TextElement();
+
+        foreach (var paraEl in paragraphsEl.Elements(_ns + "Paragraph"))
+        {
+            var paraStyleEl = paraEl.Element(_ns + "Style");
+            var textAlignStr = paraStyleEl?.Element(_ns + "TextAlign")?.Value;
+            TextAlignment paraAlign = textAlignStr?.ToLowerInvariant() switch
+            {
+                "center"            => TextAlignment.Center,
+                "right"             => TextAlignment.Right,
+                "justify" or "full" => TextAlignment.Justify,
+                _                   => TextAlignment.Left
+            };
+
+            foreach (var runEl in paraEl
+                .Elements(_ns + "TextRuns")
+                .Elements(_ns + "TextRun"))
+            {
+                var value      = _evaluator.Evaluate(runEl.Element(_ns + "Value")?.Value, row);
+                var runStyleEl = runEl.Element(_ns + "Style");
+
+                var spanStyle = new TextStyle { Alignment = paraAlign };
+                // Apply box-level defaults first, then run-level overrides.
+                ApplyTextStyle(spanStyle, boxStyleEl);
+                ApplyTextStyle(spanStyle, runStyleEl);
+
+                text.AddSpan(value, spanStyle);
+            }
+        }
+
+        if (text.Spans.Count == 0)
+            text.AddSpan(string.Empty);
+
+        return text;
+    }
+
     private IElement BuildLine(XElement el)
     {
         var styleEl = el.Element(_ns + "Style");
@@ -248,8 +419,10 @@ public sealed class RdlcDocumentFactory
 
         if (string.Equals(sourceType, "Embedded", StringComparison.OrdinalIgnoreCase))
         {
-            // Embedded images reference a key in <EmbeddedImages>; resolve if possible.
-            img = new ImageElement(Array.Empty<byte>());
+            // valueStr is the name of an entry in <EmbeddedImages>.
+            img = _embeddedImages.TryGetValue(valueStr, out var embBytes)
+                ? new ImageElement(embBytes)
+                : new ImageElement(Array.Empty<byte>());
         }
         else if (string.Equals(sourceType, "Database", StringComparison.OrdinalIgnoreCase) && row != null)
         {
@@ -300,23 +473,48 @@ public sealed class RdlcDocumentFactory
             ?.Elements(_ns + "TablixRow")
             .ToList() ?? new List<XElement>();
 
+        // Flatten the hierarchy into a list of (isDetail) flags, one per TablixRow.
+        // When a member has nested TablixMembers, its children map to consecutive rows.
+        // A row is "detail" when its closest ancestor member with a <Group> is that group.
+        var flatHierarchy = FlattenRowHierarchy(hierarchyMembers);
+
         // A row is a detail row when its TablixMember has a <Group> child.
         bool IsDetailByHierarchy(int rowIndex)
-            => rowIndex < hierarchyMembers.Count
-               && hierarchyMembers[rowIndex].Element(_ns + "Group") != null;
+            => rowIndex < flatHierarchy.Count && flatHierarchy[rowIndex];
 
         // Fallback: any cell value that starts with =Fields! marks the row as detail.
         bool IsDetailByExpression(XElement row)
             => row.Descendants(_ns + "Value")
                   .Any(v => RdlcExpressionEvaluator.IsFieldExpression(v.Value));
 
-        bool hasHierarchy = hierarchyMembers.Count == tblRows.Count;
+        bool hasHierarchy = flatHierarchy.Count == tblRows.Count;
 
-        // ── Build TableElement ─────────────────────────────────────────────────
+        // ── Scale column widths to fit the declared tablix Width ─────────────
+        // Always use proportional (relative) widths so the table fills whatever
+        // rendered space it is given, with columns scaled to their declared proportions.
+        // This handles cases where the declared tablix width is wider than the page.
+        float tablixDeclaredWidth = ParseUnit(tablixEl.Element(_ns + "Width")?.Value);
+        if (tablixDeclaredWidth > 0 && colWidths.Count > 0)
+        {
+            float totalColWidth = colWidths.Sum();
+            if (totalColWidth > tablixDeclaredWidth + 1f)
+            {
+                float scale = tablixDeclaredWidth / totalColWidth;
+                colWidths = colWidths.Select(w => w * scale).ToList();
+            }
+        }
+
+        // ── Build TableElement ────────────────────────────────────────────────
         var table = new TableElement();
 
+        // Convert to relative (proportional) widths so the table always fits its
+        // available container width rather than rendering at its absolute declared width.
+        float totalWidth = colWidths.Count > 0 ? colWidths.Sum() : 1f;
         foreach (var w in colWidths)
-            table.Columns.Add(new TableColumnDefinition { FixedWidth = Math.Max(1f, w) });
+            table.Columns.Add(new TableColumnDefinition
+            {
+                RelativeWidth = totalWidth > 0 ? w / totalWidth : 1f
+            });
 
         if (table.Columns.Count == 0)
             table.Columns.Add(new TableColumnDefinition { RelativeWidth = 1 });
@@ -402,8 +600,40 @@ public sealed class RdlcDocumentFactory
         return wrapper;
     }
 
-    // ── Style helpers ─────────────────────────────────────────────────────────
+    // ── Row hierarchy flattening ──────────────────────────────────────────────
 
+    /// <summary>
+    /// Recursively flattens the TablixRowHierarchy members into a list of <c>isDetail</c> booleans,
+    /// one per body row.  When a member has a <c>&lt;Group&gt;</c> element, its leaf descendants
+    /// are detail rows; otherwise they are static (header/footer) rows.
+    /// </summary>
+    private List<bool> FlattenRowHierarchy(List<XElement> members, bool parentIsDetail = false)
+    {
+        var result = new List<bool>();
+        foreach (var member in members)
+        {
+            bool hasGroup = member.Element(_ns + "Group") != null;
+            bool isDetail = parentIsDetail || hasGroup;
+
+            var nested = member.Element(_ns + "TablixMembers")
+                ?.Elements(_ns + "TablixMember")
+                .ToList();
+
+            if (nested != null && nested.Count > 0)
+            {
+                // This member groups child rows — recurse and don't emit a row for the parent.
+                result.AddRange(FlattenRowHierarchy(nested, isDetail));
+            }
+            else
+            {
+                // Leaf member → corresponds to exactly one TablixRow.
+                result.Add(isDetail);
+            }
+        }
+        return result;
+    }
+
+    // ── Style helpers ─────────────────────────────────────────────────────────
     private void ApplyTextStyle(TextStyle style, XElement? styleEl)
     {
         if (styleEl == null) return;
