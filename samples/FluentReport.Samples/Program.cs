@@ -554,6 +554,521 @@ File.WriteAllBytes(Path.Combine(outputDir, "09-multi-sheet.xlsx"),
     }).GenerateExcel());
 
 Console.WriteLine("Generated 09-multi-sheet.xlsx");
+
+// ── Uruguayan fiscal / legal documents ──────────────────────────────────────
+
+// Sample 10: Recibo de Sueldo (Uruguay – MTSS compliant payslip)
+// ── Payslip data ─────────────────────────────────────────────────────────────
+const string empNombre    = "Empresa Demo S.A.";
+const string empRut       = "21234567-1";
+const string empDomicilio = "Av. 18 de Julio 1234, Montevideo";
+
+const string trabNombre  = "Juan Carlos Pérez López";
+const string trabCi      = "1.234.567-8";
+const string trabCargo   = "Analista de Sistemas";
+const string trabLegajo  = "00042";
+const string trabBps     = "1234567-1";
+const string periodoDesc = "Mayo 2026";
+const string periodoFrom = "01/05/2026";
+const string periodoTo   = "31/05/2026";
+const string fechaPago   = "05/06/2026";
+
+// Haberes
+decimal sueldoNominal   = 50_000m;
+decimal horasExtra      = 2_500m;
+decimal viaticos        = 1_200m;
+decimal totalHaberes    = sueldoNominal + horasExtra + viaticos;
+
+// Descuentos (sobre sueldo nominal + horas extra; viáticos exonerados)
+decimal baseAportes     = sueldoNominal + horasExtra;
+decimal bpsJubilacion   = Math.Round(baseAportes * 0.15m,   2);
+decimal bpsFonasa       = Math.Round(baseAportes * 0.03m,   2);
+decimal bpsSegDesempleo = Math.Round(baseAportes * 0.00125m, 2);
+decimal irpf            = 1_580m;    // retención mensual estimada
+decimal frl             = Math.Round(baseAportes * 0.01m, 2);   // Fondo de Reconversión Laboral
+decimal totalDescuentos = bpsJubilacion + bpsFonasa + bpsSegDesempleo + irpf + frl;
+decimal netoLiquidar    = totalHaberes - totalDescuentos;
+
+File.WriteAllBytes(Path.Combine(outputDir, "10-recibo-sueldo.pdf"),
+    Document.Create(c =>
+    {
+        c.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.MarginAll(40);
+
+            // ── Header ────────────────────────────────────────────────────
+            page.Header().Column(hdr =>
+            {
+                hdr.Item().Row(row =>
+                {
+                    row.RelativeItem(3).Column(emp =>
+                    {
+                        emp.Item().Text(empNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeTitle).Bold().Color(FacturaUY.TextPrimary);
+                        emp.Item().Text($"RUT: {empRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        emp.Item().Text(empDomicilio).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                    });
+
+                    row.RelativeItem(2).AlignRight().Border(1, FacturaUY.DocBoxBorder).Background(FacturaUY.DocBoxBackground).Padding(8).Column(box =>
+                    {
+                        box.Item().Text("RECIBO DE SUELDO").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSubtitle).Bold().AlignCenter().Color(FacturaUY.HeaderBackground);
+                        box.Item().Text($"Período: {periodoDesc}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignCenter().Color(FacturaUY.TextSecondary);
+                        box.Item().Text($"{periodoFrom} – {periodoTo}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                    });
+                });
+
+                hdr.Item().Spacer(6);
+                hdr.Item().Line(1, FacturaUY.LineSeparator);
+            });
+
+            // ── Content ───────────────────────────────────────────────────
+            page.Content().Column(col =>
+            {
+                col.Spacing(8);
+
+                // Worker data
+                col.Item().PaddingTop(6).Background(FacturaUY.RowAlt).Padding(8).Column(trab =>
+                {
+                    trab.Item().Text("Datos del Trabajador").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderBackground);
+                    trab.Item().Spacer(4);
+                    trab.Item().Row(r =>
+                    {
+                        r.RelativeItem().Column(left =>
+                        {
+                            left.Item().Text($"Nombre:   {trabNombre}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                            left.Item().Text($"C.I.:       {trabCi}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                            left.Item().Text($"Cargo:     {trabCargo}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        });
+                        r.RelativeItem().Column(right =>
+                        {
+                            right.Item().Text($"Legajo:    {trabLegajo}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                            right.Item().Text($"BPS:       {trabBps}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                            right.Item().Text($"F. pago:  {fechaPago}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        });
+                    });
+                });
+
+                // Haberes table
+                col.Item().Text("Haberes").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderBackground);
+                col.Item().Table(t =>
+                {
+                    t.ColumnsDefinition(cols =>
+                    {
+                        cols.RelativeColumn(4);
+                        cols.RelativeColumn(2);
+                    });
+                    t.Header(h =>
+                    {
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Concepto").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderText);
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Importe ($)").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignRight().Color(FacturaUY.HeaderText);
+                    });
+                    bool alt2 = false;
+                    foreach (var (concepto, valor) in new[]
+                    {
+                        ("Sueldo nominal",    sueldoNominal),
+                        ("Horas extras",      horasExtra),
+                        ("Viáticos",          viaticos),
+                    })
+                    {
+                        string bg = alt2 ? FacturaUY.RowAlt : FacturaUY.RowBase;
+                        t.Cell().Background(bg).Padding(4).Text(concepto).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        t.Cell().Background(bg).Padding(4).Text($"$ {Fmt(valor)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignRight().Color(FacturaUY.TextPrimary);
+                        alt2 = !alt2;
+                    }
+                    t.Cell().Background(FacturaUY.RowAlt).Padding(4).Text("TOTAL HABERES").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.TextPrimary);
+                    t.Cell().Background(FacturaUY.RowAlt).Padding(4).Text($"$ {Fmt(totalHaberes)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignRight().Color(FacturaUY.TextPrimary);
+                });
+
+                // Descuentos table
+                col.Item().Text("Descuentos").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderBackground);
+                col.Item().Table(t =>
+                {
+                    t.ColumnsDefinition(cols =>
+                    {
+                        cols.RelativeColumn(4);
+                        cols.RelativeColumn(2);
+                    });
+                    t.Header(h =>
+                    {
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Concepto").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderText);
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Importe ($)").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignRight().Color(FacturaUY.HeaderText);
+                    });
+                    bool alt3 = false;
+                    foreach (var (concepto, valor) in new[]
+                    {
+                        ("BPS – Jubilación (15%)",          bpsJubilacion),
+                        ("BPS – FONASA (3%)",               bpsFonasa),
+                        ("BPS – Seg. Desempleo (0.125%)",   bpsSegDesempleo),
+                        ("IRPF (retención mensual)",        irpf),
+                        ("FRL – Fondo Reconversión (1%)",   frl),
+                    })
+                    {
+                        string bg = alt3 ? FacturaUY.RowAlt : FacturaUY.RowBase;
+                        t.Cell().Background(bg).Padding(4).Text(concepto).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        t.Cell().Background(bg).Padding(4).Text($"$ {Fmt(valor)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignRight().Color(FacturaUY.TextPrimary);
+                        alt3 = !alt3;
+                    }
+                    t.Cell().Background(FacturaUY.RowAlt).Padding(4).Text("TOTAL DESCUENTOS").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.TextPrimary);
+                    t.Cell().Background(FacturaUY.RowAlt).Padding(4).Text($"$ {Fmt(totalDescuentos)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignRight().Color(FacturaUY.TextPrimary);
+                });
+
+                // Net pay
+                col.Item().Border(1, FacturaUY.HeaderBackground).Background(FacturaUY.DocBoxBackground).Padding(10).Row(r =>
+                {
+                    r.RelativeItem().Text("NETO A COBRAR").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSubtitle).Bold().Color(FacturaUY.HeaderBackground);
+                    r.RelativeItem().Text($"$ {Fmt(netoLiquidar)}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSubtitle).Bold().AlignRight().Color(FacturaUY.HeaderBackground);
+                });
+
+                // Signature area
+                col.Item().PaddingTop(30).Row(r =>
+                {
+                    r.RelativeItem().Column(sig =>
+                    {
+                        sig.Item().Line(0.5f, FacturaUY.LineSeparator);
+                        sig.Item().Spacer(4);
+                        sig.Item().Text("Firma del empleado").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                        sig.Item().Text(trabNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextPrimary);
+                        sig.Item().Text($"C.I. {trabCi}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                    });
+                    r.FixedItem(40);
+                    r.RelativeItem().Column(sig =>
+                    {
+                        sig.Item().Line(0.5f, FacturaUY.LineSeparator);
+                        sig.Item().Spacer(4);
+                        sig.Item().Text("Firma del empleador").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                        sig.Item().Text(empNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextPrimary);
+                        sig.Item().Text($"RUT {empRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                    });
+                });
+
+                col.Item().PaddingTop(8).Text("El trabajador declara haber recibido conforme los haberes detallados.")
+                    .FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Italic().AlignCenter().Color(FacturaUY.TextSecondary);
+            });
+
+            // ── Footer ────────────────────────────────────────────────────
+            Action<TextStyle> footerStyle = s => { s.FontFamily = FacturaUY.FontPrimary; s.FontSize = FacturaUY.FontSizeLegal; };
+            page.Footer().AlignCenter().Text(x =>
+            {
+                x.Span("Generado con FluentReport  –  Página ", footerStyle);
+                x.CurrentPageNumber(footerStyle);
+                x.Span(" de ", footerStyle);
+                x.TotalPages(footerStyle);
+            });
+        });
+    }).GeneratePdf());
+
+Console.WriteLine("Generated 10-recibo-sueldo.pdf");
+
+// Sample 11: Remito de Entrega (Uruguay – DGI delivery note)
+// ── Delivery note data ───────────────────────────────────────────────────────
+const string remitoNumero  = "R 00000123";
+const string remitoFecha   = "05/05/2026";
+const string remitoHora    = "10:30";
+
+const string remitentNombre   = "Empresa Demo S.A.";
+const string remitentRut      = "21234567-1";
+const string remitentDireccion = "Av. 18 de Julio 1234, Montevideo";
+
+const string destinNombre    = "Distribuidora Norte S.R.L.";
+const string destinRut       = "21987654-3";
+const string destinDireccion = "Gral. Flores 3456, Montevideo";
+
+const string lugarEntrega    = "Gral. Flores 3456 – Depósito Central";
+const string transportista   = "Transporte Demo – Matrícula SBJ 4321";
+
+var itemsRemito = new[]
+{
+    new { Cant = 10,  Unidad = "unid.", Desc = "Monitor LED 24\"",          Obs = "Embalaje original" },
+    new { Cant = 5,   Unidad = "unid.", Desc = "Teclado USB inalámbrico",   Obs = "" },
+    new { Cant = 5,   Unidad = "unid.", Desc = "Mouse óptico inalámbrico",  Obs = "" },
+    new { Cant = 2,   Unidad = "caja",  Desc = "Cables HDMI 2 m (x10)",     Obs = "Sellado" },
+};
+
+File.WriteAllBytes(Path.Combine(outputDir, "11-remito-entrega.pdf"),
+    Document.Create(c =>
+    {
+        c.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.MarginAll(40);
+
+            // ── Header ────────────────────────────────────────────────────
+            page.Header().Column(hdr =>
+            {
+                hdr.Item().Row(row =>
+                {
+                    row.RelativeItem(3).Column(rem =>
+                    {
+                        rem.Item().Text(remitentNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeTitle).Bold().Color(FacturaUY.TextPrimary);
+                        rem.Item().Text($"RUT: {remitentRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        rem.Item().Text(remitentDireccion).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                    });
+
+                    row.RelativeItem(2).AlignRight().Border(1, FacturaUY.DocBoxBorder).Background(FacturaUY.DocBoxBackground).Padding(8).Column(box =>
+                    {
+                        box.Item().Text("REMITO DE ENTREGA").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSubtitle).Bold().AlignCenter().Color(FacturaUY.HeaderBackground);
+                        box.Item().Text($"N° {remitoNumero}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignCenter().Color(FacturaUY.HeaderBackground);
+                        box.Item().Text($"Fecha: {remitoFecha}  Hora: {remitoHora}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                    });
+                });
+
+                hdr.Item().Spacer(6);
+                hdr.Item().Line(1, FacturaUY.LineSeparator);
+            });
+
+            // ── Content ───────────────────────────────────────────────────
+            page.Content().Column(col =>
+            {
+                col.Spacing(10);
+
+                // Recipient block
+                col.Item().PaddingTop(6).Row(row =>
+                {
+                    row.RelativeItem().Background(FacturaUY.RowAlt).Padding(8).Column(dest =>
+                    {
+                        dest.Item().Text("Destinatario").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderBackground);
+                        dest.Item().Spacer(3);
+                        dest.Item().Text(destinNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        dest.Item().Text($"RUT: {destinRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        dest.Item().Text(destinDireccion).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                    });
+
+                    row.FixedItem(12);
+
+                    row.RelativeItem().Background(FacturaUY.RowAlt).Padding(8).Column(entrega =>
+                    {
+                        entrega.Item().Text("Lugar de Entrega").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderBackground);
+                        entrega.Item().Spacer(3);
+                        entrega.Item().Text(lugarEntrega).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        entrega.Item().Spacer(6);
+                        entrega.Item().Text("Transportista").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderBackground);
+                        entrega.Item().Spacer(3);
+                        entrega.Item().Text(transportista).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                    });
+                });
+
+                // Items table
+                col.Item().Table(t =>
+                {
+                    t.ColumnsDefinition(cols =>
+                    {
+                        cols.ConstantColumn(45);  // Cantidad
+                        cols.ConstantColumn(50);  // Unidad
+                        cols.RelativeColumn(4);   // Descripción
+                        cols.RelativeColumn(2);   // Observaciones
+                    });
+
+                    t.Header(h =>
+                    {
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Cant.").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignCenter().Color(FacturaUY.HeaderText);
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Unidad").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignCenter().Color(FacturaUY.HeaderText);
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Descripción").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderText);
+                        h.Cell().Background(FacturaUY.HeaderBackground).Padding(5).Text("Observaciones").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderText);
+                    });
+
+                    bool alt4 = false;
+                    foreach (var it in itemsRemito)
+                    {
+                        string bg = alt4 ? FacturaUY.RowAlt : FacturaUY.RowBase;
+                        t.Cell().Background(bg).Padding(4).Text(it.Cant.ToString()).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignCenter().Color(FacturaUY.TextPrimary);
+                        t.Cell().Background(bg).Padding(4).Text(it.Unidad).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).AlignCenter().Color(FacturaUY.TextPrimary);
+                        t.Cell().Background(bg).Padding(4).Text(it.Desc).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        t.Cell().Background(bg).Padding(4).Text(it.Obs).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).Color(FacturaUY.TextSecondary);
+                        alt4 = !alt4;
+                    }
+                });
+
+                // Observations
+                col.Item().Border(0.5f, FacturaUY.LineSeparator).Padding(8).Column(obs =>
+                {
+                    obs.Item().Text("Observaciones generales:").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.TextPrimary);
+                    obs.Item().Spacer(4);
+                    obs.Item().Text("Mercadería entregada en buen estado y embalaje sin daños visibles.").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextSecondary);
+                });
+
+                // Signatures
+                col.Item().PaddingTop(30).Row(r =>
+                {
+                    r.RelativeItem().Column(sig =>
+                    {
+                        sig.Item().Line(0.5f, FacturaUY.LineSeparator);
+                        sig.Item().Spacer(4);
+                        sig.Item().Text("Entregado por").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                        sig.Item().Text(remitentNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextPrimary);
+                    });
+                    r.FixedItem(40);
+                    r.RelativeItem().Column(sig =>
+                    {
+                        sig.Item().Line(0.5f, FacturaUY.LineSeparator);
+                        sig.Item().Spacer(4);
+                        sig.Item().Text("Recibido por").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                        sig.Item().Text(destinNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextPrimary);
+                    });
+                });
+            });
+
+            // ── Footer ────────────────────────────────────────────────────
+            Action<TextStyle> footerStyle2 = s => { s.FontFamily = FacturaUY.FontPrimary; s.FontSize = FacturaUY.FontSizeLegal; };
+            page.Footer().AlignCenter().Text(x =>
+            {
+                x.Span("Generado con FluentReport  –  Página ", footerStyle2);
+                x.CurrentPageNumber(footerStyle2);
+                x.Span(" de ", footerStyle2);
+                x.TotalPages(footerStyle2);
+            });
+        });
+    }).GeneratePdf());
+
+Console.WriteLine("Generated 11-remito-entrega.pdf");
+
+// Sample 12: Recibo de Pago (payment receipt)
+// ── Receipt data ─────────────────────────────────────────────────────────────
+const string reciboNumero    = "RP-2026-00456";
+const string reciboFecha     = "05/05/2026";
+const string reciboFormaPago = "Transferencia bancaria";
+const string reciboCuenta    = "Cuenta: 001-123456-7 – BROU";
+
+const string pagadorNombre = "Cliente de Ejemplo S.A.";
+const string pagadorRut    = "21234568-0";
+
+const string benefNombre   = "Empresa Demo S.A.";
+const string benefRut      = "21234567-1";
+
+const string reciboConcepto = "Pago de factura N° A 00000001 – Servicios de consultoría y licencias – Mayo 2026";
+decimal      reciboMonto    = 44_000m;
+const string reciboMoneda   = "Pesos Uruguayos (UYU)";
+const string reciboEnLetras = "Cuarenta y cuatro mil pesos uruguayos";
+
+File.WriteAllBytes(Path.Combine(outputDir, "12-recibo-pago.pdf"),
+    Document.Create(c =>
+    {
+        c.Page(page =>
+        {
+            page.Size(PageSizes.A4);
+            page.MarginAll(40);
+
+            // ── Header ────────────────────────────────────────────────────
+            page.Header().Column(hdr =>
+            {
+                hdr.Item().Row(row =>
+                {
+                    row.RelativeItem(3).Column(ben =>
+                    {
+                        ben.Item().Text(benefNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeTitle).Bold().Color(FacturaUY.TextPrimary);
+                        ben.Item().Text($"RUT: {benefRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        ben.Item().Text("Av. 18 de Julio 1234, Montevideo").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                    });
+
+                    row.RelativeItem(2).AlignRight().Border(1, FacturaUY.DocBoxBorder).Background(FacturaUY.DocBoxBackground).Padding(8).Column(box =>
+                    {
+                        box.Item().Text("RECIBO DE PAGO").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSubtitle).Bold().AlignCenter().Color(FacturaUY.HeaderBackground);
+                        box.Item().Text($"N° {reciboNumero}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignCenter().Color(FacturaUY.HeaderBackground);
+                        box.Item().Text($"Fecha: {reciboFecha}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                    });
+                });
+
+                hdr.Item().Spacer(6);
+                hdr.Item().Line(1, FacturaUY.LineSeparator);
+            });
+
+            // ── Content ───────────────────────────────────────────────────
+            page.Content().Column(col =>
+            {
+                col.Spacing(10);
+
+                // Parties
+                col.Item().PaddingTop(6).Row(row =>
+                {
+                    row.RelativeItem().Background(FacturaUY.RowAlt).Padding(8).Column(pag =>
+                    {
+                        pag.Item().Text("Pagador").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderBackground);
+                        pag.Item().Spacer(3);
+                        pag.Item().Text(pagadorNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        pag.Item().Text($"RUT: {pagadorRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                    });
+
+                    row.FixedItem(12);
+
+                    row.RelativeItem().Background(FacturaUY.RowAlt).Padding(8).Column(ben =>
+                    {
+                        ben.Item().Text("Beneficiario").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.HeaderBackground);
+                        ben.Item().Spacer(3);
+                        ben.Item().Text(benefNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        ben.Item().Text($"RUT: {benefRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                    });
+                });
+
+                // Amount box
+                col.Item().Border(1.5f, FacturaUY.HeaderBackground).Background(FacturaUY.DocBoxBackground).Padding(12).Column(amt =>
+                {
+                    amt.Item().Text("MONTO RECIBIDO").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().AlignCenter().Color(FacturaUY.HeaderBackground);
+                    amt.Item().Spacer(6);
+                    amt.Item().Text($"$ {Fmt(reciboMonto)}").FontFamily(FacturaUY.FontPrimary).FontSize(22).Bold().AlignCenter().Color(FacturaUY.HeaderBackground);
+                    amt.Item().Spacer(4);
+                    amt.Item().Text($"({reciboEnLetras})").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Italic().AlignCenter().Color(FacturaUY.TextSecondary);
+                    amt.Item().Text($"Moneda: {reciboMoneda}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                });
+
+                // Payment details
+                col.Item().Column(det =>
+                {
+                    det.Item().Text("Detalle del pago").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.TextPrimary);
+                    det.Item().Spacer(4);
+                    det.Item().Table(t =>
+                    {
+                        t.ColumnsDefinition(cols =>
+                        {
+                            cols.RelativeColumn(1);
+                            cols.RelativeColumn(2);
+                        });
+                        foreach (var (label, value) in new[]
+                        {
+                            ("Concepto",      reciboConcepto),
+                            ("Forma de pago", reciboFormaPago),
+                            ("Cuenta",        reciboCuenta),
+                            ("Fecha",         reciboFecha),
+                        })
+                        {
+                            t.Cell().Padding(4).Text(label + ":").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Bold().Color(FacturaUY.TextSecondary);
+                            t.Cell().Padding(4).Text(value).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeBody).Color(FacturaUY.TextPrimary);
+                        }
+                    });
+                });
+
+                // Signature
+                col.Item().PaddingTop(40).Row(r =>
+                {
+                    r.RelativeItem();
+                    r.RelativeItem(2).Column(sig =>
+                    {
+                        sig.Item().Line(0.5f, FacturaUY.LineSeparator);
+                        sig.Item().Spacer(4);
+                        sig.Item().Text("Firma y aclaración del beneficiario").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                        sig.Item().Text(benefNombre).FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextPrimary);
+                        sig.Item().Text($"RUT {benefRut}").FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeSmall).AlignCenter().Color(FacturaUY.TextSecondary);
+                    });
+                    r.RelativeItem();
+                });
+
+                col.Item().PaddingTop(8)
+                    .Text("Este recibo es válido como comprobante de pago de la obligación indicada en el concepto.")
+                    .FontFamily(FacturaUY.FontPrimary).FontSize(FacturaUY.FontSizeLegal).Italic().AlignCenter().Color(FacturaUY.TextSecondary);
+            });
+
+            // ── Footer ────────────────────────────────────────────────────
+            Action<TextStyle> footerStyle3 = s => { s.FontFamily = FacturaUY.FontPrimary; s.FontSize = FacturaUY.FontSizeLegal; };
+            page.Footer().AlignCenter().Text(x =>
+            {
+                x.Span("Generado con FluentReport  –  Página ", footerStyle3);
+                x.CurrentPageNumber(footerStyle3);
+                x.Span(" de ", footerStyle3);
+                x.TotalPages(footerStyle3);
+            });
+        });
+    }).GeneratePdf());
+
+Console.WriteLine("Generated 12-recibo-pago.pdf");
+
 Console.WriteLine($"\nAll sample files written to: {Path.GetFullPath(outputDir)}");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
