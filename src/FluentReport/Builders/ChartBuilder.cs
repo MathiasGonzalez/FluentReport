@@ -35,17 +35,14 @@ public class ChartBuilder
     /// <summary>Adds a data series.</summary>
     /// <param name="label">Series name shown in the legend.</param>
     /// <param name="values">Data values, one per category.</param>
-    /// <param name="colorHex">Optional hex color, e.g. <c>"#4682B4"</c>. When null, a default palette color is used.</param>
+    /// <param name="colorHex">Optional hex color, e.g. <c>"#4682B4"</c>. When null, a default palette color is used automatically.</param>
     public ChartBuilder AddSeries(string label, IEnumerable<double> values, string? colorHex = null)
     {
-        var defaultColors = _chart.GetDefaultColors();
         _chart.Series.Add(new ChartSeries
         {
             Label = label,
             Values = values.ToList().AsReadOnly(),
-            Color = colorHex != null
-                ? ReportColor.FromHex(colorHex)
-                : defaultColors[_chart.Series.Count % defaultColors.Length]
+            Color = colorHex != null ? ReportColor.FromHex(colorHex) : null
         });
         return this;
     }

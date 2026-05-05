@@ -19,11 +19,11 @@ dotnet add package FluentReport.Rdlc
 using FluentReport.Rdlc;
 
 // Desde un archivo .rdlc en disco
-var doc = Document.FromRdlc("reportes/ventas.rdlc");
+var doc = DocumentRdlcExtensions.FromRdlc("reportes/ventas.rdlc");
 doc.GeneratePdf("ventas.pdf");
 
 // Con datos y parámetros
-var doc = Document.FromRdlc(
+var doc = DocumentRdlcExtensions.FromRdlc(
     "reportes/ventas.rdlc",
     datasets: new Dictionary<string, IEnumerable<object>>
     {
@@ -37,11 +37,13 @@ var doc = Document.FromRdlc(
 doc.GeneratePdf("ventas.pdf");
 ```
 
+> **Tip:** Con `using static FluentReport.Rdlc.DocumentRdlcExtensions;` puedes llamar directamente a `FromRdlc(...)`, `FromRdlcStream(...)` y `FromRdlcXml(...)` sin el prefijo de clase.
+
 ---
 
 ## API
 
-### `Document.FromRdlc(path, datasets?, parameters?)`
+### `DocumentRdlcExtensions.FromRdlc(path, datasets?, parameters?)`
 
 Parsea un archivo `.rdlc` desde disco y devuelve un `Document` listo para renderizar.
 
@@ -51,7 +53,7 @@ Parsea un archivo `.rdlc` desde disco y devuelve un `Document` listo para render
 | `datasets` | `IDictionary<string, IEnumerable<object>>?` | Filas de datos por nombre de dataset |
 | `parameters` | `IDictionary<string, object>?` | Valores de parámetros del reporte |
 
-### `Document.FromRdlcStream(stream, datasets?, parameters?)`
+### `DocumentRdlcExtensions.FromRdlcStream(stream, datasets?, parameters?)`
 
 Igual a `FromRdlc` pero lee el XML desde un `Stream`. Útil cuando el `.rdlc` está embebido como recurso o descargado de una red.
 
@@ -59,16 +61,16 @@ Igual a `FromRdlc` pero lee el XML desde un `Stream`. Útil cuando el `.rdlc` es
 using var stream = Assembly.GetExecutingAssembly()
     .GetManifestResourceStream("MyApp.Resources.report.rdlc")!;
 
-var doc = Document.FromRdlcStream(stream, datasets: myDatasets);
+var doc = DocumentRdlcExtensions.FromRdlcStream(stream, datasets: myDatasets);
 ```
 
-### `Document.FromRdlcXml(xml, datasets?, parameters?)`
+### `DocumentRdlcExtensions.FromRdlcXml(xml, datasets?, parameters?)`
 
 Igual a `FromRdlc` pero acepta el contenido XML directamente como `string`. Útil para pruebas o cuando el XML se almacena en base de datos.
 
 ```csharp
 var xml = File.ReadAllText("report.rdlc");
-var doc = Document.FromRdlcXml(xml, datasets: myDatasets);
+var doc = DocumentRdlcExtensions.FromRdlcXml(xml, datasets: myDatasets);
 ```
 
 ---
@@ -153,8 +155,11 @@ El parser convierte automáticamente las unidades RDLC a puntos (pt):
 ## Colores
 
 Se aceptan:
-- Colores hexadecimales: `#FF0000`, `#RGB`
+- Colores hexadecimales de 6 dígitos: `#FF0000`, `#4472C4`
+- Colores hexadecimales de 8 dígitos (con alpha): `#FF000080`
 - Nombres CSS básicos: `Black`, `White`, `Red`, `Green`, `Blue`, `Yellow`, `Orange`, `Purple`, `Navy`, `Teal`, `Gray`, `Silver`, etc.
+
+> **Nota:** El formato hexadecimal abreviado de 3 dígitos (`#RGB`) **no está soportado**. Use siempre 6 dígitos (`#RRGGBB`).
 
 Los colores no reconocidos se reemplazan por negro.
 
@@ -189,7 +194,7 @@ Y el archivo `catalogo.rdlc` que contiene un `<Tablix>` con `DataSetName="Produc
 ```csharp
 using FluentReport.Rdlc;
 
-var doc = Document.FromRdlc(
+var doc = DocumentRdlcExtensions.FromRdlc(
     "catalogo.rdlc",
     datasets: new Dictionary<string, IEnumerable<object>>
     {

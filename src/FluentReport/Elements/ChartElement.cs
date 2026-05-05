@@ -13,8 +13,8 @@ public class ChartSeries
     /// <summary>Numeric values, one per category.</summary>
     public IReadOnlyList<double> Values { get; set; } = Array.Empty<double>();
 
-    /// <summary>Color used to draw bars or lines for this series.</summary>
-    public ReportColor Color { get; set; } = ReportColor.Black;
+    /// <summary>Color used to draw bars or lines for this series. When <c>null</c>, a palette color is chosen automatically.</summary>
+    public ReportColor? Color { get; set; } = null;
 }
 
 /// <summary>Type of chart to render.</summary>
@@ -51,8 +51,6 @@ public class ChartElement : ElementBase
     /// <summary>Fixed height of the chart area, in points. Default 200.</summary>
     public float FixedHeight { get; set; } = 200f;
 
-    internal ReportColor[] GetDefaultColors() => DefaultColors;
-
     public override Size Measure(MeasureContext context)
         => new(context.AvailableWidth, FixedHeight);
 
@@ -77,10 +75,6 @@ public class ChartElement : ElementBase
         if (plotW <= 0 || plotH <= 0) return;
 
         var canvas = context.Canvas;
-
-        // ── Background ───────────────────────────────────────────────────────
-        using (var bgPaint = new SKPaint { Color = SKColors.White })
-            canvas.DrawRect(position.X, position.Y, size.Width, size.Height, bgPaint);
 
         // ── Title ─────────────────────────────────────────────────────────────
         if (Title != null)
@@ -148,9 +142,10 @@ public class ChartElement : ElementBase
             float legendY = plotY + plotH + axisBottom + padding;
             float legendX = plotX;
 
-            foreach (var series in Series)
+            foreach (var (series, si) in Series.Select((s, i) => (s, i)))
             {
-                using var legendDotPaint = new SKPaint { Color = series.Color.ToSkColor(), Style = SKPaintStyle.Fill };
+                var legendColor = series.Color ?? DefaultColors[si % DefaultColors.Length];
+                using var legendDotPaint = new SKPaint { Color = legendColor.ToSkColor(), Style = SKPaintStyle.Fill };
                 canvas.DrawRect(legendX, legendY - 8, 10, 10, legendDotPaint);
                 canvas.DrawText(series.Label, legendX + 14, legendY, SKTextAlign.Left, axisFont, axisPaint);
                 legendX += axisFont.MeasureText(series.Label) + 28;
@@ -170,7 +165,7 @@ public class ChartElement : ElementBase
         for (int si = 0; si < Series.Count; si++)
         {
             var series = Series[si];
-            var color = series.Color.Equals(default(ReportColor)) ? DefaultColors[si % DefaultColors.Length] : series.Color;
+            var color = series.Color ?? DefaultColors[si % DefaultColors.Length];
             using var barPaint = new SKPaint { Color = color.ToSkColor(), Style = SKPaintStyle.Fill, IsAntialias = true };
 
             for (int c = 0; c < catCount; c++)
@@ -191,7 +186,7 @@ public class ChartElement : ElementBase
         for (int si = 0; si < Series.Count; si++)
         {
             var series = Series[si];
-            var color = series.Color.Equals(default(ReportColor)) ? DefaultColors[si % DefaultColors.Length] : series.Color;
+            var color = series.Color ?? DefaultColors[si % DefaultColors.Length];
             using var linePaint = new SKPaint { Color = color.ToSkColor(), StrokeWidth = 2, Style = SKPaintStyle.Stroke, IsAntialias = true };
             using var dotPaint = new SKPaint { Color = color.ToSkColor(), Style = SKPaintStyle.Fill, IsAntialias = true };
 

@@ -186,7 +186,7 @@ Document.Create(container =>
 ```csharp
 using FluentReport.Rdlc;
 
-var doc = Document.FromRdlc(
+var doc = DocumentRdlcExtensions.FromRdlc(
     "reportes/catalogo.rdlc",
     datasets: new Dictionary<string, IEnumerable<object>>
     {
@@ -277,9 +277,9 @@ t.Span(item.Estado, s =>
 | Método | Descripción |
 |--------|-------------|
 | `Document.Create(configure)` | Crea un nuevo documento |
-| `Document.FromRdlc(path, ...)` | Importa un archivo `.rdlc` *(requiere FluentReport.Rdlc)* |
-| `Document.FromRdlcStream(stream, ...)` | Importa RDLC desde un `Stream` *(requiere FluentReport.Rdlc)* |
-| `Document.FromRdlcXml(xml, ...)` | Importa RDLC desde una cadena XML *(requiere FluentReport.Rdlc)* |
+| `DocumentRdlcExtensions.FromRdlc(path, ...)` | Importa un archivo `.rdlc` *(requiere FluentReport.Rdlc)* |
+| `DocumentRdlcExtensions.FromRdlcStream(stream, ...)` | Importa RDLC desde un `Stream` *(requiere FluentReport.Rdlc)* |
+| `DocumentRdlcExtensions.FromRdlcXml(xml, ...)` | Importa RDLC desde una cadena XML *(requiere FluentReport.Rdlc)* |
 | `.GeneratePdf(filePath)` | Genera el PDF y lo guarda en disco |
 | `.GeneratePdf(stream)` | Genera el PDF y lo escribe en un stream |
 | `.GeneratePdf()` | Genera el PDF y devuelve `byte[]` |

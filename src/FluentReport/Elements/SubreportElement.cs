@@ -1,6 +1,4 @@
 using FluentReport.Core;
-using FluentReport.Rendering;
-using SkiaSharp;
 
 namespace FluentReport.Elements;
 
@@ -38,18 +36,31 @@ public class SubreportElement : ElementBase
 
     public override void Render(RenderContext context, Position position, Size size)
     {
-        var renderer = new DocumentRenderer(_nested.Settings);
-        int pageCount = renderer.GetPageCount();
+        // Use GenerateImages for a single pagination pass (O(n) instead of O(n²)).
+        var pageImages = _nested.GenerateImages(1f);
         float y = position.Y;
 
-        for (int i = 0; i < pageCount; i++)
+        // Clip the canvas to the allocated height to prevent overflow into adjacent content.
+        context.Canvas.Save();
+        context.Canvas.ClipRect(
+            new SkiaSharp.SKRect(position.X, position.Y, position.X + size.Width, position.Y + size.Height));
+
+        foreach (var pngBytes in pageImages)
         {
-            using var image = renderer.RenderPageToImage(i);
+            using var image = SkiaSharp.SKImage.FromEncodedData(pngBytes);
+            if (image == null) continue;
+
             float scaledH = image.Height * size.Width / Math.Max(1f, image.Width);
-            var destRect = new SKRect(position.X, y, position.X + size.Width, y + scaledH);
-            using var paint = new SKPaint { IsAntialias = true };
+            // Stop drawing once we would go beyond the allocated area.
+            if (y - position.Y + scaledH > size.Height + 0.5f && y > position.Y)
+                break;
+
+            var destRect = new SkiaSharp.SKRect(position.X, y, position.X + size.Width, y + scaledH);
+            using var paint = new SkiaSharp.SKPaint { IsAntialias = true };
             context.Canvas.DrawImage(image, destRect, paint);
             y += scaledH;
         }
+
+        context.Canvas.Restore();
     }
 }
