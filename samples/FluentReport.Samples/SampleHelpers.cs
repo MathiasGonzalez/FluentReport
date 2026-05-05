@@ -27,7 +27,7 @@ internal static class SampleHelpers
     /// Creates a checkerboard PNG that mimics a QR code placeholder.
     /// Replace this with an actual QR-code generator (e.g. ZXing.Net) in production.
     /// <para>
-    /// <paramref name="size"/> must be at least 10 so that the 10×10 cell grid and the
+    /// <paramref name="size"/> must be at least 10 so that the 10x10 cell grid and the
     /// three finder-pattern corner squares fit without producing negative coordinates or
     /// zero/negative dimensions.
     /// </para>
