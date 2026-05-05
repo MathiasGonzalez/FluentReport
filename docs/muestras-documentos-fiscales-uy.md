@@ -58,15 +58,26 @@ Neto a cobrar      = Total haberes − Total descuentos
 ### Cómo adaptar la muestra
 
 ```csharp
-// Reemplazá estas constantes con datos reales:
-const string empNombre    = "Mi Empresa S.A.";
-const string empRut       = "2XXXXXXX-X";
-const string trabNombre   = "Nombre Apellido";
-const string trabCi       = "X.XXX.XXX-X";
-const string periodoDesc  = "Junio 2026";
-
-decimal sueldoNominal = 60_000m;
-decimal irpf          = CalcularIrpf(sueldoNominal);  // lógica propia
+var reciboSueldo = new ReciboSueldoData(
+    EmpNombre:     "Mi Empresa S.A.",
+    EmpRut:        "2XXXXXXX-X",
+    EmpDomicilio:  "Dirección fiscal, Montevideo",
+    TrabNombre:    "Nombre Apellido",
+    TrabCi:        "X.XXX.XXX-X",
+    TrabCargo:     "Cargo",
+    TrabLegajo:    "00001",
+    TrabBps:       "XXXXXXX-X",
+    PeriodoDesc:   "Junio 2026",
+    PeriodoFrom:   "01/06/2026",
+    PeriodoTo:     "30/06/2026",
+    FechaPago:     "05/07/2026",
+    SueldoNominal: 60_000m,
+    HorasExtra:    0m,
+    Viaticos:      0m,
+    Irpf:          CalcularIrpf(60_000m)  // lógica propia
+);
+// BpsJubilacion, BpsFonasa, BpsSegDesempleo, Frl, TotalHaberes,
+// TotalDescuentos y NetoLiquidar se calculan automáticamente.
 ```
 
 ---
@@ -100,19 +111,24 @@ El **remito de entrega** (o albarán) es el documento que acompaña a la mercade
 ### Cómo adaptar la muestra
 
 ```csharp
-const string remitoNumero    = "R 00000001";  // correlativo único
-const string remitentNombre  = "Mi Empresa S.A.";
-const string remitentRut     = "2XXXXXXX-X";
-const string destinNombre    = "Cliente Destino S.R.L.";
-const string destinRut       = "2XXXXXXX-X";
-const string lugarEntrega    = "Dirección de entrega";
-const string transportista   = "Transportista S.A. – Matrícula ABC 1234";
-
-var itemsRemito = new[]
-{
-    new { Cant = 5, Unidad = "unid.", Desc = "Producto A", Obs = "" },
-    new { Cant = 2, Unidad = "caja",  Desc = "Producto B", Obs = "Frágil" },
-};
+var remito = new RemitoData(
+    Numero:                "R 00000001",  // correlativo único
+    Fecha:                 "01/06/2026",
+    Hora:                  "09:00",
+    RemitenteNombre:       "Mi Empresa S.A.",
+    RemitenteRut:          "2XXXXXXX-X",
+    RemitenteDireccion:    "Dirección remitente",
+    DestinatarioNombre:    "Cliente Destino S.R.L.",
+    DestinatarioRut:       "2XXXXXXX-X",
+    DestinatarioDireccion: "Dirección destino",
+    LugarEntrega:          "Dirección de entrega",
+    Transportista:         "Transportista S.A. – Matrícula ABC 1234",
+    Items: new[]
+    {
+        new RemitoItem(5, "unid.", "Producto A", ""),
+        new RemitoItem(2, "caja",  "Producto B", "Frágil"),
+    }
+);
 ```
 
 ---
@@ -147,16 +163,21 @@ El **recibo de pago** es el comprobante que entrega quien **recibe** un pago a q
 ### Cómo adaptar la muestra
 
 ```csharp
-const string reciboNumero    = "RP-2026-00001";
-const string pagadorNombre   = "Empresa Pagadora S.A.";
-const string pagadorRut      = "2XXXXXXX-X";
-const string benefNombre     = "Mi Empresa S.A.";
-const string benefRut        = "2XXXXXXX-X";
-const string reciboConcepto  = "Pago factura N° A 00000001";
-decimal      reciboMonto     = 44_000m;
-const string reciboEnLetras  = "Cuarenta y cuatro mil pesos uruguayos";
-const string reciboFormaPago = "Transferencia bancaria";
-const string reciboCuenta    = "Cuenta: 001-XXXXXX-X – BROU";
+var reciboPago = new ReciboPagoData(
+    Numero:        "RP-2026-00001",
+    Fecha:         "01/06/2026",
+    PagadorNombre: "Empresa Pagadora S.A.",
+    PagadorRut:    "2XXXXXXX-X",
+    BenefNombre:   "Mi Empresa S.A.",
+    BenefRut:      "2XXXXXXX-X",
+    BenefDomicilio: "Dirección fiscal, Montevideo",
+    Concepto:      "Pago factura N° A 00000001",
+    Monto:         44_000m,
+    Moneda:        "Pesos Uruguayos (UYU)",
+    EnLetras:      "Cuarenta y cuatro mil pesos uruguayos",
+    FormaPago:     "Transferencia bancaria",
+    Cuenta:        "Cuenta: 001-XXXXXX-X – BROU"
+);
 ```
 
 ---
@@ -173,6 +194,7 @@ Los tres documentos (y la e-Factura existente) reutilizan las constantes de esti
 | `FontSizeBody` | `9f` | Texto de cuerpo |
 | `FontSizeSmall` | `8f` | Notas y campos secundarios |
 | `FontSizeLegal` | `7f` | Pie de página y leyendas legales |
+| `FontSizeAmount` | `22f` | Monto principal destacado (recibo de pago) |
 | `HeaderBackground` | `#003366` | Fondo de encabezados de tabla |
 | `HeaderText` | `#FFFFFF` | Texto sobre fondo oscuro |
 | `RowAlt` | `#F0F4F8` | Filas alternas de tabla |

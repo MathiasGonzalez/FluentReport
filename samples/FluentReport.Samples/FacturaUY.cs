@@ -22,6 +22,8 @@ internal static class FacturaUY
     public const float FontSizeBody     =  9f;
     public const float FontSizeSmall    =  8f;
     public const float FontSizeLegal    =  7f;
+    /// <summary>Tamaño destacado para montos principales (ej. recibo de pago).</summary>
+    public const float FontSizeAmount   = 22f;
 
     // ── Paleta de colores ────────────────────────────────────────────────────
     /// <summary>Azul marino oscuro: encabezado de tabla y títulos de sección.</summary>
