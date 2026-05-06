@@ -272,6 +272,8 @@ t.Span(item.Estado, s =>
 
 ## API Reference
 
+> 📖 **Referencia completa de la API fluent:** [`docs/fluent-api.md`](docs/fluent-api.md)
+
 ### Document
 
 | Método | Descripción |
