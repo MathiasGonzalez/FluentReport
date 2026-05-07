@@ -14,9 +14,14 @@ public sealed class SnapshotFontFixture : IDisposable
 {
     private readonly string _regularPath;
     private readonly string _boldPath;
+    private readonly Func<TextStyle, SKTypeface>? _previousFactory;
 
     public SnapshotFontFixture()
     {
+        // Capture the current factory so it can be restored in Dispose, preventing
+        // global state leaks across test collections that may run concurrently.
+        _previousFactory = SkiaFonts.TypefaceFactory;
+
         var asm = typeof(SnapshotFontFixture).Assembly;
         _regularPath = ExtractResource(asm, "DejaVuSans.ttf");
         _boldPath = ExtractResource(asm, "DejaVuSans-Bold.ttf");
@@ -48,7 +53,8 @@ public sealed class SnapshotFontFixture : IDisposable
 
     public void Dispose()
     {
-        SkiaFonts.TypefaceFactory = null;
+        // Restore the factory that was active before this fixture was created.
+        SkiaFonts.TypefaceFactory = _previousFactory;
         // Best-effort cleanup of temp font files.
         try { File.Delete(_regularPath); } catch { }
         try { File.Delete(_boldPath); } catch { }

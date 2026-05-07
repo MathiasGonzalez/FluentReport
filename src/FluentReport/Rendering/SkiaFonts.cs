@@ -29,10 +29,19 @@ public static class SkiaFonts
     }
 
     internal static SKTypeface CreateTypeface(string? fontFamily, bool bold = false)
-        => SKTypeface.FromFamilyName(
+    {
+        // Honor TypefaceFactory for consistent behavior when a custom font provider is active.
+        if (TypefaceFactory != null)
+        {
+            var style = new TextStyle { FontFamily = fontFamily ?? "sans-serif", Bold = bold };
+            return TypefaceFactory(style) ?? SKTypeface.Default;
+        }
+
+        return SKTypeface.FromFamilyName(
                fontFamily ?? "sans-serif",
                bold ? SKFontStyleWeight.Bold : SKFontStyleWeight.Normal,
                SKFontStyleWidth.Normal,
                SKFontStyleSlant.Upright)
            ?? SKTypeface.Default;
+    }
 }
