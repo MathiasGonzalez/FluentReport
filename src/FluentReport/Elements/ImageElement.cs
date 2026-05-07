@@ -13,16 +13,29 @@ public class ImageElement : ElementBase, IDisposable
     public float? FixedHeight { get; set; }
     public ImageFit Fit { get; set; } = ImageFit.Contain;
 
+    /// <summary>Raw image bytes as provided to the constructor. Useful for non-Skia renderers (e.g. HTML).</summary>
+    public byte[]? SourceBytes { get; private set; }
+
+    /// <summary>Source file path when constructed from a path. Useful for non-Skia renderers.</summary>
+    public string? SourcePath { get; private set; }
+
     public ImageElement(string path)
     {
+        SourcePath = path;
         if (File.Exists(path))
-            _bitmap = SKBitmap.Decode(path);
+        {
+            SourceBytes = File.ReadAllBytes(path);
+            _bitmap = SKBitmap.Decode(SourceBytes);
+        }
     }
 
     public ImageElement(byte[] imageBytes)
     {
         if (imageBytes.Length > 0)
+        {
+            SourceBytes = imageBytes;
             _bitmap = SKBitmap.Decode(imageBytes);
+        }
     }
 
     public override Size Measure(MeasureContext context)

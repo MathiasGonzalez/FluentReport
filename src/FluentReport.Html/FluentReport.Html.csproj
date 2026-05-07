@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- NuGet package metadata -->
+    <PackageId>FluentReport.Html</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Mathías González Benítez</Authors>
+    <Description>HTML/Email renderer for FluentReport — generate email-ready HTML using the same fluent API as PDF.</Description>
+    <PackageTags>html;email;report;fluent</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/MathiasGonzalez/FluentReport</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FluentReport\FluentReport.csproj" />
+  </ItemGroup>
+</Project>
