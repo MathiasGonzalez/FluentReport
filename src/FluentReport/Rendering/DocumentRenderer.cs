@@ -5,9 +5,10 @@ using SkiaSharp;
 
 namespace FluentReport.Rendering;
 
-public class DocumentRenderer
+public class DocumentRenderer : IPageImagesProvider
 {
     private readonly DocumentSettings _settings;
+    private readonly SkiaTextMeasurer _measurer = new();
 
     public DocumentRenderer(DocumentSettings settings) => _settings = settings;
 
@@ -23,9 +24,8 @@ public class DocumentRenderer
         int total = CountTotalPages();
 
         if (pageIndex < 0 || pageIndex >= total)
-            throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page index {pageIndex} is out of range (0–{total - 1}).");
+            throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page index {pageIndex} is out of range (0-{total - 1}).");
 
-        // Iterate only until the requested page to avoid paging the whole document.
         int visitedPageCount = 0;
         int currentPageNumber = 0;
 
@@ -34,12 +34,12 @@ public class DocumentRenderer
             var contentWidth = pageSettings.ContentWidth;
             var contentHeight = pageSettings.ContentHeight;
 
-            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight);
-            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight);
+            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight, _measurer);
+            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight, _measurer);
             var contentAreaHeight = contentHeight - headerHeight - footerHeight;
 
             var contentElements = GetContentElements(pageSettings.ContentElement);
-            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight);
+            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
 
             if (pages.Count == 0) pages.Add(new List<(IElement, Size)>());
 
@@ -47,12 +47,11 @@ public class DocumentRenderer
             {
                 currentPageNumber++;
                 if (visitedPageCount == pageIndex)
-                    return RenderPageToImageCore(pageSettings, pageContent, currentPageNumber, total, scale);
+                    return RenderPageToImageCore(pageSettings, pageContent, currentPageNumber, total, scale, this);
                 visitedPageCount++;
             }
         }
 
-        // Unreachable: bounds are validated above via CountTotalPages().
         throw new InvalidOperationException($"Page index {pageIndex} could not be located.");
     }
 
@@ -60,8 +59,7 @@ public class DocumentRenderer
     public int GetPageCount() => CountTotalPages();
 
     /// <summary>
-    /// Renders all logical pages to PNG byte arrays in a single pagination pass,
-    /// avoiding the O(n²) cost of calling <see cref="RenderPageToImage"/> in a loop.
+    /// Renders all logical pages to PNG byte arrays in a single pagination pass.
     /// </summary>
     internal IReadOnlyList<byte[]> RenderAllPages(float scale)
     {
@@ -74,19 +72,19 @@ public class DocumentRenderer
             var contentWidth = pageSettings.ContentWidth;
             var contentHeight = pageSettings.ContentHeight;
 
-            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight);
-            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight);
+            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight, _measurer);
+            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight, _measurer);
             var contentAreaHeight = contentHeight - headerHeight - footerHeight;
 
             var contentElements = GetContentElements(pageSettings.ContentElement);
-            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight);
+            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
 
             if (pages.Count == 0) pages.Add(new List<(IElement, Size)>());
 
             foreach (var pageContent in pages)
             {
                 currentPage++;
-                using var image = RenderPageToImageCore(pageSettings, pageContent, currentPage, total, scale);
+                using var image = RenderPageToImageCore(pageSettings, pageContent, currentPage, total, scale, this);
                 using var data = image.Encode(SKEncodedImageFormat.Png, 100);
                 result.Add(data.ToArray());
             }
@@ -100,7 +98,8 @@ public class DocumentRenderer
         List<(IElement, Size)> pageContent,
         int logicalPageNumber,
         int totalPages,
-        float scale)
+        float scale,
+        IPageImagesProvider pageImagesProvider)
     {
         int width = (int)Math.Ceiling(pageSettings.Size.Width * scale);
         int height = (int)Math.Ceiling(pageSettings.Size.Height * scale);
@@ -108,30 +107,32 @@ public class DocumentRenderer
         var imageInfo = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
         using var surface = SKSurface.Create(imageInfo)
             ?? throw new InvalidOperationException(
-                $"Failed to create SKSurface ({width}×{height}). The requested dimensions may be too large or insufficient memory is available.");
-        var canvas = surface.Canvas;
-        canvas.Clear(SKColors.White);
+                $"Failed to create SKSurface ({width}x{height}). The requested dimensions may be too large or insufficient memory is available.");
+        var skCanvas = surface.Canvas;
+        skCanvas.Clear(SKColors.White);
 
         if (scale != 1f)
-            canvas.Scale(scale, scale);
+            skCanvas.Scale(scale, scale);
 
         var contentHeight = pageSettings.ContentHeight;
+        var canvas = new SkiaDrawingCanvas(skCanvas);
         var renderCtx = new RenderContext
         {
             Canvas = canvas,
             AvailableWidth = pageSettings.ContentWidth,
             AvailableHeight = contentHeight,
             CurrentPage = logicalPageNumber,
-            TotalPages = totalPages
+            TotalPages = totalPages,
+            PageImagesProvider = pageImagesProvider
         };
 
-        float headerHeight = MeasureElement(pageSettings.HeaderElement, pageSettings.ContentWidth, contentHeight);
-        float footerHeight = MeasureElement(pageSettings.FooterElement, pageSettings.ContentWidth, contentHeight);
+        float headerHeight = MeasureElement(pageSettings.HeaderElement, pageSettings.ContentWidth, contentHeight, canvas);
+        float footerHeight = MeasureElement(pageSettings.FooterElement, pageSettings.ContentWidth, contentHeight, canvas);
         float y = pageSettings.MarginTop;
 
         if (pageSettings.HeaderElement != null)
         {
-            var hs = pageSettings.HeaderElement.Measure(new MeasureContext { AvailableWidth = pageSettings.ContentWidth, AvailableHeight = contentHeight });
+            var hs = pageSettings.HeaderElement.Measure(renderCtx.MeasureContextFor(pageSettings.ContentWidth, contentHeight));
             pageSettings.HeaderElement.Render(renderCtx, new Position(pageSettings.MarginLeft, y), new Size(pageSettings.ContentWidth, hs.Height));
             y += hs.Height;
         }
@@ -163,12 +164,12 @@ public class DocumentRenderer
             var contentWidth = pageSettings.ContentWidth;
             var contentHeight = pageSettings.ContentHeight;
 
-            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight);
-            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight);
+            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight, _measurer);
+            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight, _measurer);
 
             var contentAreaHeight = contentHeight - headerHeight - footerHeight;
             var contentElements = GetContentElements(pageSettings.ContentElement);
-            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight);
+            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
 
             if (pages.Count == 0) pages.Add(new List<(IElement, Size)>());
 
@@ -176,7 +177,8 @@ public class DocumentRenderer
             {
                 currentPage++;
 
-                using var canvas = document.BeginPage(pageSettings.Size.Width, pageSettings.Size.Height);
+                using var skCanvas = document.BeginPage(pageSettings.Size.Width, pageSettings.Size.Height);
+                var canvas = new SkiaDrawingCanvas(skCanvas);
 
                 var renderCtx = new RenderContext
                 {
@@ -184,14 +186,15 @@ public class DocumentRenderer
                     AvailableWidth = contentWidth,
                     AvailableHeight = contentHeight,
                     CurrentPage = currentPage,
-                    TotalPages = totalPages
+                    TotalPages = totalPages,
+                    PageImagesProvider = this
                 };
 
                 float y = pageSettings.MarginTop;
 
                 if (pageSettings.HeaderElement != null)
                 {
-                    var hs = pageSettings.HeaderElement.Measure(new MeasureContext { AvailableWidth = contentWidth, AvailableHeight = contentHeight });
+                    var hs = pageSettings.HeaderElement.Measure(renderCtx.MeasureContextFor(contentWidth, contentHeight));
                     pageSettings.HeaderElement.Render(renderCtx, new Position(pageSettings.MarginLeft, y), new Size(contentWidth, hs.Height));
                     y += hs.Height;
                 }
@@ -215,10 +218,17 @@ public class DocumentRenderer
         document.Close();
     }
 
-    private static float MeasureElement(IElement? element, float width, float height)
+    // ── IPageImagesProvider ──────────────────────────────────────────────────
+
+    IReadOnlyList<byte[]> IPageImagesProvider.GetPageImages(DocumentSettings settings, float scale)
+        => new DocumentRenderer(settings).RenderAllPages(scale);
+
+    // ── Private helpers ──────────────────────────────────────────────────────
+
+    private static float MeasureElement(IElement? element, float width, float height, ITextMeasurer measurer)
     {
         if (element == null) return 0;
-        return element.Measure(new MeasureContext { AvailableWidth = width, AvailableHeight = height }).Height;
+        return element.Measure(new MeasureContext { AvailableWidth = width, AvailableHeight = height, Measurer = measurer }).Height;
     }
 
     private int CountTotalPages()
@@ -229,12 +239,12 @@ public class DocumentRenderer
             var contentWidth = pageSettings.ContentWidth;
             var contentHeight = pageSettings.ContentHeight;
 
-            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight);
-            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight);
+            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight, _measurer);
+            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight, _measurer);
             var contentAreaHeight = contentHeight - headerHeight - footerHeight;
 
             var contentElements = GetContentElements(pageSettings.ContentElement);
-            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight);
+            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
             total += Math.Max(1, pages.Count);
         }
         return Math.Max(1, total);
@@ -246,7 +256,6 @@ public class DocumentRenderer
         var resolved = content is LazyElement lazy ? lazy.Built : content;
         if (resolved is ColumnElement column)
         {
-            // Preserve column spacing by inserting spacers between items
             if (column.Spacing <= 0) return column.Items.ToList();
             var items = new List<IElement>();
             bool first = true;
@@ -261,7 +270,7 @@ public class DocumentRenderer
         return new List<IElement> { content };
     }
 
-    private static List<List<(IElement, Size)>> SplitIntoPages(List<IElement> elements, float width, float pageHeight)
+    private static List<List<(IElement, Size)>> SplitIntoPages(List<IElement> elements, float width, float pageHeight, ITextMeasurer measurer)
     {
         var pages = new List<List<(IElement, Size)>>();
         var currentPage = new List<(IElement, Size)>();
@@ -272,7 +281,6 @@ public class DocumentRenderer
             var resolved = element is LazyElement lazy ? lazy.Built : element;
             if (resolved is PageBreakElement)
             {
-                // Only start a new page if the current page has content
                 if (currentPage.Count > 0)
                 {
                     pages.Add(currentPage);
@@ -282,7 +290,7 @@ public class DocumentRenderer
                 continue;
             }
 
-            var size = element.Measure(new MeasureContext { AvailableWidth = width, AvailableHeight = pageHeight });
+            var size = element.Measure(new MeasureContext { AvailableWidth = width, AvailableHeight = pageHeight, Measurer = measurer });
 
             if (usedHeight + size.Height > pageHeight && currentPage.Count > 0)
             {

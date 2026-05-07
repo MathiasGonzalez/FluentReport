@@ -1,5 +1,5 @@
 using System.Reflection;
-using FluentReport.Elements;
+using FluentReport.Rendering;
 using FluentReport.Styling;
 using SkiaSharp;
 
@@ -7,7 +7,7 @@ namespace FluentReport.Tests;
 
 /// <summary>
 /// xUnit class fixture that loads the embedded DejaVu Sans fonts and installs them as
-/// the global <see cref="TextElement.TypefaceFactory"/> so that all PDF snapshot tests
+/// the global <see cref="SkiaFonts.TypefaceFactory"/> so that all PDF snapshot tests
 /// render text with the same font on every OS, making golden images reproducible.
 /// </summary>
 public sealed class SnapshotFontFixture : IDisposable
@@ -25,7 +25,7 @@ public sealed class SnapshotFontFixture : IDisposable
         _regular = SKTypeface.FromFile(_regularPath);
         _bold = SKTypeface.FromFile(_boldPath);
 
-        TextElement.TypefaceFactory = style => style.Bold ? _bold : _regular;
+        SkiaFonts.TypefaceFactory = (TextStyle style) => style.EffectiveBold ? _bold : _regular;
     }
 
     private static string ExtractResource(Assembly asm, string logicalName)
@@ -46,10 +46,12 @@ public sealed class SnapshotFontFixture : IDisposable
 
     public void Dispose()
     {
-        TextElement.TypefaceFactory = null;
+        SkiaFonts.TypefaceFactory = null;
         _regular.Dispose();
         _bold.Dispose();
-        if (File.Exists(_regularPath)) File.Delete(_regularPath);
-        if (File.Exists(_boldPath)) File.Delete(_boldPath);
+        // SkiaSharp may keep a native handle open; best-effort cleanup only.
+        try { File.Delete(_regularPath); } catch { }
+        try { File.Delete(_boldPath); } catch { }
     }
 }
+

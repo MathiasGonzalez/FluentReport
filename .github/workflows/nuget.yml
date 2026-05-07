@@ -30,11 +30,17 @@ jobs:
       - name: Build (Release)
         run: dotnet build --no-restore --configuration Release
 
+      - name: Pack FluentReport.Core
+        run: dotnet pack src/FluentReport.Core/FluentReport.Core.csproj --no-build --configuration Release --output ./nupkgs
+
       - name: Pack FluentReport
         run: dotnet pack src/FluentReport/FluentReport.csproj --no-build --configuration Release --output ./nupkgs
 
       - name: Pack FluentReport.Excel
         run: dotnet pack src/FluentReport.Excel/FluentReport.Excel.csproj --no-build --configuration Release --output ./nupkgs
+
+      - name: Pack FluentReport.Html
+        run: dotnet pack src/FluentReport.Html/FluentReport.Html.csproj --no-build --configuration Release --output ./nupkgs
 
       - name: Pack FluentReport.Rdlc
         run: dotnet pack src/FluentReport.Rdlc/FluentReport.Rdlc.csproj --no-build --configuration Release --output ./nupkgs

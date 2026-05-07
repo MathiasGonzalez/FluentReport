@@ -1,5 +1,6 @@
 using FluentReport.Core;
 using FluentReport.Elements;
+using FluentReport.Rendering;
 
 namespace FluentReport.Tests;
 
@@ -9,7 +10,7 @@ public class LayoutTests
     public void TextElement_Measure_ReturnsNonZeroSize()
     {
         var text = new TextElement("Hello World");
-        var size = text.Measure(new MeasureContext { AvailableWidth = 500, AvailableHeight = 1000 });
+        var size = text.Measure(new MeasureContext { AvailableWidth = 500, AvailableHeight = 1000, Measurer = new SkiaTextMeasurer() });
         Assert.True(size.Width > 0);
         Assert.True(size.Height > 0);
     }

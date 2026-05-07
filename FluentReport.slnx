@@ -1,5 +1,6 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/FluentReport.Core/FluentReport.Core.csproj" />
     <Project Path="src/FluentReport/FluentReport.csproj" />
     <Project Path="src/FluentReport.Excel/FluentReport.Excel.csproj" />
     <Project Path="src/FluentReport.Html/FluentReport.Html.csproj" />
