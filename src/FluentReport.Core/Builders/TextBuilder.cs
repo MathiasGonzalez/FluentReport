@@ -32,33 +32,29 @@ public class TextBuilder
     public ContainerBuilder PaddingHorizontal(float h) => _parent?.PaddingHorizontal(h) ?? throw new InvalidOperationException("No parent container");
 }
 
-public class DynamicTextBuilder
+public class DynamicTextBuilder(TextElement text)
 {
-    private readonly TextElement _text;
-
-    internal DynamicTextBuilder(TextElement text) => _text = text;
-
-    public DynamicTextBuilder Span(string text, Action<TextStyle>? configure = null)
+    public DynamicTextBuilder Span(string value, Action<TextStyle>? configure = null)
     {
-        var style = _text.Style.Clone();
+        var style = text.Style.Clone();
         configure?.Invoke(style);
-        _text.AddSpan(text, style);
+        text.AddSpan(value, style);
         return this;
     }
 
     public DynamicTextBuilder CurrentPageNumber(Action<TextStyle>? configure = null)
     {
-        var style = _text.Style.Clone();
+        var style = text.Style.Clone();
         configure?.Invoke(style);
-        _text.AddCurrentPageSpan(style);
+        text.AddCurrentPageSpan(style);
         return this;
     }
 
     public DynamicTextBuilder TotalPages(Action<TextStyle>? configure = null)
     {
-        var style = _text.Style.Clone();
+        var style = text.Style.Clone();
         configure?.Invoke(style);
-        _text.AddTotalPagesSpan(style);
+        text.AddTotalPagesSpan(style);
         return this;
     }
 }

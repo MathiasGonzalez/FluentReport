@@ -424,7 +424,7 @@ public class HtmlDocumentRenderer
 
     private static string RenderSpacer(SpacerElement spacer)
     {
-        float h = spacer.Measure(new MeasureContext { AvailableWidth = 600, AvailableHeight = 9999 }).Height;
+        float h = spacer.Measure(new() { AvailableWidth = 600, AvailableHeight = 9999 }).Height;
         return $"<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">" +
                $"<tr><td style=\"height: {(int)h}px; font-size: 0; line-height: 0; padding: 0;\">&nbsp;</td></tr>" +
                "</table>";

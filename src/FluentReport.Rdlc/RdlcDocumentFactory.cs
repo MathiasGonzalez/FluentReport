@@ -77,7 +77,7 @@ public sealed class RdlcDocumentFactory
         var sections = root.Element(_ns + "ReportSections")
             ?.Elements(_ns + "ReportSection")
             .ToList()
-            ?? new List<XElement> { root };
+            ?? [root];
 
         var settings = new DocumentSettings();
         foreach (var section in sections)
@@ -204,7 +204,7 @@ public sealed class RdlcDocumentFactory
     /// </summary>
     private List<IElement> BuildReportItems(XElement? reportItemsEl, object? dataRow)
     {
-        if (reportItemsEl == null) return new List<IElement>();
+        if (reportItemsEl == null) return [];
 
         var children = reportItemsEl.Elements()
             .OrderBy(e => ParseUnit(e.Element(_ns + "Top")?.Value))
@@ -253,7 +253,7 @@ public sealed class RdlcDocumentFactory
             if (last != null && Math.Abs(item.top - last[0].top) <= topTolerance)
                 last.Add(item);
             else
-                bands.Add(new List<(XElement, float, float, float)> { item });
+                bands.Add([item]);
         }
 
         var col = new ColumnElement();
@@ -422,7 +422,7 @@ public sealed class RdlcDocumentFactory
             // valueStr is the name of an entry in <EmbeddedImages>.
             img = _embeddedImages.TryGetValue(valueStr, out var embBytes)
                 ? new ImageElement(embBytes)
-                : new ImageElement(Array.Empty<byte>());
+                : new ImageElement([]);
         }
         else if (string.Equals(sourceType, "Database", StringComparison.OrdinalIgnoreCase) && row != null)
         {
@@ -433,7 +433,7 @@ public sealed class RdlcDocumentFactory
             }
             catch
             {
-                img = new ImageElement(Array.Empty<byte>());
+                img = new ImageElement([]);
             }
         }
         else
@@ -460,18 +460,18 @@ public sealed class RdlcDocumentFactory
         var colWidths = bodyEl.Element(_ns + "TablixColumns")
             ?.Elements(_ns + "TablixColumn")
             .Select(c => ParseUnit(c.Element(_ns + "Width")?.Value))
-            .ToList() ?? new List<float>();
+            .ToList() ?? [];
 
         // ── Row hierarchy: distinguish header rows from detail rows ───────────
         var hierarchyMembers = tablixEl
             .Element(_ns + "TablixRowHierarchy")
             ?.Element(_ns + "TablixMembers")
             ?.Elements(_ns + "TablixMember")
-            .ToList() ?? new List<XElement>();
+            .ToList() ?? [];
 
         var tblRows = bodyEl.Element(_ns + "TablixRows")
             ?.Elements(_ns + "TablixRow")
-            .ToList() ?? new List<XElement>();
+            .ToList() ?? [];
 
         // Flatten the hierarchy into a list of (isDetail) flags, one per TablixRow.
         // When a member has nested TablixMembers, its children map to consecutive rows.
@@ -521,7 +521,7 @@ public sealed class RdlcDocumentFactory
 
         var dataRows = _datasets != null && _datasets.TryGetValue(dataSetName, out var ds)
             ? ds.ToList()
-            : new List<object>();
+            : [];
 
         for (int ri = 0; ri < tblRows.Count; ri++)
         {
@@ -530,7 +530,7 @@ public sealed class RdlcDocumentFactory
 
             var cells = tblRow.Element(_ns + "TablixCells")
                 ?.Elements(_ns + "TablixCell")
-                .ToList() ?? new List<XElement>();
+                .ToList() ?? [];
 
             if (!isDetail)
             {
@@ -734,15 +734,15 @@ public sealed class RdlcDocumentFactory
         {
             "black"                        => ReportColor.Black,
             "white"                        => ReportColor.White,
-            "red"                          => new ReportColor(255, 0, 0),
-            "green"                        => new ReportColor(0, 128, 0),
-            "lime"                         => new ReportColor(0, 255, 0),
-            "blue"                         => new ReportColor(0, 0, 255),
-            "yellow"                       => new ReportColor(255, 255, 0),
-            "orange"                       => new ReportColor(255, 165, 0),
-            "purple"                       => new ReportColor(128, 0, 128),
-            "fuchsia" or "magenta"         => new ReportColor(255, 0, 255),
-            "aqua" or "cyan"               => new ReportColor(0, 255, 255),
+            "red"                          => new(255, 0, 0),
+            "green"                        => new(0, 128, 0),
+            "lime"                         => new(0, 255, 0),
+            "blue"                         => new(0, 0, 255),
+            "yellow"                       => new(255, 255, 0),
+            "orange"                       => new(255, 165, 0),
+            "purple"                       => new(128, 0, 128),
+            "fuchsia" or "magenta"         => new(255, 0, 255),
+            "aqua" or "cyan"               => new(0, 255, 255),
             "gray" or "grey"               => ReportColor.Gray,
             "silver" or "lightgray" or "lightgrey" => ReportColor.LightGray,
             "navy"                         => new ReportColor(0, 0, 128),

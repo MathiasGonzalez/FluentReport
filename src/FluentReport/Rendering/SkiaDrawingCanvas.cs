@@ -8,20 +8,17 @@ namespace FluentReport.Rendering;
 /// SkiaSharp implementation of <see cref="IDrawingCanvas"/>.
 /// Wraps an <see cref="SKCanvas"/> and delegates text measurement to <see cref="SkiaTextMeasurer"/>.
 /// </summary>
-public sealed class SkiaDrawingCanvas : IDrawingCanvas
+public sealed class SkiaDrawingCanvas(SKCanvas canvas) : IDrawingCanvas
 {
-    private readonly SKCanvas _canvas;
     private readonly SkiaTextMeasurer _measurer = new();
-
-    public SkiaDrawingCanvas(SKCanvas canvas) => _canvas = canvas;
 
     // ── State management ────────────────────────────────────────────────────
 
-    public void Save() => _canvas.Save();
-    public void Restore() => _canvas.Restore();
+    public void Save() => canvas.Save();
+    public void Restore() => canvas.Restore();
 
     public void ClipRect(float x, float y, float width, float height)
-        => _canvas.ClipRect(new SKRect(x, y, x + width, y + height));
+        => canvas.ClipRect(new SKRect(x, y, x + width, y + height));
 
     // ── Drawing primitives ───────────────────────────────────────────────────
 
@@ -34,13 +31,13 @@ public sealed class SkiaDrawingCanvas : IDrawingCanvas
             Style = SKPaintStyle.Stroke,
             IsAntialias = true
         };
-        _canvas.DrawLine(x0, y0, x1, y1, paint);
+        canvas.DrawLine(x0, y0, x1, y1, paint);
     }
 
     public void DrawFilledRect(float x, float y, float width, float height, ReportColor color)
     {
         using var paint = new SKPaint { Color = ToSk(color), Style = SKPaintStyle.Fill };
-        _canvas.DrawRect(x, y, width, height, paint);
+        canvas.DrawRect(x, y, width, height, paint);
     }
 
     public void DrawStrokedRect(float x, float y, float width, float height, ReportColor color, float strokeWidth)
@@ -51,7 +48,7 @@ public sealed class SkiaDrawingCanvas : IDrawingCanvas
             StrokeWidth = strokeWidth,
             Style = SKPaintStyle.Stroke
         };
-        _canvas.DrawRect(x, y, width, height, paint);
+        canvas.DrawRect(x, y, width, height, paint);
     }
 
     public void DrawText(string text, float x, float y, DrawTextAlign align, TextStyle style)
@@ -65,7 +62,7 @@ public sealed class SkiaDrawingCanvas : IDrawingCanvas
             DrawTextAlign.Right => SKTextAlign.Right,
             _ => SKTextAlign.Left
         };
-        _canvas.DrawText(text, x, y, skAlign, font, paint);
+        canvas.DrawText(text, x, y, skAlign, font, paint);
     }
 
     public void DrawImageBytes(byte[] bytes, float x, float y, float width, float height)
@@ -77,18 +74,18 @@ public sealed class SkiaDrawingCanvas : IDrawingCanvas
         using var bitmap = SKBitmap.Decode(bytes);
         if (bitmap != null)
         {
-            _canvas.DrawBitmap(bitmap, destRect, paint);
+            canvas.DrawBitmap(bitmap, destRect, paint);
             return;
         }
         using var image = SKImage.FromEncodedData(bytes);
         if (image != null)
-            _canvas.DrawImage(image, destRect, paint);
+            canvas.DrawImage(image, destRect, paint);
     }
 
     public void DrawCircle(float x, float y, float radius, ReportColor color)
     {
         using var paint = new SKPaint { Color = ToSk(color), Style = SKPaintStyle.Fill, IsAntialias = true };
-        _canvas.DrawCircle(x, y, radius, paint);
+        canvas.DrawCircle(x, y, radius, paint);
     }
 
     public void DrawPolyline(IReadOnlyList<(float X, float Y)> points, ReportColor color, float strokeWidth)
@@ -99,7 +96,7 @@ public sealed class SkiaDrawingCanvas : IDrawingCanvas
         path.MoveTo(points[0].X, points[0].Y);
         for (int i = 1; i < points.Count; i++)
             path.LineTo(points[i].X, points[i].Y);
-        _canvas.DrawPath(path, paint);
+        canvas.DrawPath(path, paint);
     }
 
     // ── ITextMeasurer (delegates to SkiaTextMeasurer) ────────────────────────

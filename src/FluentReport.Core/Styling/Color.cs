@@ -24,18 +24,18 @@ public readonly struct ReportColor
         if (hex.Length == 6)
         {
             return new(
-                Convert.ToByte(hex.Substring(0, 2), 16),
-                Convert.ToByte(hex.Substring(2, 2), 16),
-                Convert.ToByte(hex.Substring(4, 2), 16)
+                Convert.ToByte(hex[0..2], 16),
+                Convert.ToByte(hex[2..4], 16),
+                Convert.ToByte(hex[4..6], 16)
             );
         }
         if (hex.Length == 8)
         {
             return new(
-                Convert.ToByte(hex.Substring(0, 2), 16),
-                Convert.ToByte(hex.Substring(2, 2), 16),
-                Convert.ToByte(hex.Substring(4, 2), 16),
-                Convert.ToByte(hex.Substring(6, 2), 16)
+                Convert.ToByte(hex[0..2], 16),
+                Convert.ToByte(hex[2..4], 16),
+                Convert.ToByte(hex[4..6], 16),
+                Convert.ToByte(hex[6..8], 16)
             );
         }
         throw new ArgumentException($"Invalid hex color: #{hex}");

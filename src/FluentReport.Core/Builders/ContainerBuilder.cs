@@ -200,7 +200,7 @@ public class ContainerBuilder
             element = new BorderElement
             {
                 Child = element,
-                Border = _border ?? new BorderStyle { Width = 0 },
+                Border = _border ?? new() { Width = 0 },
                 BackgroundColor = _background
             };
         }

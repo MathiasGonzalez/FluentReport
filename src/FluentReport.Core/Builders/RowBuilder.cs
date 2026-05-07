@@ -2,19 +2,15 @@ using FluentReport.Elements;
 
 namespace FluentReport.Builders;
 
-public class RowBuilder
+public class RowBuilder(RowElement row)
 {
-    private readonly RowElement _row;
-
-    internal RowBuilder(RowElement row) => _row = row;
-
-    public RowBuilder Spacing(float spacing) { _row.Spacing = spacing; return this; }
+    public RowBuilder Spacing(float spacing) { row.Spacing = spacing; return this; }
 
     public ContainerBuilder RelativeItem(float width = 1)
     {
         var cb = new ContainerBuilder();
         var lazy = new LazyElement(cb);
-        _row.Items.Add(new RowItem { Element = lazy, RelativeWidth = width });
+        row.Items.Add(new RowItem { Element = lazy, RelativeWidth = width });
         return cb;
     }
 
@@ -22,7 +18,7 @@ public class RowBuilder
     {
         var cb = new ContainerBuilder();
         var lazy = new LazyElement(cb);
-        _row.Items.Add(new RowItem { Element = lazy, FixedWidth = width });
+        row.Items.Add(new RowItem { Element = lazy, FixedWidth = width });
         return cb;
     }
 

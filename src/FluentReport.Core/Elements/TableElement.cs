@@ -30,7 +30,7 @@ public class TableElement : ElementBase
 
     private float[] GetColumnWidths(float availableWidth)
     {
-        if (Columns.Count == 0) return Array.Empty<float>();
+        if (Columns.Count == 0) return [];
         var fixedTotal = Columns.Where(c => !c.IsRelative).Sum(c => c.FixedWidth ?? 0);
         var relTotal = Columns.Where(c => c.IsRelative).Sum(c => c.RelativeWidth);
         var remaining = Math.Max(0f, availableWidth - fixedTotal);

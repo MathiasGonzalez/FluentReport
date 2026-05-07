@@ -5,12 +5,9 @@ using SkiaSharp;
 
 namespace FluentReport.Rendering;
 
-public class DocumentRenderer : IPageImagesProvider
+public class DocumentRenderer(DocumentSettings settings) : IPageImagesProvider
 {
-    private readonly DocumentSettings _settings;
     private readonly SkiaTextMeasurer _measurer = new();
-
-    public DocumentRenderer(DocumentSettings settings) => _settings = settings;
 
     /// <summary>
     /// Renders a single logical page (0-based index) to an <see cref="SKImage"/>.
@@ -29,7 +26,7 @@ public class DocumentRenderer : IPageImagesProvider
         int visitedPageCount = 0;
         int currentPageNumber = 0;
 
-        foreach (var pageSettings in _settings.Pages)
+        foreach (var pageSettings in settings.Pages)
         {
             var contentWidth = pageSettings.ContentWidth;
             var contentHeight = pageSettings.ContentHeight;
@@ -41,7 +38,7 @@ public class DocumentRenderer : IPageImagesProvider
             var contentElements = GetContentElements(pageSettings.ContentElement);
             var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
 
-            if (pages.Count == 0) pages.Add(new List<(IElement, Size)>());
+            if (pages.Count == 0) pages.Add([]);
 
             foreach (var pageContent in pages)
             {
@@ -67,7 +64,7 @@ public class DocumentRenderer : IPageImagesProvider
         var result = new List<byte[]>();
         int currentPage = 0;
 
-        foreach (var pageSettings in _settings.Pages)
+        foreach (var pageSettings in settings.Pages)
         {
             var contentWidth = pageSettings.ContentWidth;
             var contentHeight = pageSettings.ContentHeight;
@@ -79,7 +76,7 @@ public class DocumentRenderer : IPageImagesProvider
             var contentElements = GetContentElements(pageSettings.ContentElement);
             var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
 
-            if (pages.Count == 0) pages.Add(new List<(IElement, Size)>());
+            if (pages.Count == 0) pages.Add([]);
 
             foreach (var pageContent in pages)
             {
@@ -159,7 +156,7 @@ public class DocumentRenderer : IPageImagesProvider
         using var document = SKDocument.CreatePdf(stream);
         int currentPage = 0;
 
-        foreach (var pageSettings in _settings.Pages)
+        foreach (var pageSettings in settings.Pages)
         {
             var contentWidth = pageSettings.ContentWidth;
             var contentHeight = pageSettings.ContentHeight;
@@ -171,7 +168,7 @@ public class DocumentRenderer : IPageImagesProvider
             var contentElements = GetContentElements(pageSettings.ContentElement);
             var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
 
-            if (pages.Count == 0) pages.Add(new List<(IElement, Size)>());
+            if (pages.Count == 0) pages.Add([]);
 
             foreach (var pageContent in pages)
             {
@@ -228,13 +225,13 @@ public class DocumentRenderer : IPageImagesProvider
     private static float MeasureElement(IElement? element, float width, float height, ITextMeasurer measurer)
     {
         if (element == null) return 0;
-        return element.Measure(new MeasureContext { AvailableWidth = width, AvailableHeight = height, Measurer = measurer }).Height;
+        return element.Measure(new() { AvailableWidth = width, AvailableHeight = height, Measurer = measurer }).Height;
     }
 
     private int CountTotalPages()
     {
         int total = 0;
-        foreach (var pageSettings in _settings.Pages)
+        foreach (var pageSettings in settings.Pages)
         {
             var contentWidth = pageSettings.ContentWidth;
             var contentHeight = pageSettings.ContentHeight;
@@ -267,7 +264,7 @@ public class DocumentRenderer : IPageImagesProvider
             }
             return items;
         }
-        return new List<IElement> { content };
+        return [content];
     }
 
     private static List<List<(IElement, Size)>> SplitIntoPages(List<IElement> elements, float width, float pageHeight, ITextMeasurer measurer)
@@ -290,7 +287,7 @@ public class DocumentRenderer : IPageImagesProvider
                 continue;
             }
 
-            var size = element.Measure(new MeasureContext { AvailableWidth = width, AvailableHeight = pageHeight, Measurer = measurer });
+            var size = element.Measure(new() { AvailableWidth = width, AvailableHeight = pageHeight, Measurer = measurer });
 
             if (usedHeight + size.Height > pageHeight && currentPage.Count > 0)
             {

@@ -12,10 +12,8 @@ namespace FluentReport.Excel;
 /// PageBreak elements within content produce additional worksheets.
 /// Elements without a meaningful Excel equivalent (images) are skipped.
 /// </summary>
-public class ExcelDocumentRenderer
+public class ExcelDocumentRenderer(DocumentSettings settings)
 {
-    private readonly DocumentSettings _settings;
-
     /// <summary>Number of virtual Excel columns used to distribute layout. Default is 10.</summary>
     public int TotalColumns { get; set; } = 10;
 
@@ -25,14 +23,12 @@ public class ExcelDocumentRenderer
     /// </summary>
     public double RelativeUnitWidthPt { get; set; } = 150.0;
 
-    public ExcelDocumentRenderer(DocumentSettings settings) => _settings = settings;
-
     public void RenderToStream(Stream stream)
     {
         using var workbook = new XLWorkbook();
 
         int pageIndex = 0;
-        foreach (var pageSettings in _settings.Pages)
+        foreach (var pageSettings in settings.Pages)
         {
             pageIndex++;
             WritePageToWorkbook(workbook, pageSettings, pageIndex);
@@ -58,7 +54,7 @@ public class ExcelDocumentRenderer
         {
             if (Resolve(element) is PageBreakElement)
             {
-                currentGroup = new List<IElement>();
+                currentGroup = [];
                 sheetGroups.Add(currentGroup);
             }
             else
@@ -70,7 +66,7 @@ public class ExcelDocumentRenderer
         for (int si = 0; si < sheetGroups.Count; si++)
         {
             string sheetName = sheetGroups.Count == 1
-                ? (_settings.Pages.Count == 1 ? "Sheet1" : $"Sheet{pageIndex}")
+                ? (settings.Pages.Count == 1 ? "Sheet1" : $"Sheet{pageIndex}")
                 : $"Sheet{pageIndex}_{si + 1}";
 
             var sheet = workbook.AddWorksheet(sheetName);
@@ -361,7 +357,7 @@ public class ExcelDocumentRenderer
         int endCol,
         StyleInfo? parentStyle)
     {
-        var newStyle = new StyleInfo
+        StyleInfo newStyle = new()
         {
             BackgroundColor = border.BackgroundColor,
             Border = border.Border.Width > 0 ? border.Border : null,
