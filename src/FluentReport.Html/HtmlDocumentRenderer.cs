@@ -23,6 +23,12 @@ public class HtmlDocumentRenderer
         _options = options ?? new HtmlRendererOptions();
     }
 
+    /// <summary>
+    /// Returns <c>role="presentation" </c> (with trailing space) when <see cref="HtmlRendererOptions.OutlookCompatible"/> is enabled,
+    /// otherwise an empty string. Apply to every layout <c>&lt;table&gt;</c>.
+    /// </summary>
+    private string RoleAttr => _options.OutlookCompatible ? "role=\"presentation\" " : "";
+
     // ── Public render methods ─────────────────────────────────────────────────
 
     /// <summary>
@@ -38,6 +44,10 @@ public class HtmlDocumentRenderer
         sb.AppendLine("  <meta charset=\"UTF-8\">");
         sb.AppendLine("  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">");
         sb.AppendLine("  <title>Document</title>");
+        if (_options.OutlookCompatible)
+        {
+            sb.AppendLine("  <!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch><o:AllowPNG/></o:OfficeDocumentSettings></xml><![endif]-->");
+        }
         sb.AppendLine("</head>");
         sb.AppendLine($"<body style=\"margin: 0; padding: 20px 0; background-color: #f5f5f5; font-family: {Encode(_options.FontFamily)};\">");
         sb.AppendLine(RenderFragment());
@@ -61,8 +71,9 @@ public class HtmlDocumentRenderer
         string maxWidthStyle = _options.MaxWidth.HasValue
             ? $" max-width: {_options.MaxWidth}px;"
             : "";
+        string bgcolorAttr = _options.OutlookCompatible ? " bgcolor=\"#ffffff\"" : "";
 
-        sb.AppendLine($"<table{widthAttr} cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color: #ffffff;{maxWidthStyle} margin: 0 auto; border-collapse: collapse;\">");
+        sb.AppendLine($"<table {RoleAttr}{widthAttr}{bgcolorAttr} cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background-color: #ffffff;{maxWidthStyle} margin: 0 auto; border-collapse: collapse;\">");
 
         bool first = true;
         foreach (var page in _settings.Pages)
@@ -143,7 +154,7 @@ public class HtmlDocumentRenderer
     {
         if (col.Items.Count == 0) return "";
         var sb = new StringBuilder();
-        sb.AppendLine("<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-collapse: collapse;\">");
+        sb.AppendLine($"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-collapse: collapse;\">");
         bool first = true;
         foreach (var item in col.Items)
         {
@@ -167,7 +178,7 @@ public class HtmlDocumentRenderer
         float relativeTotal = row.Items.Where(i => i.IsRelative).Sum(i => i.RelativeWidth);
 
         var sb = new StringBuilder();
-        sb.AppendLine("<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-collapse: collapse;\">");
+        sb.AppendLine($"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"border-collapse: collapse;\">");
         sb.AppendLine("<tr>");
 
         for (int i = 0; i < row.Items.Count; i++)
@@ -215,7 +226,8 @@ public class HtmlDocumentRenderer
             : "";
 
         var sb = new StringBuilder();
-        sb.AppendLine($"<table width=\"100%\"{borderAttr} cellpadding=\"4\" cellspacing=\"0\" style=\"border-collapse: collapse; width: 100%;\">");
+        // Data table: intentionally no role="presentation" as it carries semantic meaning.
+        sb.AppendLine($"<table width=\"100%\"{borderAttr} cellpadding=\"4\" cellspacing=\"0\" style=\"border-collapse: collapse; width: 100%;\">"); ;
 
         if (table.HeaderCells.Count > 0)
         {
@@ -372,7 +384,7 @@ public class HtmlDocumentRenderer
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine($"<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"{style}\">");
+        sb.AppendLine($"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"{style}\">");
         sb.AppendLine("<tr><td style=\"padding: 0;\">");
         if (border.Child != null)
             sb.AppendLine(RenderElement(border.Child));
@@ -384,7 +396,7 @@ public class HtmlDocumentRenderer
     private string RenderPadding(PaddingElement pad)
     {
         var sb = new StringBuilder();
-        sb.AppendLine("<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">");
+        sb.AppendLine($"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">");
         sb.AppendLine($"<tr><td style=\"padding: {pad.Top}px {pad.Right}px {pad.Bottom}px {pad.Left}px;\">");
         if (pad.Child != null)
             sb.AppendLine(RenderElement(pad.Child));
@@ -403,7 +415,7 @@ public class HtmlDocumentRenderer
         };
 
         var sb = new StringBuilder();
-        sb.AppendLine($"<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">");
+        sb.AppendLine($"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">");
         sb.AppendLine($"<tr><td align=\"{textAlign}\" style=\"text-align: {textAlign}; padding: 0;\">");
         if (align.Child != null)
             sb.AppendLine(RenderElement(align.Child));
@@ -414,18 +426,18 @@ public class HtmlDocumentRenderer
 
     // ── Visual elements ───────────────────────────────────────────────────────
 
-    private static string RenderLine(LineElement line)
+    private string RenderLine(LineElement line)
     {
         string color = ColorToHex(line.Color);
-        return $"<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">" +
+        return $"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">" +
                $"<tr><td style=\"border-top: {line.Thickness}px solid {color}; height: 0; font-size: 0; line-height: 0; padding: 0;\">&nbsp;</td></tr>" +
                "</table>";
     }
 
-    private static string RenderSpacer(SpacerElement spacer)
+    private string RenderSpacer(SpacerElement spacer)
     {
         float h = spacer.Measure(new() { AvailableWidth = 600, AvailableHeight = 9999 }).Height;
-        return $"<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">" +
+        return $"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">" +
                $"<tr><td style=\"height: {(int)h}px; font-size: 0; line-height: 0; padding: 0;\">&nbsp;</td></tr>" +
                "</table>";
     }
@@ -446,7 +458,7 @@ public class HtmlDocumentRenderer
     }
 
     private string RenderPageBreak() =>
-        $"<table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">" +
+        $"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">" +
         $"<tr><td style=\"{_options.PageDividerStyle}; font-size: 0; line-height: 0;\">&nbsp;</td></tr>" +
         "</table>";
 

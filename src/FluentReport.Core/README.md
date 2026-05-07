@@ -2,24 +2,24 @@
 
 [![NuGet](https://img.shields.io/nuget/v/FluentReport.Core.svg?label=FluentReport.Core)](https://www.nuget.org/packages/FluentReport.Core)
 
-Modelos, elementos y builders de **FluentReport** sin ninguna dependencia de renderizado. Diseñado para proyectos que quieren compartir la misma definición de documento entre múltiples renderers (PDF, Excel, HTML) o construir renderers propios.
+Models, elements, and builders for **FluentReport** without rendering dependencies. Designed for projects that want to share the same document definition across multiple renderers (PDF, Excel, HTML) or build custom renderers.
 
-## Instalación
+## Installation
 
 ```shell
 dotnet add package FluentReport.Core
 ```
 
-## ¿Qué incluye?
+## What is included?
 
-- `Document` / `DocumentSettings` — modelo central del documento
-- `PageBuilder`, `ColumnBuilder`, `RowBuilder`, `TableBuilder`, `TextBuilder`, `ChartBuilder` — API fluent
-- Elementos: `TextElement`, `TableElement`, `ImageElement`, `ChartElement`, `SubreportElement`, `ColumnElement`, `RowElement`, `BorderElement`, `LineElement`, `PaddingElement`, `AlignElement`, `ListElement`, `SpacerElement`, `PageBreakElement`
-- `TextStyle`, `ReportColor`, `BorderStyle` — tipos de estilo
-- `MeasureContext` / `RenderContext` — contextos de layout
-- `ITextMeasurer` / `IDrawingCanvas` — interfaces de abstracción del renderer
+- `Document` / `DocumentSettings` — central document model
+- `PageBuilder`, `ColumnBuilder`, `RowBuilder`, `TableBuilder`, `TextBuilder`, `ChartBuilder` — fluent API
+- Elements: `TextElement`, `TableElement`, `ImageElement`, `ChartElement`, `SubreportElement`, `ColumnElement`, `RowElement`, `BorderElement`, `LineElement`, `PaddingElement`, `AlignElement`, `ListElement`, `SpacerElement`, `PageBreakElement`
+- `TextStyle`, `ReportColor`, `BorderStyle` — style types
+- `MeasureContext` / `RenderContext` — layout contexts
+- `ITextMeasurer` / `IDrawingCanvas` — renderer abstraction interfaces
 
-## Implementar un renderer propio
+## Implement a custom renderer
 
 ```csharp
 public class MyCanvas : IDrawingCanvas
@@ -29,10 +29,10 @@ public class MyCanvas : IDrawingCanvas
     public float MeasureText(string text, float fontSize, string? fontFamily = null) => 0;
     public void DrawText(string text, float x, float y, DrawTextAlign align, TextStyle style) { /* ... */ }
     public void DrawFilledRect(float x, float y, float w, float h, ReportColor color) { /* ... */ }
-    // ... resto de métodos de IDrawingCanvas
+    // ... rest of the IDrawingCanvas methods
 }
 
-var doc = Document.Create(c => { c.Page(p => { p.Size(PageSizes.A4); p.Content().Text("Hola"); }); });
+var doc = Document.Create(c => { c.Page(p => { p.Size(PageSizes.A4); p.Content().Text("Hello"); }); });
 
 foreach (var page in doc.Settings.Pages)
 {
@@ -50,14 +50,14 @@ foreach (var page in doc.Settings.Pages)
 }
 ```
 
-## Paquetes del ecosistema
+## Ecosystem packages
 
-| Paquete | Función |
+| Package | Purpose |
 |---------|---------|
-| `FluentReport.Core` | Modelo y API fluent (este paquete) |
-| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | Renderer PDF (SkiaSharp) |
-| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Renderer Excel (ClosedXML) |
-| [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | Renderer HTML / email |
-| [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | Importador RDLC / SSRS |
+| `FluentReport.Core` | Model and fluent API (this package) |
+| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer (SkiaSharp) |
+| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel renderer (ClosedXML) |
+| [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer |
+| [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
 
-> 📖 Documentación completa en el [repositorio](https://github.com/MathiasGonzalez/FluentReport).
+> Full documentation is available in the [repository](https://github.com/MathiasGonzalez/FluentReport).

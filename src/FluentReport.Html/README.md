@@ -2,15 +2,15 @@
 
 [![NuGet](https://img.shields.io/nuget/v/FluentReport.Html.svg?label=FluentReport.Html)](https://www.nuget.org/packages/FluentReport.Html)
 
-Renderer **HTML / email** para FluentReport. Genera HTML estático o fragmentos listos para embeber en emails transaccionales, usando el mismo fluent API que PDF y Excel. No requiere SkiaSharp.
+**HTML / email** renderer for FluentReport. Generates static HTML or fragments ready to embed in transactional emails, using the same fluent API as PDF and Excel. It does not require SkiaSharp.
 
-## Instalación
+## Installation
 
 ```shell
 dotnet add package FluentReport.Html
 ```
 
-## Uso rápido
+## Quick start
 
 ```csharp
 using FluentReport;
@@ -25,12 +25,12 @@ var doc = Document.Create(c =>
         page.MarginAll(40);
 
         page.Header()
-            .Text("Factura #001").FontSize(18).Bold().AlignCenter();
+            .Text("Invoice #001").FontSize(18).Bold().AlignCenter();
 
         page.Content().Column(col =>
         {
             col.Spacing(8);
-            col.Item().Text("Cliente: Empresa S.A.").FontSize(12);
+            col.Item().Text("Customer: Company Inc.").FontSize(12);
             col.Item().Line(1);
             col.Item().Table(table =>
             {
@@ -42,52 +42,52 @@ var doc = Document.Create(c =>
                 table.BorderEachCell(1);
                 table.Header(h =>
                 {
-                    h.Cell().Background("#EEEEEE").Padding(6).Text("Descripción").Bold();
+                    h.Cell().Background("#EEEEEE").Padding(6).Text("Description").Bold();
                     h.Cell().Background("#EEEEEE").Padding(6).Text("Total").Bold();
                 });
-                table.Cell().Padding(6).Text("Servicio de consultoría");
+                table.Cell().Padding(6).Text("Consulting service");
                 table.Cell().Padding(6).Text("$5.000");
             });
         });
     });
 });
 
-// HTML completo (<html>…</html>)
-doc.GenerateHtml("factura.html");
+// Full HTML (<html>...</html>)
+doc.GenerateHtml("invoice.html");
 
-// Fragmento para embeber en un email
+// Fragment to embed in an email
 string fragment = doc.GenerateHtmlFragment();
 await emailService.SendAsync(to, subject, htmlBody: fragment);
 ```
 
-## API de generación
+## Generation API
 
-| Método | Descripción |
+| Method | Description |
 |--------|-------------|
-| `.GenerateHtml(filePath)` | Guarda el HTML completo en disco |
-| `.GenerateHtml(stream)` | Escribe el HTML en un `Stream` |
-| `.GenerateHtml()` | Devuelve el HTML completo como `string` |
-| `.GenerateHtmlFragment()` | Devuelve solo la tabla exterior, sin `<html>`/`<body>` |
+| `.GenerateHtml(filePath)` | Saves the full HTML to disk |
+| `.GenerateHtml(stream)` | Writes the HTML to a `Stream` |
+| `.GenerateHtml()` | Returns the full HTML as `string` |
+| `.GenerateHtmlFragment()` | Returns only the outer table, without `<html>`/`<body>` |
 
-## Opciones
+## Options
 
 ```csharp
 var options = new HtmlRendererOptions
 {
-    InlineStyles = true,   // por defecto: true  — estilos inline para máxima compatibilidad con clientes de email
-    MaxWidthPx   = 800     // ancho máximo del contenedor en píxeles
+    InlineStyles = true,   // default: true - inline styles for maximum email client compatibility
+    MaxWidthPx   = 800     // maximum container width in pixels
 };
-doc.GenerateHtml("reporte.html", options);
+doc.GenerateHtml("report.html", options);
 ```
 
-## Paquetes del ecosistema
+## Ecosystem packages
 
-| Paquete | Función |
+| Package | Purpose |
 |---------|---------|
-| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Modelo y API fluent |
-| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | Renderer PDF |
-| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Renderer Excel |
-| `FluentReport.Html` | Renderer HTML / email — este paquete |
-| [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | Importador RDLC / SSRS |
+| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Model and fluent API |
+| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer |
+| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel renderer |
+| `FluentReport.Html` | HTML / email renderer - this package |
+| [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
 
-> 📖 Documentación completa en el [repositorio](https://github.com/MathiasGonzalez/FluentReport).
+> Full documentation is available in the [repository](https://github.com/MathiasGonzalez/FluentReport).

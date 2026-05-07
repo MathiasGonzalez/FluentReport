@@ -3,15 +3,15 @@
 [![CI](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/ci.yml/badge.svg)](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/ci.yml)
 [![NuGet](https://img.shields.io/nuget/v/FluentReport.svg?label=FluentReport)](https://www.nuget.org/packages/FluentReport)
 
-Renderer **PDF** para FluentReport. Usa **SkiaSharp** como motor de renderizado y genera archivos PDF multipágina con soporte completo del layout fluent. Funciona en Linux sin dependencias nativas adicionales.
+**PDF** renderer for FluentReport. It uses **SkiaSharp** as the rendering engine and generates multi-page PDF files with full fluent layout support. It works on Linux without extra native dependencies.
 
-## Instalación
+## Installation
 
 ```shell
 dotnet add package FluentReport
 ```
 
-## Uso rápido
+## Quick start
 
 ```csharp
 using FluentReport;
@@ -25,13 +25,13 @@ Document.Create(c =>
         page.MarginAll(40);
 
         page.Header()
-            .Text("Mi Reporte").FontSize(20).Bold().AlignCenter();
+            .Text("My Report").FontSize(20).Bold().AlignCenter();
 
         page.Content().Column(col =>
         {
             col.Spacing(8);
-            col.Item().Text("Introducción").FontSize(14).Bold();
-            col.Item().Text("Contenido del reporte.");
+            col.Item().Text("Introduction").FontSize(14).Bold();
+            col.Item().Text("Report content.");
             col.Item().Line(1);
 
             col.Item().Table(table =>
@@ -43,54 +43,54 @@ Document.Create(c =>
                 });
                 table.Header(h =>
                 {
-                    h.Cell().Background("#CCCCCC").Padding(5).Text("Producto").Bold();
-                    h.Cell().Background("#CCCCCC").Padding(5).Text("Precio").Bold();
+                    h.Cell().Background("#CCCCCC").Padding(5).Text("Product").Bold();
+                    h.Cell().Background("#CCCCCC").Padding(5).Text("Price").Bold();
                 });
-                table.Cell().Padding(5).Text("Producto A");
+                table.Cell().Padding(5).Text("Product A");
                 table.Cell().Padding(5).Text("$100");
             });
         });
 
         page.Footer().AlignCenter().Text(x =>
         {
-            x.Span("Página ");
+            x.Span("Page ");
             x.CurrentPageNumber();
-            x.Span(" de ");
+            x.Span(" of ");
             x.TotalPages();
         });
     });
 })
-.GeneratePdf("reporte.pdf");
+.GeneratePdf("report.pdf");
 ```
 
-## API de generación
+## Generation API
 
-| Método | Descripción |
+| Method | Description |
 |--------|-------------|
-| `.GeneratePdf(filePath)` | Genera el PDF y lo guarda en disco |
-| `.GeneratePdf(stream)` | Escribe el PDF en un `Stream` |
-| `.GeneratePdf()` | Devuelve el PDF como `byte[]` |
-| `.GenerateImages(scale)` | Renderiza cada página como PNG (`byte[][]`) |
+| `.GeneratePdf(filePath)` | Generates the PDF and saves it to disk |
+| `.GeneratePdf(stream)` | Writes the PDF to a `Stream` |
+| `.GeneratePdf()` | Returns the PDF as `byte[]` |
+| `.GenerateImages(scale)` | Renders each page as PNG (`byte[][]`) |
 
-## Personalizar fuentes
+## Customize fonts
 
 ```csharp
 using FluentReport.Rendering;
 using SkiaSharp;
 
-// Usar una fuente personalizada para todo el documento
+// Use a custom font for the whole document
 SkiaFonts.TypefaceFactory = style =>
     SKTypeface.FromFile(style.Bold ? "fonts/MyFont-Bold.ttf" : "fonts/MyFont.ttf");
 ```
 
-## Paquetes del ecosistema
+## Ecosystem packages
 
-| Paquete | Función |
+| Package | Purpose |
 |---------|---------|
-| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Modelo y API fluent (sin deps de render) |
-| `FluentReport` | Renderer PDF — este paquete |
-| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Renderer Excel (ClosedXML) |
-| [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | Renderer HTML / email |
-| [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | Importador RDLC / SSRS |
+| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Model and fluent API (without rendering deps) |
+| `FluentReport` | PDF renderer - this package |
+| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel renderer (ClosedXML) |
+| [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer |
+| [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
 
-> 📖 Documentación completa y todos los ejemplos en el [repositorio](https://github.com/MathiasGonzalez/FluentReport).
+> Full documentation and all examples are available in the [repository](https://github.com/MathiasGonzalez/FluentReport).
