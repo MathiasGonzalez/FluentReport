@@ -14,18 +14,20 @@ public sealed class SnapshotFontFixture : IDisposable
 {
     private readonly string _regularPath;
     private readonly string _boldPath;
-    private readonly SKTypeface _regular;
-    private readonly SKTypeface _bold;
 
     public SnapshotFontFixture()
     {
         var asm = typeof(SnapshotFontFixture).Assembly;
         _regularPath = ExtractResource(asm, "DejaVuSans.ttf");
         _boldPath = ExtractResource(asm, "DejaVuSans-Bold.ttf");
-        _regular = SKTypeface.FromFile(_regularPath);
-        _bold = SKTypeface.FromFile(_boldPath);
 
-        SkiaFonts.TypefaceFactory = (TextStyle style) => style.EffectiveBold ? _bold : _regular;
+        // Each factory call returns a NEW SKTypeface instance because callers wrap
+        // the returned value in a 'using' block and dispose it after use.
+        // Returning a shared instance would cause the fixture's typeface to be
+        // disposed on the first call, causing subsequent renders to fall back to
+        // a system font and produce non-deterministic output.
+        SkiaFonts.TypefaceFactory = (TextStyle style) =>
+            SKTypeface.FromFile(style.EffectiveBold ? _boldPath : _regularPath);
     }
 
     private static string ExtractResource(Assembly asm, string logicalName)
@@ -47,9 +49,7 @@ public sealed class SnapshotFontFixture : IDisposable
     public void Dispose()
     {
         SkiaFonts.TypefaceFactory = null;
-        _regular.Dispose();
-        _bold.Dispose();
-        // SkiaSharp may keep a native handle open; best-effort cleanup only.
+        // Best-effort cleanup of temp font files.
         try { File.Delete(_regularPath); } catch { }
         try { File.Delete(_boldPath); } catch { }
     }
