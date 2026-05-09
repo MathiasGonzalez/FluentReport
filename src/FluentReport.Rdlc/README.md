@@ -63,8 +63,13 @@ var doc3 = DocumentRdlcExtensions.FromRdlcXml(xmlString, datasets, parameters);
 | Expression | Result |
 |-----------|-----------|
 | `=Fields!FieldName.Value` | Field value from the dataset |
+| `=First(Fields!FieldName.Value, "DataSetName")` | Field value from the first row of the named dataset |
 | `=Parameters!ParamName.Value` | Parameter value |
+| `=IIF(condition, trueValue, falseValue)` | Conditional expression (supports simple equality checks) |
+| `=Switch(cond1, val1, cond2, val2, ...)` | Multi-branch conditional expression |
 | Literal (without `=`) | Static text |
+
+Unsupported/unknown expressions still resolve to an empty string.
 
 > Full documentation and limitations: [`docs/api.md#rdlc-import`](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/api.md#rdlc-import) · [`docs/rdlc-limitations.md`](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/rdlc-limitations.md)
 

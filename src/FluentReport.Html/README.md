@@ -74,11 +74,21 @@ await emailService.SendAsync(to, subject, htmlBody: fragment);
 ```csharp
 var options = new HtmlRendererOptions
 {
-    InlineStyles = true,   // default: true - inline styles for maximum email client compatibility
-    MaxWidthPx   = 800     // maximum container width in pixels
+    MaxWidth          = 800,
+    FontFamily        = "Arial, Helvetica, sans-serif",
+    OutlookCompatible = true
 };
 doc.GenerateHtml("report.html", options);
 ```
+
+Common options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `MaxWidth` | `600` | Maximum width (px) of the outer wrapper table. Use `null` for 100% width. |
+| `FontFamily` | `"Arial, Helvetica, sans-serif"` | Base fallback font stack for the generated HTML. |
+| `PageDividerStyle` | dashed separator CSS | Inline CSS used between pages in multi-page output. |
+| `OutlookCompatible` | `false` | Enables Outlook desktop compatibility tweaks (`role="presentation"`, `bgcolor` fallback, OfficeDocumentSettings in full document mode). |
 
 ## Ecosystem packages
 

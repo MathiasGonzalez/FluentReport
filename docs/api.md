@@ -402,10 +402,13 @@ doc.GeneratePdf("catalog.pdf");
 | Expression | Description |
 |------------|-------------|
 | `=Fields!FieldName.Value` | Field value from the current data row |
+| `=First(Fields!FieldName.Value, "DataSetName")` | Field value from the first row of the named dataset |
 | `=Parameters!ParamName.Value` | Report parameter value |
+| `=IIF(condition, trueValue, falseValue)` | Conditional expression (supports simple equality checks) |
+| `=Switch(cond1, val1, cond2, val2, ...)` | Multi-branch conditional expression |
 | Literal (no `=` prefix) | Returned as-is |
 
-Unsupported expressions (aggregates, `IIF`, `Format`, `Globals!`, etc.) are replaced with an empty string.
+Unsupported/unknown expressions (aggregates, `Format`, `Globals!`, concatenations, etc.) are replaced with an empty string.
 
 ### Supported RDLC elements
 

@@ -70,7 +70,7 @@ Document.Create(c =>
 | `.GeneratePdf(filePath)` | Generates the PDF and saves it to disk |
 | `.GeneratePdf(stream)` | Writes the PDF to a `Stream` |
 | `.GeneratePdf()` | Returns the PDF as `byte[]` |
-| `.GenerateImages(scale)` | Renders each page as PNG (`byte[][]`) |
+| `.GenerateImages(scale)` | Renders each page as PNG (`IReadOnlyList<byte[]>`) |
 
 ## Customize fonts
 
