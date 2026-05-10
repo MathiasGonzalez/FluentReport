@@ -25,6 +25,13 @@ public sealed class SkiaTextMeasurer : ITextMeasurer
         return font.MeasureText(text);
     }
 
+    public float GetTextAscent(TextStyle style)
+    {
+        using var typeface = SkiaFonts.CreateTypeface(style);
+        using var font = new SKFont(typeface, style.FontSize);
+        return Math.Max(1f, -font.Metrics.Ascent);
+    }
+
     public List<string> WrapText(string text, TextStyle style, float maxWidth)
     {
         using var typeface = SkiaFonts.CreateTypeface(style);

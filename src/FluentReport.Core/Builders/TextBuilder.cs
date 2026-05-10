@@ -26,6 +26,7 @@ public class TextBuilder
     public TextBuilder AlignLeft() { _text.Style.Alignment = TextAlignment.Left; return this; }
     public TextBuilder AlignJustify() { _text.Style.Alignment = TextAlignment.Justify; return this; }
     public TextBuilder LineSpacing(float spacing) { _text.Style.LineSpacing = spacing; return this; }
+    public TextBuilder Rotate(float degrees) { _text.Style.Rotation = degrees; return this; }
 
     public ContainerBuilder Padding(float all) => _parent?.Padding(all) ?? throw new InvalidOperationException("No parent container");
     public ContainerBuilder PaddingVertical(float v) => _parent?.PaddingVertical(v) ?? throw new InvalidOperationException("No parent container");

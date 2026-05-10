@@ -1,0 +1,51 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg-a: #eef3f8;
+  --bg-b: #e6ecf3;
+  --panel: rgba(255, 255, 255, 0.96);
+  --panel-alt: rgba(247, 250, 252, 0.96);
+  --stroke: #d6dee7;
+  --stroke-strong: #c1ccd8;
+  --ink: #162435;
+  --ink-soft: #415367;
+  --ink-dim: #6a7b8f;
+  --mint-deep: #0e6077;
+  --mint-soft: #e6f2f6;
+  --panel-shadow: 0 10px 28px rgba(26, 41, 58, 0.08);
+  --font-sans: 'Sora', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  min-height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 10% 0%, rgba(14, 96, 119, 0.08), transparent 34%),
+    radial-gradient(circle at 100% 0%, rgba(73, 104, 138, 0.08), transparent 28%),
+    linear-gradient(165deg, var(--bg-a), var(--bg-b));
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+h1 {
+  font-size: clamp(1.4rem, 2.4vw, 2.1rem);
+  letter-spacing: -0.02em;
+}

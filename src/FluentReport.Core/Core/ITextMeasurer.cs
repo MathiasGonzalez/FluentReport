@@ -9,5 +9,6 @@ public interface ITextMeasurer
 {
     float MeasureText(string text, TextStyle style);
     float MeasureText(string text, float fontSize, string? fontFamily = null);
+    float GetTextAscent(TextStyle style);
     List<string> WrapText(string text, TextStyle style, float maxWidth);
 }
