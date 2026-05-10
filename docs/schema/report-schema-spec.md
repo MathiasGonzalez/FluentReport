@@ -1,44 +1,47 @@
-# FluentReport Report Schema v1 (Propuesta)
+# FluentReport Report Schema v1 (Proposal)
 
-## 1. Objetivo
+> Note: this document describes a broad proposal for `Schema v1`.
+> The exact contract currently exported by the editor is documented in [docs/editor-yaml-schema.md](./editor-yaml-schema.md).
 
-Definir un formato declarativo para modelar reportes sin escribir C# fluido, de forma que pueda:
+## 1. Goal
 
-- Validarse con un esquema (JSON Schema).
-- Traducirse a `DocumentSettings`.
-- Renderizarse por los backends existentes (PDF, HTML, Excel).
-- Mantener compatibilidad y versionado explicito.
+Define a declarative format for modeling reports without writing fluent C#, so that it can:
 
-Este documento propone un **Schema v1** como base para un importador nuevo (`FluentReport.Schema`).
+- be validated with a schema (JSON Schema),
+- be translated into `DocumentSettings`,
+- be rendered by the existing backends (PDF, HTML, Excel),
+- maintain explicit compatibility and versioning.
 
-## 2. Alcance v1
+This document proposes **Schema v1** as the basis for a new importer package (`FluentReport.Schema`).
 
-Incluye:
+## 2. v1 scope
 
-- Documento, paginas, margenes y tamano.
-- Header, content y footer.
-- Contenedores `column`, `row`, `table`.
-- Elementos `text`, `line`, `spacer`, `image`, `pageBreak`.
-- Estilos basicos (tipografia, color, background, border, padding, alignment).
-- Binding de datos por expresiones restringidas.
+Included:
 
-No incluye en v1:
+- document, pages, margins, and page size,
+- `header`, `content`, and `footer`,
+- `column`, `row`, and `table` containers,
+- `text`, `line`, `spacer`, `image`, and `pageBreak` elements,
+- basic styling (typography, color, background, border, padding, alignment),
+- data binding through restricted expressions.
 
-- Motor de expresiones arbitrario (sin ejecutar C# ni JS).
-- Layout avanzado de Tablix (tipo RDLC complejo).
-- Reglas condicionales complejas por renderer.
-- Componentes custom de terceros en runtime.
+Not included in v1:
 
-## 3. Formato de archivo
+- arbitrary expression engines (no C# or JS execution),
+- advanced tablix layout (complex RDLC-like structures),
+- complex renderer-specific conditional rules,
+- third-party runtime custom components.
 
-Se recomienda soportar ambos serializadores:
+## 3. File format
 
-- YAML (mejor authoring humano): `.frpt.yaml`
-- JSON (integracion/tooling): `.frpt.json`
+Both serializers should be supported:
 
-Ambos mapean a la misma estructura DTO interna.
+- YAML (better for human authoring): `.frpt.yaml`
+- JSON (better for tooling/integration): `.frpt.json`
 
-## 4. Estructura top-level
+Both map to the same internal DTO structure.
+
+## 4. Top-level structure
 
 ```yaml
 kind: FluentReport
@@ -51,7 +54,7 @@ metadata:
 
 pageDefaults:
   size: A4
-  orientation: portrait # portrait | landscape
+  orientation: portrait
   margin:
     top: 40
     right: 40
@@ -90,12 +93,12 @@ pages:
       items: []
 ```
 
-## 5. Modelo de pagina
+## 5. Page model
 
-Cada pagina define zonas:
+Each page defines these zones:
 
 - `header`
-- `content` (obligatoria)
+- `content` (required)
 - `footer`
 
 ```yaml
@@ -125,23 +128,23 @@ pages:
         - token: totalPages
 ```
 
-## 6. Tipos de nodos
+## 6. Node types
 
-Todos los nodos comparten campos comunes:
+All nodes share these common fields:
 
-- `type` (obligatorio)
-- `id` (opcional)
-- `style` (inline, opcional)
-- `styleRef` (opcional)
-- `padding`, `background`, `border`, `align` (opcionales)
-- `visibleWhen` (opcional, expresion booleana simple)
+- `type` (required)
+- `id` (optional)
+- `style` (inline, optional)
+- `styleRef` (optional)
+- `padding`, `background`, `border`, `align` (optional)
+- `visibleWhen` (optional, simple boolean expression)
 
-### 6.1 text
+### 6.1 `text`
 
 ```yaml
 type: text
-value: "Resumen {{ parameters.period }}"
-# o formato por spans:
+value: "Summary {{ parameters.period }}"
+# or span-based formatting:
 runs:
   - value: "Page "
   - token: currentPage
@@ -149,12 +152,12 @@ runs:
   - token: totalPages
 ```
 
-Reglas:
+Rules:
 
-- Debe existir `value` o `runs`.
-- `runs[].token` solo permite: `currentPage`, `totalPages`.
+- `value` or `runs` must exist.
+- `runs[].token` only allows `currentPage` and `totalPages`.
 
-### 6.2 column
+### 6.2 `column`
 
 ```yaml
 type: column
@@ -165,7 +168,7 @@ items:
   - type: line
 ```
 
-### 6.3 row
+### 6.3 `row`
 
 ```yaml
 type: row
@@ -181,7 +184,7 @@ items:
     node: { type: text, value: "Right" }
 ```
 
-### 6.4 table
+### 6.4 `table`
 
 ```yaml
 type: table
@@ -204,23 +207,23 @@ cellBorder:
   color: "#CCCCCC"
 ```
 
-Reglas:
+Rules:
 
-- `columns` es obligatoria.
-- Si hay `rows.source`, debe existir en `dataSources`.
-- Cada fila resultante debe completar la grilla respetando `colSpan`.
+- `columns` is required.
+- If `rows.source` exists, it must exist in `dataSources`.
+- Each resulting row must complete the grid while respecting `colSpan`.
 
-### 6.5 image
+### 6.5 `image`
 
 ```yaml
 type: image
 source:
-  mode: path # path | base64
+  mode: path
   value: "assets/logo.png"
-fit: contain # contain | cover | none
+fit: contain
 ```
 
-### 6.6 line
+### 6.6 `line`
 
 ```yaml
 type: line
@@ -228,25 +231,25 @@ thickness: 1
 color: "#D0D0D0"
 ```
 
-### 6.7 spacer
+### 6.7 `spacer`
 
 ```yaml
 type: spacer
 size: 12
 ```
 
-### 6.8 pageBreak
+### 6.8 `pageBreak`
 
 ```yaml
 type: pageBreak
 ```
 
-## 7. Estilos
+## 7. Styles
 
-### 7.1 styleRef + style inline
+### 7.1 `styleRef` + inline `style`
 
-- `styleRef`: aplica estilo nombrado desde `styles`.
-- `style`: override inline sobre el estilo referenciado.
+- `styleRef`: applies a named style from `styles`.
+- `style`: inline override on top of the referenced style.
 
 ```yaml
 styles:
@@ -261,7 +264,7 @@ content:
     bold: true
 ```
 
-### 7.2 Propiedades de estilo v1
+### 7.2 v1 style properties
 
 - `fontSize: number`
 - `fontFamily: string`
@@ -272,18 +275,18 @@ content:
 - `background: #RRGGBB`
 - `lineSpacing: number`
 - `align: left|center|right|justify`
-- `padding`: number o objeto `{top,right,bottom,left}`
+- `padding`: number or object `{top,right,bottom,left}`
 - `border`: `{ width, color }`
 
-## 8. Binding y expresiones
+## 8. Binding and expressions
 
-Se propone una sintaxis segura tipo template:
+The proposal uses a safe template-like syntax:
 
 - `{{ parameters.companyName }}`
 - `{{ row.region }}`
 - `{{ row.revenue | currency }}`
 
-Funciones permitidas v1:
+Allowed v1 functions:
 
 - `upper`
 - `lower`
@@ -292,56 +295,56 @@ Funciones permitidas v1:
 - `number(format)`
 - `date(format)`
 
-Condiciones (`visibleWhen`) permitidas:
+Allowed `visibleWhen` conditions:
 
-- comparacion simple: `row.revenue > 0`
-- igualdad: `parameters.country == "UY"`
-- booleanos: `and`, `or`, `not`
+- simple comparison: `row.revenue > 0`
+- equality: `parameters.country == "UY"`
+- boolean operators: `and`, `or`, `not`
 
-Restricciones de seguridad:
+Security restrictions:
 
-- Sin ejecucion de codigo dinamico.
-- Sin reflection arbitraria sobre expresiones.
-- Sin llamadas IO/red desde expresiones.
+- no dynamic code execution,
+- no arbitrary reflection over expressions,
+- no IO/network calls from expressions.
 
-## 9. Contrato de validacion
+## 9. Validation contract
 
-Validaciones minimas antes de renderizar:
+Minimum validations before rendering:
 
 - `kind == FluentReport`
-- `schemaVersion` soportado
+- supported `schemaVersion`
 - `pages.length >= 1`
-- Cada pagina tiene `content`
-- `type` conocido en cada nodo
-- `styleRef` existente
-- Colores hex validos
-- `dataSources` referenciados existen
-- `rows.cells` consistente con columnas y `colSpan`
+- every page has `content`
+- known `type` on every node
+- existing `styleRef`
+- valid hex colors
+- referenced `dataSources` exist
+- `rows.cells` are consistent with columns and `colSpan`
 
-Errores deben incluir:
+Errors should include:
 
-- Codigo (`FRS001`, `FRS002`, ...)
-- Mensaje claro
-- Ruta del nodo (`pages[0].content.items[3]`)
-- Linea/columna (si el parser lo soporta)
+- code (`FRS001`, `FRS002`, ...)
+- clear message
+- node path (`pages[0].content.items[3]`)
+- line/column when supported by the parser
 
-## 10. Mapeo a FluentReport actual
+## 10. Mapping to the current FluentReport runtime
 
-Mapeo propuesto:
+Proposed mapping:
 
 - Schema -> DTO (`ReportDefinition`)
 - DTO -> `DocumentSettings`
-- `Document.FromSettings(...)` -> renderers existentes
+- `Document.FromSettings(...)` -> existing renderers
 
-Tabla de equivalencias:
+Equivalence table:
 
 - `page.size/margin` -> `PageSettings`
 - `header/content/footer` -> `HeaderElement/ContentElement/FooterElement`
-- `column/row/table/text/...` -> `IElement` concretos
-- `runs token currentPage/totalPages` -> spans dinamicos
-- `rows.source` -> expansion de filas en `TableElement`
+- `column/row/table/text/...` -> concrete `IElement` implementations
+- `runs token currentPage/totalPages` -> dynamic spans
+- `rows.source` -> row expansion in `TableElement`
 
-## 11. Ejemplo completo (v1)
+## 11. Full example (v1)
 
 ```yaml
 kind: FluentReport
@@ -413,22 +416,22 @@ pages:
         - { token: totalPages }
 ```
 
-## 12. Versionado y compatibilidad
+## 12. Versioning and compatibility
 
-- `schemaVersion` obligatorio.
-- Cambios compatibles: agregar campos opcionales.
-- Cambios no compatibles: cambiar semantica o campos requeridos.
-- Estrategia recomendada: `v1`, `v2`, con parser por version.
+- `schemaVersion` is required.
+- Compatible changes: adding optional fields.
+- Breaking changes: changing semantics or required fields.
+- Recommended strategy: `v1`, `v2`, with a parser per version.
 
-## 13. Integracion con MD/MDX (opcional)
+## 13. Integration with MD/MDX (optional)
 
-Propuesta:
+Proposal:
 
-- Markdown/MDX como capa de authoring.
-- Frontmatter YAML + bloques declarativos.
-- Compilacion a Schema v1 antes de render.
+- Markdown/MDX as an authoring layer.
+- YAML frontmatter + declarative blocks.
+- Compilation to Schema v1 before rendering.
 
-Ejemplo conceptual:
+Conceptual example:
 
 ```md
 ---
@@ -442,17 +445,17 @@ name: md-report
 <FrTable source="sales" columns="region,month,revenue" />
 ```
 
-Recomendacion: mantener **Schema v1** como fuente canonica y tratar MD/MDX como transpiler de entrada.
+Recommendation: keep **Schema v1** as the canonical source and treat MD/MDX as an input transpiler.
 
-## 14. Plan de implementacion sugerido
+## 14. Suggested implementation plan
 
-1. Definir DTOs (`ReportDefinition`, `PageNode`, `ElementNode`, etc.).
-2. Publicar JSON Schema de validacion v1.
-3. Implementar parser YAML/JSON + validador.
-4. Implementar traductor DTO -> `DocumentSettings`.
-5. Agregar paquete `FluentReport.Schema` y extensiones:
+1. Define DTOs (`ReportDefinition`, `PageNode`, `ElementNode`, etc.).
+2. Publish a v1 JSON Schema validator.
+3. Implement a YAML/JSON parser + validator.
+4. Implement a DTO -> `DocumentSettings` translator.
+5. Add a `FluentReport.Schema` package and extensions:
    - `DocumentSchemaExtensions.FromSchema(path, data, parameters)`
-6. Tests:
-   - snapshots PDF/HTML/Excel
-   - validacion de errores
-   - casos con tablas y pageBreak.
+6. Add tests:
+   - PDF/HTML/Excel snapshots,
+   - validation error coverage,
+   - table and `pageBreak` scenarios.

@@ -1,81 +1,40 @@
 import Guides from '@scena/guides'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { forwardRef, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type CSSProperties } from 'react'
+import { createPortal } from 'react-dom'
 import Moveable from 'react-moveable'
 import Selecto from 'react-selecto'
 import './App.css'
-
-const PAGE_WIDTH = 794
-const PAGE_HEIGHT = 1123
-const PAGE_MARGIN = 56
-const PAGE_HEADER_Y = 38
-const PAGE_FOOTER_Y = PAGE_HEIGHT - 52
+import {
+  EDITOR_COPY,
+  EDITOR_LANGUAGE_STORAGE_KEY,
+  LOCALE_OPTIONS,
+  getInitialLocale,
+  isLocale,
+  type Locale,
+} from './editorCopy'
+import {
+  DEFAULT_HTML_RENDERER_OPTIONS,
+  PAGE_FOOTER_Y,
+  PAGE_HEADER_Y,
+  PAGE_HEIGHT,
+  PAGE_MARGIN,
+  PAGE_WIDTH,
+  getSelectionBounds,
+  isAlign,
+  type Align,
+  type Block,
+  type BlockFrame,
+  type BlockType,
+  type ImageFit,
+  type PageDefinition,
+  type ReportConfig,
+  type TableColumn,
+} from './reportModel'
+import { buildSchema, toYaml } from './reportSchema'
 
 const CANVAS_VERTICAL_GUIDES = [0, PAGE_MARGIN, PAGE_WIDTH / 2, PAGE_WIDTH - PAGE_MARGIN, PAGE_WIDTH]
 const CANVAS_HORIZONTAL_GUIDES = [0, PAGE_HEADER_Y, PAGE_HEIGHT / 2, PAGE_FOOTER_Y, PAGE_HEIGHT]
 const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2]
-
-type Align = 'left' | 'center' | 'right' | 'justify'
-type ImageFit = 'contain' | 'cover' | 'none'
-type ImageSourceMode = 'path' | 'base64'
-type BlockType = 'text' | 'line' | 'spacer' | 'pageBreak' | 'image'
-
-type BlockFrame = {
-  x: number
-  y: number
-  width: number
-  height: number
-}
-
-type BlockBase = {
-  id: string
-  frame: BlockFrame
-  groupId?: string
-}
-
-type TextBlock = BlockBase & {
-  id: string
-  type: 'text'
-  value: string
-  styleRef?: string
-  align?: Align
-  fontSize?: number
-  bold?: boolean
-  italic?: boolean
-  color?: string
-}
-
-type LineBlock = BlockBase & {
-  type: 'line'
-  thickness: number
-  color: string
-}
-
-type SpacerBlock = BlockBase & {
-  type: 'spacer'
-  size: number
-}
-
-type PageBreakBlock = BlockBase & {
-  type: 'pageBreak'
-}
-
-type ImageBlock = BlockBase & {
-  type: 'image'
-  source: string
-  sourceMode: ImageSourceMode
-  fit: ImageFit
-  alt?: string
-}
-
-type Block = TextBlock | LineBlock | SpacerBlock | PageBreakBlock | ImageBlock
-
-type ReportConfig = {
-  name: string
-  title: string
-  companyParam: string
-  periodParam: string
-  blocks: Block[]
-}
 
 type GuidesInstance = Guides & {
   scroll: (pos: number, nextZoom?: number) => void
@@ -88,9 +47,13 @@ const initialConfig: ReportConfig = {
   title: 'Revenue Report - {{ parameters.period }}',
   companyParam: 'companyName',
   periodParam: 'period',
+  dataSources: ['sales'],
+  htmlRendererOptions: { ...DEFAULT_HTML_RENDERER_OPTIONS },
+  pages: [{ id: 'p1' }],
   blocks: [
     {
       id: 'b-1',
+      pageId: 'p1',
       type: 'text',
       value: '{{ parameters.companyName }}',
       styleRef: 'h2',
@@ -98,6 +61,7 @@ const initialConfig: ReportConfig = {
     },
     {
       id: 'b-2',
+      pageId: 'p1',
       type: 'line',
       thickness: 1,
       color: '#D8D8D8',
@@ -105,6 +69,7 @@ const initialConfig: ReportConfig = {
     },
     {
       id: 'b-3',
+      pageId: 'p1',
       type: 'text',
       value: 'Revenue Report - {{ parameters.period }}',
       styleRef: 'title',
@@ -113,21 +78,33 @@ const initialConfig: ReportConfig = {
     },
     {
       id: 'b-4',
+      pageId: 'p1',
       type: 'spacer',
       size: 12,
       frame: { x: 72, y: 314, width: 220, height: 28 },
     },
     {
       id: 'b-5',
-      type: 'text',
-      value: 'Table placeholder: define table in next iteration of the editor.',
-      frame: { x: 72, y: 372, width: 520, height: 108 },
+      pageId: 'p1',
+      type: 'table',
+      name: 'sales-table',
+      dataSource: 'sales',
+      growthMode: 'grow',
+      overflowMode: 'nextPage',
+      keepTogether: false,
+      columns: [
+        { id: 'col-region', field: 'region', header: 'Region', width: 2 },
+        { id: 'col-month', field: 'month', header: 'Month', width: 2 },
+        { id: 'col-revenue', field: 'revenue', header: 'Revenue', width: 1, align: 'right' },
+      ],
+      frame: { x: 72, y: 372, width: 520, height: 144 },
     },
   ],
 }
 
 let idCounter = 100
 let groupCounter = 1
+let pageCounter = 1
 
 function nextId() {
   idCounter += 1
@@ -139,6 +116,11 @@ function nextGroupId() {
   return `g-${groupCounter}`
 }
 
+function nextPageId() {
+  pageCounter += 1
+  return `p${pageCounter}`
+}
+
 function getBlockSelector(blockId: string) {
   return `.canvas-block[data-block-id="${blockId}"]`
 }
@@ -147,9 +129,179 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
+type TooltipButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
+  tooltip: string
+}
+
+const TooltipButton = forwardRef<HTMLButtonElement, TooltipButtonProps>(function TooltipButton(
+  { tooltip, children, className, ...buttonProps },
+  ref,
+) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const [isTooltipVisible, setIsTooltipVisible] = useState(false)
+  const [tooltipPlacement, setTooltipPlacement] = useState<'top' | 'bottom'>('top')
+  const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>()
+  const ariaLabel = buttonProps['aria-label'] ?? tooltip
+
+  function assignRef(element: HTMLButtonElement | null) {
+    buttonRef.current = element
+
+    if (typeof ref === 'function') {
+      ref(element)
+      return
+    }
+
+    if (ref) {
+      ref.current = element
+    }
+  }
+
+  function updateTooltipPosition() {
+    const element = buttonRef.current
+    if (!element) {
+      return
+    }
+
+    const rect = element.getBoundingClientRect()
+    const showAbove = rect.top > 56
+
+    setTooltipPlacement(showAbove ? 'top' : 'bottom')
+    setTooltipStyle({
+      left: rect.left + rect.width / 2,
+      top: showAbove ? rect.top - 10 : rect.bottom + 10,
+    })
+  }
+
+  function showTooltip() {
+    updateTooltipPosition()
+    setIsTooltipVisible(true)
+  }
+
+  function hideTooltip() {
+    setIsTooltipVisible(false)
+  }
+
+  useEffect(() => {
+    if (!isTooltipVisible) {
+      return
+    }
+
+    const handleViewportChange = () => updateTooltipPosition()
+
+    window.addEventListener('resize', handleViewportChange)
+    window.addEventListener('scroll', handleViewportChange, true)
+
+    return () => {
+      window.removeEventListener('resize', handleViewportChange)
+      window.removeEventListener('scroll', handleViewportChange, true)
+    }
+  }, [isTooltipVisible])
+
+  return (
+    <>
+      <button
+        ref={assignRef}
+        {...buttonProps}
+        className={className}
+        aria-label={ariaLabel}
+        onMouseEnter={(event) => {
+          buttonProps.onMouseEnter?.(event)
+          showTooltip()
+        }}
+        onMouseLeave={(event) => {
+          buttonProps.onMouseLeave?.(event)
+          hideTooltip()
+        }}
+        onFocus={(event) => {
+          buttonProps.onFocus?.(event)
+          showTooltip()
+        }}
+        onBlur={(event) => {
+          buttonProps.onBlur?.(event)
+          hideTooltip()
+        }}
+      >
+        {children}
+      </button>
+      {isTooltipVisible && tooltipStyle && typeof document !== 'undefined'
+        ? createPortal(
+            <span
+              className={[
+                'toolbar-tooltip',
+                tooltipPlacement === 'bottom' ? 'bottom' : '',
+                'visible',
+              ].filter(Boolean).join(' ')}
+              role="tooltip"
+              style={tooltipStyle}
+            >
+              {tooltip}
+            </span>,
+            document.body,
+          )
+        : null}
+    </>
+  )
+})
+
+function createDefaultTableColumns(): TableColumn[] {
+  return [
+    { id: 'col-region', field: 'region', header: 'Region', width: 2 },
+    { id: 'col-month', field: 'month', header: 'Month', width: 2 },
+    { id: 'col-revenue', field: 'revenue', header: 'Revenue', width: 1, align: 'right' },
+  ]
+}
+
+function createDefaultRepeatTemplate() {
+  return '{{ row.title }}\n{{ row.description }}'
+}
+
+function formatTableColumns(columns: TableColumn[]): string {
+  return columns
+    .map((column) => [column.field, column.header, String(column.width), column.align ?? 'left'].join(' | '))
+    .join('\n')
+}
+
+function formatNameList(values: string[]): string {
+  return values.join('\n')
+}
+
+function parseNameList(input: string): string[] {
+  return [...new Set(input.split(/\r?\n|,/).map((value) => value.trim()).filter(Boolean))]
+}
+
+function parseTableColumns(input: string, previousColumns: TableColumn[]): TableColumn[] {
+  const parsed = input
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const [fieldRaw, headerRaw, widthRaw, alignRaw] = line.split('|').map((part) => part.trim())
+      const field = fieldRaw || `column${index + 1}`
+      const width = Number(widthRaw)
+
+      return {
+        id: previousColumns[index]?.id ?? `col-${field}`,
+        field,
+        header: headerRaw || field,
+        width: Number.isFinite(width) && width > 0 ? width : 1,
+        ...(alignRaw && isAlign(alignRaw) ? { align: alignRaw } : {}),
+      }
+    })
+
+  return parsed.length > 0 ? parsed : previousColumns
+}
+
 function getMinimumFrame(type: BlockType) {
   if (type === 'line') {
     return { width: 80, height: 4 }
+  }
+
+  if (type === 'table') {
+    return { width: 240, height: 120 }
+  }
+
+  if (type === 'repeat') {
+    return { width: 220, height: 120 }
   }
 
   if (type === 'image') {
@@ -180,7 +332,7 @@ function clampFrame(frame: BlockFrame, type: BlockType): BlockFrame {
   }
 }
 
-function createBlock(type: BlockType, index: number): Block {
+function createBlock(type: BlockType, index: number, pageId: string): Block {
   const baseFrame = clampFrame(
     {
       x: 72,
@@ -188,6 +340,10 @@ function createBlock(type: BlockType, index: number): Block {
       width:
         type === 'line'
           ? 520
+          : type === 'table'
+            ? 420
+            : type === 'repeat'
+              ? 320
           : type === 'pageBreak'
             ? 180
             : type === 'spacer'
@@ -195,45 +351,93 @@ function createBlock(type: BlockType, index: number): Block {
               : type === 'image'
                 ? 240
                 : 260,
-      height: type === 'line' ? 6 : type === 'spacer' ? 28 : type === 'pageBreak' ? 40 : type === 'image' ? 160 : 72,
+      height:
+        type === 'line'
+          ? 6
+          : type === 'spacer'
+            ? 28
+            : type === 'pageBreak'
+              ? 40
+              : type === 'image'
+                ? 160
+                : type === 'table'
+                  ? 148
+                  : type === 'repeat'
+                    ? 160
+                  : 72,
     },
     type,
   )
 
   if (type === 'text') {
-    return { id: nextId(), type: 'text', value: 'New text block', frame: baseFrame }
+    return { id: nextId(), pageId, type: 'text', value: 'New text block', frame: baseFrame }
   }
 
   if (type === 'line') {
-    return { id: nextId(), type: 'line', thickness: 1, color: '#D8D8D8', frame: baseFrame }
+    return { id: nextId(), pageId, type: 'line', thickness: 1, color: '#D8D8D8', frame: baseFrame }
   }
 
   if (type === 'spacer') {
-    return { id: nextId(), type: 'spacer', size: 10, frame: baseFrame }
+    return { id: nextId(), pageId, type: 'spacer', size: 10, frame: baseFrame }
   }
 
   if (type === 'image') {
-    return { id: nextId(), type: 'image', source: '', sourceMode: 'path', fit: 'contain', alt: 'Image', frame: baseFrame }
+    return { id: nextId(), pageId, type: 'image', source: '', sourceMode: 'path', fit: 'contain', alt: 'Image', frame: baseFrame }
   }
 
-  return { id: nextId(), type: 'pageBreak', frame: baseFrame }
+  if (type === 'table') {
+    return {
+      id: nextId(),
+      pageId,
+      type: 'table',
+      name: 'table-block',
+      dataSource: 'items',
+      growthMode: 'grow',
+      overflowMode: 'nextPage',
+      keepTogether: false,
+      columns: createDefaultTableColumns(),
+      frame: baseFrame,
+    }
+  }
+
+  if (type === 'repeat') {
+    return {
+      id: nextId(),
+      pageId,
+      type: 'repeat',
+      name: 'repeat-block',
+      dataSource: 'items',
+      itemTemplate: createDefaultRepeatTemplate(),
+      itemGap: 10,
+      growthMode: 'grow',
+      overflowMode: 'nextPage',
+      keepTogether: false,
+      frame: baseFrame,
+    }
+  }
+
+  return { id: nextId(), pageId, type: 'pageBreak', frame: baseFrame }
 }
 
-function getBlockTypeLabel(type: BlockType): string {
-  if (type === 'image') {
-    return 'Image'
-  }
-
-  if (type === 'pageBreak') {
-    return 'Page break'
-  }
-
-  return type.charAt(0).toUpperCase() + type.slice(1)
+function getBlockTypeLabel(type: BlockType, locale: Locale): string {
+  return EDITOR_COPY[locale].blockTypes[type]
 }
 
-function getBlockSummary(block: Block): string {
+function getGrowthModeLabel(mode: 'fixed' | 'grow', locale: Locale) {
+  const copy = EDITOR_COPY[locale]
+  return mode === 'grow' ? copy.growDown : copy.fixed
+}
+
+function getOverflowModeLabel(mode: 'nextPage' | 'truncate', locale: Locale) {
+  const copy = EDITOR_COPY[locale]
+  return mode === 'nextPage' ? copy.nextPage : copy.truncate
+}
+
+function getBlockSummary(block: Block, locale: Locale): string {
+  const copy = EDITOR_COPY[locale]
+
   if (block.type === 'text') {
-    return block.value || 'Empty text block'
+    return block.value || copy.emptyTextBlock
   }
 
   if (block.type === 'line') {
@@ -241,14 +445,22 @@ function getBlockSummary(block: Block): string {
   }
 
   if (block.type === 'spacer') {
-    return `${block.size}px spacer`
+    return copy.spacerSummary(block.size)
   }
 
   if (block.type === 'image') {
-    return block.source ? block.alt || block.source : 'Empty image block'
+    return block.source ? block.alt || block.source : copy.emptyImageBlock
   }
 
-  return 'Forces a new page'
+  if (block.type === 'table') {
+    return `${block.dataSource} · ${copy.columnsCount(block.columns.length)} · ${getGrowthModeLabel(block.growthMode, locale)} / ${getOverflowModeLabel(block.overflowMode, locale)}`
+  }
+
+  if (block.type === 'repeat') {
+    return `${block.dataSource} · ${copy.gap} ${block.itemGap} · ${getGrowthModeLabel(block.growthMode, locale)} / ${getOverflowModeLabel(block.overflowMode, locale)}`
+  }
+
+  return copy.forceNewPage
 }
 
 function expandSelectionForBlocks(blocks: Block[], blockIds: string[], primaryId?: string | null) {
@@ -273,22 +485,18 @@ function expandSelectionForBlocks(blocks: Block[], blockIds: string[], primaryId
   return orderedIds
 }
 
-function getSelectionBounds(blocks: Block[]) {
-  if (blocks.length === 0) {
-    return null
-  }
+function getGroupBlockIds(blocks: Block[], groupId: string) {
+  return blocks.filter((block) => block.groupId === groupId).map((block) => block.id)
+}
 
-  const left = Math.min(...blocks.map((block) => block.frame.x))
-  const top = Math.min(...blocks.map((block) => block.frame.y))
-  const right = Math.max(...blocks.map((block) => block.frame.x + block.frame.width))
-  const bottom = Math.max(...blocks.map((block) => block.frame.y + block.frame.height))
+function isExactGroupSelection(blocks: Block[], selectedIds: string[], groupId: string) {
+  const groupBlockIds = getGroupBlockIds(blocks, groupId)
 
-  return {
-    x: left,
-    y: top,
-    width: right - left,
-    height: bottom - top,
-  }
+  return (
+    groupBlockIds.length > 1
+    && groupBlockIds.length === selectedIds.length
+    && groupBlockIds.every((id) => selectedIds.includes(id))
+  )
 }
 
 function isTextEntryTarget(target: EventTarget | null) {
@@ -307,183 +515,24 @@ function getNextZoom(currentZoom: number, direction: -1 | 1): number {
   return ZOOM_LEVELS[nextIndex]
 }
 
-function sortBlocksForSchema(blocks: Block[]): Block[] {
-  return [...blocks].sort((left, right) => {
-    if (left.frame.y !== right.frame.y) {
-      return left.frame.y - right.frame.y
-    }
-
-    return left.frame.x - right.frame.x
-  })
-}
-
-function quoteIfNeeded(value: string): string {
-  if (value.length === 0) {
-    return '""'
-  }
-
-  if (/^[-?:@`#!&*|>'"%!{},[\]]/.test(value) || value.includes(': ') || /\s/.test(value)) {
-    return `"${value.replace(/"/g, '\\"')}"`
-  }
-
-  return value
-}
-
-function toYaml(value: unknown, depth = 0): string {
-  const indent = '  '.repeat(depth)
-
-  if (value === null || value === undefined) {
-    return 'null'
-  }
-
-  if (typeof value === 'string') {
-    return quoteIfNeeded(value)
-  }
-
-  if (typeof value === 'number' || typeof value === 'boolean') {
-    return String(value)
-  }
-
-  if (Array.isArray(value)) {
-    if (value.length === 0) {
-      return '[]'
-    }
-
-    return value
-      .map((item) => {
-        if (typeof item === 'object' && item !== null) {
-          const nested = toYaml(item, depth + 1)
-          const lines = nested.split('\n')
-          const [first, ...rest] = lines
-          const head = `${indent}- ${first}`
-          const tail = rest.map((line) => `${indent}  ${line}`).join('\n')
-          return tail ? `${head}\n${tail}` : head
-        }
-
-        return `${indent}- ${toYaml(item, depth + 1)}`
-      })
-      .join('\n')
-  }
-
-  const entries = Object.entries(value as Record<string, unknown>).filter(([, v]) => v !== undefined)
-
-  if (entries.length === 0) {
-    return '{}'
-  }
-
-  return entries
-    .map(([key, val]) => {
-      if (val !== null && typeof val === 'object') {
-        if (Array.isArray(val) && val.length === 0) {
-          return `${indent}${key}: []`
-        }
-
-        const nested = toYaml(val, depth + 1)
-        return `${indent}${key}:\n${nested}`
-      }
-
-      return `${indent}${key}: ${toYaml(val, depth + 1)}`
-    })
-    .join('\n')
-}
-
-function buildSchema(config: ReportConfig) {
-  const orderedBlocks = sortBlocksForSchema(config.blocks)
-
-  return {
-    kind: 'FluentReport',
-    schemaVersion: 1,
-    name: config.name,
-    pageDefaults: {
-      size: 'A4',
-      orientation: 'portrait',
-      margin: { top: 40, right: 40, bottom: 40, left: 40 },
-    },
-    parameters: {
-      [config.companyParam]: { type: 'string', required: true },
-      [config.periodParam]: { type: 'string', required: true },
-    },
-    styles: {
-      title: { fontSize: 20, bold: true, align: 'center' },
-      h2: { fontSize: 13, bold: true },
-    },
-    pages: [
-      {
-        id: 'p1',
-        content: {
-          type: 'column',
-          spacing: 10,
-          items: orderedBlocks.map((b) => {
-            if (b.type === 'text') {
-              return {
-                type: 'text',
-                value: b.value,
-                ...(b.styleRef ? { styleRef: b.styleRef } : {}),
-                ...(b.align ? { align: b.align } : {}),
-                ...(b.fontSize ? { fontSize: b.fontSize } : {}),
-                ...(b.bold ? { bold: b.bold } : {}),
-                ...(b.italic ? { italic: b.italic } : {}),
-                ...(b.color ? { color: b.color } : {}),
-              }
-            }
-
-            if (b.type === 'line') {
-              return {
-                type: 'line',
-                thickness: b.thickness,
-                color: b.color,
-              }
-            }
-
-            if (b.type === 'spacer') {
-              return {
-                type: 'spacer',
-                size: b.size,
-              }
-            }
-
-            if (b.type === 'image') {
-              return {
-                type: 'image',
-                source: {
-                  mode: b.sourceMode,
-                  value: b.source,
-                },
-                ...(b.fit ? { fit: b.fit } : {}),
-                ...(b.alt ? { alt: b.alt } : {}),
-              }
-            }
-
-            return {
-              type: 'pageBreak',
-            }
-          }),
-        },
-        footer: {
-          type: 'text',
-          align: 'center',
-          runs: [
-            { value: 'Page ' },
-            { token: 'currentPage' },
-            { value: ' of ' },
-            { token: 'totalPages' },
-          ],
-        },
-      },
-    ],
-  }
-}
-
 function App() {
   const [config, setConfig] = useState<ReportConfig>(initialConfig)
-  const [selectedIds, setSelectedIds] = useState<string[]>(initialConfig.blocks[0] ? [initialConfig.blocks[0].id] : [])
+  const [locale, setLocale] = useState<Locale>(getInitialLocale)
+  const [activePageId, setActivePageId] = useState<string>(initialConfig.pages[0]?.id ?? 'p1')
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => {
+    const initialPageId = initialConfig.pages[0]?.id ?? 'p1'
+    const firstBlock = initialConfig.blocks.find((block) => block.pageId === initialPageId)
+    return firstBlock ? [firstBlock.id] : []
+  })
   const [canvasZoom, setCanvasZoom] = useState(1)
   const [isInspectorOpen, setIsInspectorOpen] = useState(false)
   const [showRulers, setShowRulers] = useState(true)
   const [showYamlPanel, setShowYamlPanel] = useState(false)
   const [showLayersPanel, setShowLayersPanel] = useState(false)
   const [showDocPanel, setShowDocPanel] = useState(false)
+  const [moveTargetPageId, setMoveTargetPageId] = useState<string>('')
   const [pageElement, setPageElement] = useState<HTMLElement | null>(null)
+  const [canvasViewportElement, setCanvasViewportElement] = useState<HTMLDivElement | null>(null)
   const layersBtnRef = useRef<HTMLButtonElement | null>(null)
   const docBtnRef = useRef<HTMLButtonElement | null>(null)
   const topRulerRef = useRef<HTMLDivElement | null>(null)
@@ -493,18 +542,31 @@ function App() {
   const moveableRef = useRef<Moveable | null>(null)
   const horizontalGuidesRef = useRef<GuidesInstance | null>(null)
   const verticalGuidesRef = useRef<GuidesInstance | null>(null)
+  const copy = EDITOR_COPY[locale]
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(EDITOR_LANGUAGE_STORAGE_KEY, locale)
+    }
+  }, [locale])
 
   const schemaObject = useMemo(() => buildSchema(config), [config])
   const yamlOutput = useMemo(() => toYaml(schemaObject), [schemaObject])
+  const activePageIndex = Math.max(config.pages.findIndex((page) => page.id === activePageId), 0)
+  const activePage = config.pages[activePageIndex] ?? config.pages[0] ?? null
+  const currentPageBlocks = useMemo(
+    () => config.blocks.filter((block) => block.pageId === activePage?.id),
+    [activePage, config.blocks],
+  )
   const selectedId = selectedIds.at(-1) ?? null
   const selectedBlocks = useMemo(
-    () => config.blocks.filter((block) => selectedIds.includes(block.id)),
-    [config.blocks, selectedIds],
+    () => currentPageBlocks.filter((block) => selectedIds.includes(block.id)),
+    [currentPageBlocks, selectedIds],
   )
   const selectedTargetSelectors = useMemo(() => selectedIds.map(getBlockSelector), [selectedIds])
   const elementGuidelines = useMemo(
-    () => config.blocks.map((block) => getBlockSelector(block.id)),
-    [config.blocks],
+    () => currentPageBlocks.map((block) => getBlockSelector(block.id)),
+    [currentPageBlocks],
   )
   const isGroupSelection = selectedIds.length > 1
   const selectionType =
@@ -512,9 +574,27 @@ function App() {
       ? selectedBlocks[0].type
       : null
   const selectedGroupIds = [...new Set(selectedBlocks.map((block) => block.groupId).filter((value): value is string => Boolean(value)))]
+  const selectedWholeGroupId =
+    selectedGroupIds.length === 1 && isExactGroupSelection(currentPageBlocks, selectedIds, selectedGroupIds[0])
+      ? selectedGroupIds[0]
+      : null
   const selectionBounds = getSelectionBounds(selectedBlocks)
+  const selectionOutlineInset = selectedWholeGroupId ? 7 : isGroupSelection ? 4 : 0
+  const pageMoveOptions = config.pages.filter((page) => page.id !== activePage?.id)
 
-  const selectedBlock = config.blocks.find((b) => b.id === selectedId) ?? null
+  const selectedBlock = currentPageBlocks.find((b) => b.id === selectedId) ?? null
+
+  useEffect(() => {
+    const fallbackPageId = pageMoveOptions[0]?.id ?? ''
+
+    setMoveTargetPageId((current) => {
+      if (pageMoveOptions.some((page) => page.id === current)) {
+        return current
+      }
+
+      return fallbackPageId
+    })
+  }, [pageMoveOptions])
 
   function syncGuidesScroll(nextZoom = canvasZoom) {
     const stage = stageRef.current
@@ -685,11 +765,63 @@ function App() {
   }, [selectedIds, selectedGroupIds])
 
   function setSelection(ids: string[], primaryId?: string | null) {
-    setSelectedIds(expandSelectionForBlocks(config.blocks, ids, primaryId))
+    setSelectedIds(expandSelectionForBlocks(currentPageBlocks, ids, primaryId))
   }
 
   function setPrimarySelection(id: string | null) {
     setSelection(id ? [id] : [], id)
+  }
+
+  function setDirectSelection(id: string | null) {
+    setSelectedIds(id ? [id] : [])
+  }
+
+  function toggleSelection(blockId: string) {
+    const block = currentPageBlocks.find((candidate) => candidate.id === blockId)
+
+    if (!block) {
+      return
+    }
+
+    const relatedIds = block.groupId
+      ? currentPageBlocks.filter((candidate) => candidate.groupId === block.groupId).map((candidate) => candidate.id)
+      : [blockId]
+
+    setSelectedIds((prev) => {
+      const nextIds = new Set(prev)
+      const allSelected = relatedIds.every((id) => nextIds.has(id))
+
+      if (allSelected) {
+        relatedIds.forEach((id) => nextIds.delete(id))
+      } else {
+        relatedIds.forEach((id) => nextIds.add(id))
+      }
+
+      return expandSelectionForBlocks(currentPageBlocks, [...nextIds], blockId)
+    })
+  }
+
+  function handleSelectionPointer(blockId: string, modifiers: { ctrlKey: boolean; metaKey: boolean }) {
+    const block = currentPageBlocks.find((candidate) => candidate.id === blockId)
+
+    if (!block) {
+      return
+    }
+
+    if (modifiers.ctrlKey || modifiers.metaKey) {
+      toggleSelection(blockId)
+      return
+    }
+
+    if (selectedIds.includes(blockId)) {
+      if (block.groupId && isExactGroupSelection(currentPageBlocks, selectedIds, block.groupId)) {
+        setDirectSelection(blockId)
+      }
+
+      return
+    }
+
+    setPrimarySelection(blockId)
   }
 
   function updateBlocks(blockIds: string[], updater: (current: Block) => Block) {
@@ -710,10 +842,88 @@ function App() {
   }
 
   function addBlock(type: BlockType) {
-    const block = createBlock(type, config.blocks.length)
+    if (!activePage) {
+      return
+    }
+
+    const block = createBlock(type, currentPageBlocks.length, activePage.id)
 
     setConfig((prev) => ({ ...prev, blocks: [...prev.blocks, block] }))
     setSelectedIds([block.id])
+  }
+
+  function addPage() {
+    const page: PageDefinition = { id: nextPageId() }
+
+    setConfig((prev) => ({
+      ...prev,
+      pages: [...prev.pages, page],
+    }))
+    setActivePageId(page.id)
+    setSelectedIds([])
+  }
+
+  function selectPage(pageId: string) {
+    setActivePageId(pageId)
+    setSelectedIds([])
+    setIsInspectorOpen(false)
+  }
+
+  function moveActivePage(offset: -1 | 1) {
+    if (!activePage) {
+      return
+    }
+
+    setConfig((prev) => {
+      const index = prev.pages.findIndex((page) => page.id === activePage.id)
+      const target = index + offset
+
+      if (index < 0 || target < 0 || target >= prev.pages.length) {
+        return prev
+      }
+
+      const pages = [...prev.pages]
+      const [page] = pages.splice(index, 1)
+      pages.splice(target, 0, page)
+      return { ...prev, pages }
+    })
+  }
+
+  function removeActivePage() {
+    if (!activePage || config.pages.length <= 1) {
+      return
+    }
+
+    const pageIndex = config.pages.findIndex((page) => page.id === activePage.id)
+    const nextActivePage = config.pages[pageIndex + 1] ?? config.pages[pageIndex - 1] ?? null
+
+    setConfig((prev) => ({
+      ...prev,
+      pages: prev.pages.filter((page) => page.id !== activePage.id),
+      blocks: prev.blocks.filter((block) => block.pageId !== activePage.id),
+    }))
+
+    if (nextActivePage) {
+      setActivePageId(nextActivePage.id)
+    }
+
+    setSelectedIds([])
+    setIsInspectorOpen(false)
+  }
+
+  function moveSelectedToPage(pageId: string) {
+    if (!activePage || !pageId || pageId === activePage.id || selectedIds.length === 0) {
+      return
+    }
+
+    const movedIds = [...selectedIds]
+
+    updateSelectedBlocks((block) => ({
+      ...block,
+      pageId,
+    }))
+    setActivePageId(pageId)
+    setSelectedIds(movedIds)
   }
 
   function removeSelectedBlock() {
@@ -756,24 +966,31 @@ function App() {
   }
 
   function moveSelected(offset: -1 | 1) {
-    if (!selectedId) {
+    if (!selectedId || !activePage) {
       return
     }
 
     setConfig((prev) => {
-      const index = prev.blocks.findIndex((block) => block.id === selectedId)
-      if (index < 0) {
+      const pageIndexes = prev.blocks
+        .map((block, index) => (block.pageId === activePage.id ? index : -1))
+        .filter((index) => index >= 0)
+      const pagePosition = pageIndexes.findIndex((index) => prev.blocks[index]?.id === selectedId)
+
+      if (pagePosition < 0) {
         return prev
       }
 
-      const target = index + offset
-      if (target < 0 || target >= prev.blocks.length) {
+      const targetPosition = pagePosition + offset
+      if (targetPosition < 0 || targetPosition >= pageIndexes.length) {
         return prev
       }
 
+      const sourceIndex = pageIndexes[pagePosition]
+      const targetIndex = pageIndexes[targetPosition]
       const copy = [...prev.blocks]
-      const [item] = copy.splice(index, 1)
-      copy.splice(target, 0, item)
+      const item = copy[sourceIndex]
+      copy[sourceIndex] = copy[targetIndex]
+      copy[targetIndex] = item
       return { ...prev, blocks: copy }
     })
   }
@@ -1093,7 +1310,7 @@ function App() {
     if (block.type === 'text') {
       return (
         <>
-          <div className="canvas-block-chip">Text</div>
+          <div className="canvas-block-chip">{copy.text}</div>
           <p
             style={{
               textAlign: block.align ?? 'left',
@@ -1112,7 +1329,7 @@ function App() {
     if (block.type === 'line') {
       return (
         <>
-          <div className="canvas-block-chip">Line</div>
+          <div className="canvas-block-chip">{copy.line}</div>
           <div
             className="canvas-line"
             style={{
@@ -1127,8 +1344,8 @@ function App() {
     if (block.type === 'spacer') {
       return (
         <>
-          <div className="canvas-block-chip">Spacer</div>
-          <div className="canvas-spacer">Spacer {block.size}px</div>
+          <div className="canvas-block-chip">{copy.spacer}</div>
+          <div className="canvas-spacer">{copy.spacerSummary(block.size)}</div>
         </>
       )
     }
@@ -1136,25 +1353,69 @@ function App() {
     if (block.type === 'image') {
       return (
         <>
-          <div className="canvas-block-chip">Image</div>
+          <div className="canvas-block-chip">{copy.image}</div>
           {block.source ? (
             <img
               className="canvas-image"
               src={block.source}
-              alt={block.alt ?? 'Selected image'}
+              alt={block.alt ?? copy.selectedImageAlt}
               style={{ objectFit: block.fit === 'none' ? 'fill' : block.fit }}
             />
           ) : (
-            <div className="canvas-image-placeholder">Image placeholder</div>
+            <div className="canvas-image-placeholder">{copy.imagePlaceholder}</div>
           )}
+        </>
+      )
+    }
+
+    if (block.type === 'table') {
+      const columnTemplate = block.columns.map((column) => `minmax(${Math.max(column.width, 1)}fr, 1fr)`).join(' ')
+      const previewRows = 2
+
+      return (
+        <>
+          <div className="canvas-block-chip">{copy.table}</div>
+          <div className="canvas-table-preview" style={{ gridTemplateColumns: columnTemplate }}>
+            {block.columns.map((column) => (
+              <div key={`${block.id}-${column.id}-header`} className="canvas-table-cell header">
+                {column.header}
+              </div>
+            ))}
+            {Array.from({ length: previewRows }).flatMap((_, rowIndex) =>
+              block.columns.map((column) => (
+                <div key={`${block.id}-${column.id}-${rowIndex}`} className="canvas-table-cell" style={{ textAlign: column.align ?? 'left' }}>
+                  {`{{ row.${column.field} }}`}
+                </div>
+              )),
+            )}
+          </div>
+        </>
+      )
+    }
+
+    if (block.type === 'repeat') {
+      const previewItems = Array.from({ length: 3 }, (_, index) => index)
+
+      return (
+        <>
+          <div className="canvas-block-chip">{copy.repeat}</div>
+          <div className="canvas-repeat-preview" style={{ gap: `${block.itemGap}px` }}>
+            {previewItems.map((itemIndex) => (
+              <div key={`${block.id}-item-${itemIndex}`} className="canvas-repeat-item">
+                {block.itemTemplate.split('\n').map((line, lineIndex) => (
+                  <span key={`${block.id}-item-${itemIndex}-line-${lineIndex}`}>{line}</span>
+                ))}
+              </div>
+            ))}
+          </div>
         </>
       )
     }
 
     return (
       <>
-        <div className="canvas-block-chip">Page Break</div>
-        <div className="canvas-page-break">Page Break</div>
+        <div className="canvas-block-chip">{copy.pageBreak}</div>
+        <div className="canvas-page-break">{copy.pageBreak}</div>
       </>
     )
   }
@@ -1163,7 +1424,7 @@ function App() {
     if (!selectedBlock) {
       return (
         <div className="empty-state">
-          <strong>Nada seleccionado</strong>
+          <strong>{copy.noSelectionInspector}</strong>
         </div>
       )
     }
@@ -1195,7 +1456,7 @@ function App() {
               />
             </label>
             <label>
-              <span className="field-label">Width</span>
+                <span className="field-label">{copy.width}</span>
               <input
                 type="number"
                 value={Math.round(selectedBlock.frame.width)}
@@ -1203,7 +1464,7 @@ function App() {
               />
             </label>
             <label>
-              <span className="field-label">Height</span>
+                <span className="field-label">{copy.height}</span>
               <input
                 type="number"
                 value={Math.round(selectedBlock.frame.height)}
@@ -1218,12 +1479,12 @@ function App() {
           <section className="panel-section">
             <div className="section-heading">
               <div>
-                <h3>Contenido</h3>
+                <h3>{copy.content}</h3>
               </div>
             </div>
             <div className="field-stack">
               <label>
-                <span className="field-label">Texto</span>
+                <span className="field-label">{copy.text}</span>
                 <textarea
                   rows={5}
                   value={selectedBlock.value}
@@ -1235,7 +1496,7 @@ function App() {
                 />
               </label>
               <label>
-                <span className="field-label">styleRef</span>
+                <span className="field-label">{copy.styleRef}</span>
                 <input
                   value={selectedBlock.styleRef ?? ''}
                   onChange={(e) =>
@@ -1251,7 +1512,7 @@ function App() {
                 />
               </label>
               <label>
-                <span className="field-label">Align</span>
+                <span className="field-label">{copy.textAlign}</span>
                 <select
                   value={selectedBlock.align ?? 'left'}
                   onChange={(e) =>
@@ -1260,10 +1521,10 @@ function App() {
                     )
                   }
                 >
-                  <option value="left">left</option>
-                  <option value="center">center</option>
-                  <option value="right">right</option>
-                  <option value="justify">justify</option>
+                  <option value="left">{copy.leftShort}</option>
+                  <option value="center">{copy.centerShort}</option>
+                  <option value="right">{copy.rightShort}</option>
+                  <option value="justify">{copy.justifyShort}</option>
                 </select>
               </label>
             </div>
@@ -1271,12 +1532,12 @@ function App() {
 
           <section className="panel-section">
             <div className="section-heading">
-              <div><h3>Tipografía</h3></div>
+              <div><h3>{copy.typography}</h3></div>
             </div>
             <div className="field-stack">
               <div className="field-row">
                 <label className="field-grow">
-                  <span className="field-label">Tamaño</span>
+                  <span className="field-label">{copy.size}</span>
                   <input
                     type="number"
                     min={6}
@@ -1293,7 +1554,7 @@ function App() {
                   />
                 </label>
                 <label className="field-grow">
-                  <span className="field-label">Color</span>
+                  <span className="field-label">{copy.color}</span>
                   <div className="color-field">
                     <input
                       type="color"
@@ -1331,7 +1592,7 @@ function App() {
                       )
                     }
                   />
-                  <span>Bold</span>
+                  <span>{copy.bold}</span>
                 </label>
                 <label className="field-toggle">
                   <input
@@ -1343,7 +1604,7 @@ function App() {
                       )
                     }
                   />
-                  <span>Italic</span>
+                  <span>{copy.italic}</span>
                 </label>
               </div>
             </div>
@@ -1355,12 +1616,12 @@ function App() {
           <section className="panel-section">
             <div className="section-heading">
               <div>
-                <h3>Apariencia</h3>
+                <h3>{copy.appearance}</h3>
               </div>
             </div>
             <div className="field-stack">
               <label>
-                <span className="field-label">Thickness</span>
+                <span className="field-label">{copy.thickness}</span>
                 <input
                   type="number"
                   min={1}
@@ -1376,7 +1637,7 @@ function App() {
                 />
               </label>
               <label>
-                <span className="field-label">Color</span>
+                <span className="field-label">{copy.color}</span>
                 <input
                   value={selectedBlock.color}
                   onChange={(e) =>
@@ -1394,12 +1655,12 @@ function App() {
           <section className="panel-section">
             <div className="section-heading">
               <div>
-                <h3>Spacing</h3>
+                <h3>{copy.spacing}</h3>
               </div>
             </div>
             <div className="field-stack">
               <label>
-                <span className="field-label">Size</span>
+                <span className="field-label">{copy.size}</span>
                 <input
                   type="number"
                   min={0}
@@ -1419,7 +1680,7 @@ function App() {
         {selectedBlock.type === 'pageBreak' && (
           <section className="panel-section">
             <div className="empty-state compact">
-              <strong>Bloque sin ajustes</strong>
+              <strong>{copy.unconfiguredBlock}</strong>
             </div>
           </section>
         )}
@@ -1428,15 +1689,15 @@ function App() {
           <section className="panel-section">
             <div className="section-heading">
               <div>
-                <h3>Imagen</h3>
+                <h3>{copy.image}</h3>
               </div>
             </div>
             <div className="field-stack">
               <label>
-                <span className="field-label">Fuente</span>
+                <span className="field-label">{copy.source}</span>
                 <input
                   value={selectedBlock.source}
-                  placeholder="https://... o data:image/..."
+                  placeholder={copy.sourcePlaceholder}
                   onChange={(e) =>
                     updateSelectedBlock((block) =>
                       block.type === 'image'
@@ -1452,7 +1713,7 @@ function App() {
               </label>
               <div className="field-row">
                 <label className="field-grow">
-                  <span className="field-label">Fit</span>
+                  <span className="field-label">{copy.fit}</span>
                   <select
                     value={selectedBlock.fit}
                     onChange={(e) =>
@@ -1461,13 +1722,13 @@ function App() {
                       )
                     }
                   >
-                    <option value="contain">contain</option>
-                    <option value="cover">cover</option>
-                    <option value="none">none</option>
+                    <option value="contain">{copy.contain}</option>
+                    <option value="cover">{copy.cover}</option>
+                    <option value="none">{copy.none}</option>
                   </select>
                 </label>
                 <label className="field-grow">
-                  <span className="field-label">Alt</span>
+                  <span className="field-label">{copy.alt}</span>
                   <input
                     value={selectedBlock.alt ?? ''}
                     onChange={(e) =>
@@ -1479,8 +1740,210 @@ function App() {
                 </label>
               </div>
               <button type="button" onClick={requestImageUpload}>
-                Cargar imagen
+                {copy.loadImage}
               </button>
+            </div>
+          </section>
+        )}
+
+        {selectedBlock.type === 'table' && (
+          <section className="panel-section">
+            <div className="section-heading">
+              <div>
+                <h3>{copy.table}</h3>
+              </div>
+            </div>
+            <div className="field-stack">
+              <label>
+                <span className="field-label">{copy.tableName}</span>
+                <input
+                  value={selectedBlock.name}
+                  onChange={(e) =>
+                    updateSelectedBlock((block) =>
+                      block.type === 'table' ? { ...block, name: e.target.value || 'table-block' } : block,
+                    )
+                  }
+                />
+              </label>
+              <label>
+                <span className="field-label">{copy.dataSource}</span>
+                <input
+                  value={selectedBlock.dataSource}
+                  onChange={(e) =>
+                    updateSelectedBlock((block) =>
+                      block.type === 'table' ? { ...block, dataSource: e.target.value || 'items' } : block,
+                    )
+                  }
+                />
+              </label>
+              <label>
+                <span className="field-label">{copy.columns}</span>
+                <textarea
+                  rows={6}
+                  value={formatTableColumns(selectedBlock.columns)}
+                  onChange={(e) =>
+                    updateSelectedBlock((block) =>
+                      block.type === 'table'
+                        ? { ...block, columns: parseTableColumns(e.target.value, block.columns) }
+                        : block,
+                    )
+                  }
+                />
+              </label>
+              <div className="field-row">
+                <label className="field-grow">
+                  <span className="field-label">{copy.growth}</span>
+                  <select
+                    value={selectedBlock.growthMode}
+                    onChange={(e) =>
+                      updateSelectedBlock((block) =>
+                        block.type === 'table'
+                          ? { ...block, growthMode: e.target.value as 'fixed' | 'grow' }
+                          : block,
+                      )
+                    }
+                  >
+                    <option value="grow">{copy.growDown}</option>
+                    <option value="fixed">{copy.fixedFrame}</option>
+                  </select>
+                </label>
+                <label className="field-grow">
+                  <span className="field-label">{copy.overflow}</span>
+                  <select
+                    value={selectedBlock.overflowMode}
+                    onChange={(e) =>
+                      updateSelectedBlock((block) =>
+                        block.type === 'table'
+                          ? { ...block, overflowMode: e.target.value as 'nextPage' | 'truncate' }
+                          : block,
+                      )
+                    }
+                  >
+                    <option value="nextPage">{copy.nextPage}</option>
+                    <option value="truncate">{copy.truncate}</option>
+                  </select>
+                </label>
+              </div>
+              <label className="field-toggle">
+                <input
+                  type="checkbox"
+                  checked={selectedBlock.keepTogether}
+                  onChange={(e) =>
+                    updateSelectedBlock((block) =>
+                      block.type === 'table' ? { ...block, keepTogether: e.target.checked } : block,
+                    )
+                  }
+                />
+                <span>{copy.keepTogetherBeforeBreak}</span>
+              </label>
+              <small className="field-help">{copy.tableColumnsHelp}</small>
+              <small className="field-help">{copy.growthHelp}</small>
+            </div>
+          </section>
+        )}
+
+        {selectedBlock.type === 'repeat' && (
+          <section className="panel-section">
+            <div className="section-heading">
+              <div>
+                <h3>{copy.repeat}</h3>
+              </div>
+            </div>
+            <div className="field-stack">
+              <label>
+                <span className="field-label">{copy.repeatName}</span>
+                <input
+                  value={selectedBlock.name}
+                  onChange={(e) =>
+                    updateSelectedBlock((block) =>
+                      block.type === 'repeat' ? { ...block, name: e.target.value || 'repeat-block' } : block,
+                    )
+                  }
+                />
+              </label>
+              <label>
+                <span className="field-label">{copy.dataSource}</span>
+                <input
+                  value={selectedBlock.dataSource}
+                  onChange={(e) =>
+                    updateSelectedBlock((block) =>
+                      block.type === 'repeat' ? { ...block, dataSource: e.target.value || 'items' } : block,
+                    )
+                  }
+                />
+              </label>
+              <label>
+                <span className="field-label">{copy.template}</span>
+                <textarea
+                  rows={5}
+                  value={selectedBlock.itemTemplate}
+                  onChange={(e) =>
+                    updateSelectedBlock((block) =>
+                      block.type === 'repeat' ? { ...block, itemTemplate: e.target.value } : block,
+                    )
+                  }
+                />
+              </label>
+              <label>
+                <span className="field-label">{copy.gap}</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={64}
+                  value={selectedBlock.itemGap}
+                  onChange={(e) =>
+                    updateSelectedBlock((block) =>
+                      block.type === 'repeat' ? { ...block, itemGap: Number(e.target.value) || 0 } : block,
+                    )
+                  }
+                />
+              </label>
+              <div className="field-row">
+                <label className="field-grow">
+                  <span className="field-label">{copy.growth}</span>
+                  <select
+                    value={selectedBlock.growthMode}
+                    onChange={(e) =>
+                      updateSelectedBlock((block) =>
+                        block.type === 'repeat'
+                          ? { ...block, growthMode: e.target.value as 'fixed' | 'grow' }
+                          : block,
+                      )
+                    }
+                  >
+                    <option value="grow">{copy.growDown}</option>
+                    <option value="fixed">{copy.fixedFrame}</option>
+                  </select>
+                </label>
+                <label className="field-grow">
+                  <span className="field-label">{copy.overflow}</span>
+                  <select
+                    value={selectedBlock.overflowMode}
+                    onChange={(e) =>
+                      updateSelectedBlock((block) =>
+                        block.type === 'repeat'
+                          ? { ...block, overflowMode: e.target.value as 'nextPage' | 'truncate' }
+                          : block,
+                      )
+                    }
+                  >
+                    <option value="nextPage">{copy.nextPage}</option>
+                    <option value="truncate">{copy.truncate}</option>
+                  </select>
+                </label>
+              </div>
+              <label className="field-toggle">
+                <input
+                  type="checkbox"
+                  checked={selectedBlock.keepTogether}
+                  onChange={(e) =>
+                    updateSelectedBlock((block) =>
+                      block.type === 'repeat' ? { ...block, keepTogether: e.target.checked } : block,
+                    )
+                  }
+                />
+                <span>{copy.keepTogetherBeforeBreak}</span>
+              </label>
             </div>
           </section>
         )}
@@ -1488,21 +1951,21 @@ function App() {
         <section className="panel-section">
           <div className="section-heading">
             <div>
-              <h3>Acciones</h3>
+              <h3>{copy.actions}</h3>
             </div>
           </div>
           <div className="property-actions">
             <button type="button" onClick={duplicateSelected}>
-              Duplicar
+              {copy.duplicate}
             </button>
             <button type="button" onClick={() => moveSelected(-1)}>
-              Subir
+              {copy.moveLayerUp}
             </button>
             <button type="button" onClick={() => moveSelected(1)}>
-              Bajar
+              {copy.moveLayerDown}
             </button>
             <button type="button" className="danger" onClick={removeSelectedBlock}>
-              Eliminar
+              {copy.deleteSelection}
             </button>
           </div>
         </section>
@@ -1513,9 +1976,9 @@ function App() {
   function renderContextualToolbar() {
     if (selectedIds.length === 0) {
       return (
-        <section className="toolbar toolbar-context" aria-label="Context toolbar">
+        <section className="toolbar toolbar-context" aria-label={copy.contextToolbarAria}>
           <div className="toolbar-context-empty">
-            Selecciona uno o más elementos para ver acciones contextuales, agruparlos o editar sus propiedades rápidas.
+            {copy.emptySelectionHint}
           </div>
         </section>
       )
@@ -1525,17 +1988,19 @@ function App() {
     const activeLineBlock = selectionType === 'line' && selectedBlock?.type === 'line' ? selectedBlock : null
     const activeSpacerBlock = selectionType === 'spacer' && selectedBlock?.type === 'spacer' ? selectedBlock : null
     const activeImageBlock = selectionType === 'image' && selectedBlock?.type === 'image' ? selectedBlock : null
+    const activeTableBlock = selectionType === 'table' && selectedBlock?.type === 'table' ? selectedBlock : null
+    const activeRepeatBlock = selectionType === 'repeat' && selectedBlock?.type === 'repeat' ? selectedBlock : null
 
     return (
-      <section className="toolbar toolbar-context" aria-label="Context toolbar">
+      <section className="toolbar toolbar-context" aria-label={copy.contextToolbarAria}>
         <div className="toolbar-group toolbar-context-summary">
           <span className="status-pill accent">
-            {selectedIds.length} seleccionado{selectedIds.length > 1 ? 's' : ''}
+            {copy.selectedStatus(selectedIds.length)}
           </span>
           <span className="toolbar-info">
-            {selectionType ? getBlockTypeLabel(selectionType) : 'Selección mixta'}
+            {selectionType ? getBlockTypeLabel(selectionType, locale) : copy.mixedSelection}
           </span>
-          {selectedGroupIds.length === 1 && <span className="toolbar-info">Grupo {selectedGroupIds[0]}</span>}
+          {selectedGroupIds.length === 1 && <span className="toolbar-info">{copy.groupLabel(selectedGroupIds[0])}</span>}
           {selectionBounds && (
             <span className="toolbar-info">
               {Math.round(selectionBounds.width)} x {Math.round(selectionBounds.height)}
@@ -1546,46 +2011,46 @@ function App() {
         <div className="toolbar-sep" />
 
         <div className="toolbar-group">
-          <span className="toolbar-label">Selección</span>
-          <button type="button" className="toolbar-button" onClick={duplicateSelected} title="Duplicar selección">
-            Duplicar
-          </button>
-          <button
+          <span className="toolbar-label">{copy.selection}</span>
+          <TooltipButton type="button" className="toolbar-button" onClick={duplicateSelected} tooltip={copy.duplicate}>
+            {copy.duplicate}
+          </TooltipButton>
+          <TooltipButton
             type="button"
             className="toolbar-button"
             onClick={groupSelected}
             disabled={selectedIds.length < 2}
-            title="Agrupar selección"
+            tooltip={copy.group}
           >
-            Agrupar
-          </button>
-          <button
+            {copy.group}
+          </TooltipButton>
+          <TooltipButton
             type="button"
             className="toolbar-button"
             onClick={ungroupSelected}
             disabled={selectedGroupIds.length === 0}
-            title="Desagrupar selección"
+            tooltip={copy.ungroup}
           >
-            Desagrupar
-          </button>
-          <button type="button" className="toolbar-button danger" onClick={removeSelectedBlock} title="Eliminar selección">
-            Eliminar
-          </button>
+            {copy.ungroup}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button danger" onClick={removeSelectedBlock} tooltip={copy.deleteSelection}>
+            {copy.deleteSelection}
+          </TooltipButton>
         </div>
 
         <div className="toolbar-sep" />
 
         <div className="toolbar-group">
-          <span className="toolbar-label">Página</span>
-          <button type="button" className="toolbar-button" onClick={() => alignSelectionToPage('left')}>
-            Margen izq.
-          </button>
-          <button type="button" className="toolbar-button" onClick={() => alignSelectionToPage('center')}>
-            Centrar
-          </button>
-          <button type="button" className="toolbar-button" onClick={() => alignSelectionToPage('right')}>
-            Margen der.
-          </button>
+          <span className="toolbar-label">{copy.pageTools}</span>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => alignSelectionToPage('left')} tooltip={copy.leftMargin}>
+            {copy.leftMargin}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => alignSelectionToPage('center')} tooltip={copy.center}>
+            {copy.center}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => alignSelectionToPage('right')} tooltip={copy.rightMargin}>
+            {copy.rightMargin}
+          </TooltipButton>
         </div>
 
         {isGroupSelection && (
@@ -1593,37 +2058,37 @@ function App() {
             <div className="toolbar-sep" />
 
             <div className="toolbar-group">
-              <span className="toolbar-label">Layout</span>
-              <button type="button" className="toolbar-button" onClick={() => alignSelection('left')}>
-                Alinear izq.
-              </button>
-              <button type="button" className="toolbar-button" onClick={() => alignSelection('center')}>
-                Centrar X
-              </button>
-              <button type="button" className="toolbar-button" onClick={() => alignSelection('right')}>
-                Alinear der.
-              </button>
-              <button type="button" className="toolbar-button" onClick={() => alignSelection('top')}>
-                Arriba
-              </button>
-              <button type="button" className="toolbar-button" onClick={() => alignSelection('middle')}>
-                Centro Y
-              </button>
-              <button type="button" className="toolbar-button" onClick={() => alignSelection('bottom')}>
-                Abajo
-              </button>
-              <button type="button" className="toolbar-button" onClick={() => distributeSelection('horizontal')} disabled={selectedBlocks.length < 3}>
-                Distribuir X
-              </button>
-              <button type="button" className="toolbar-button" onClick={() => distributeSelection('vertical')} disabled={selectedBlocks.length < 3}>
-                Distribuir Y
-              </button>
-              <button type="button" className="toolbar-button" onClick={() => matchSelectionSize('width')} disabled={selectedBlocks.length < 2}>
-                Igualar ancho
-              </button>
-              <button type="button" className="toolbar-button" onClick={() => matchSelectionSize('height')} disabled={selectedBlocks.length < 2}>
-                Igualar alto
-              </button>
+              <span className="toolbar-label">{copy.layout}</span>
+              <TooltipButton type="button" className="toolbar-button" onClick={() => alignSelection('left')} tooltip={copy.alignLeft}>
+                {copy.alignLeft}
+              </TooltipButton>
+              <TooltipButton type="button" className="toolbar-button" onClick={() => alignSelection('center')} tooltip={copy.centerX}>
+                {copy.centerX}
+              </TooltipButton>
+              <TooltipButton type="button" className="toolbar-button" onClick={() => alignSelection('right')} tooltip={copy.alignRight}>
+                {copy.alignRight}
+              </TooltipButton>
+              <TooltipButton type="button" className="toolbar-button" onClick={() => alignSelection('top')} tooltip={copy.top}>
+                {copy.top}
+              </TooltipButton>
+              <TooltipButton type="button" className="toolbar-button" onClick={() => alignSelection('middle')} tooltip={copy.centerY}>
+                {copy.centerY}
+              </TooltipButton>
+              <TooltipButton type="button" className="toolbar-button" onClick={() => alignSelection('bottom')} tooltip={copy.bottom}>
+                {copy.bottom}
+              </TooltipButton>
+              <TooltipButton type="button" className="toolbar-button" onClick={() => distributeSelection('horizontal')} disabled={selectedBlocks.length < 3} tooltip={copy.distributeX}>
+                {copy.distributeX}
+              </TooltipButton>
+              <TooltipButton type="button" className="toolbar-button" onClick={() => distributeSelection('vertical')} disabled={selectedBlocks.length < 3} tooltip={copy.distributeY}>
+                {copy.distributeY}
+              </TooltipButton>
+              <TooltipButton type="button" className="toolbar-button" onClick={() => matchSelectionSize('width')} disabled={selectedBlocks.length < 2} tooltip={copy.matchWidth}>
+                {copy.matchWidth}
+              </TooltipButton>
+              <TooltipButton type="button" className="toolbar-button" onClick={() => matchSelectionSize('height')} disabled={selectedBlocks.length < 2} tooltip={copy.matchHeight}>
+                {copy.matchHeight}
+              </TooltipButton>
             </div>
           </>
         )}
@@ -1633,23 +2098,23 @@ function App() {
             <div className="toolbar-sep" />
 
             <div className="toolbar-group toolbar-inline-fields">
-              <span className="toolbar-label">Texto</span>
-              <div className="toolbar-segment" role="group" aria-label="Text align">
-                <button type="button" className="toolbar-button" onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, align: 'left' } : block)}>
-                  Izq.
-                </button>
-                <button type="button" className="toolbar-button" onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, align: 'center' } : block)}>
-                  Centro
-                </button>
-                <button type="button" className="toolbar-button" onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, align: 'right' } : block)}>
-                  Der.
-                </button>
-                <button type="button" className="toolbar-button" onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, align: 'justify' } : block)}>
-                  Just.
-                </button>
+              <span className="toolbar-label">{copy.text}</span>
+              <div className="toolbar-segment" role="group" aria-label={copy.textAlign}>
+                <TooltipButton type="button" className="toolbar-button" onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, align: 'left' } : block)} tooltip={`${copy.textAlign}: ${copy.leftShort}`}>
+                  {copy.leftShort}
+                </TooltipButton>
+                <TooltipButton type="button" className="toolbar-button" onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, align: 'center' } : block)} tooltip={`${copy.textAlign}: ${copy.centerShort}`}>
+                  {copy.centerShort}
+                </TooltipButton>
+                <TooltipButton type="button" className="toolbar-button" onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, align: 'right' } : block)} tooltip={`${copy.textAlign}: ${copy.rightShort}`}>
+                  {copy.rightShort}
+                </TooltipButton>
+                <TooltipButton type="button" className="toolbar-button" onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, align: 'justify' } : block)} tooltip={`${copy.textAlign}: ${copy.justifyShort}`}>
+                  {copy.justifyShort}
+                </TooltipButton>
               </div>
               <label className="toolbar-field toolbar-field-narrow">
-                <span>Size</span>
+                <span>{copy.size}</span>
                 <input
                   type="number"
                   min={6}
@@ -1665,7 +2130,7 @@ function App() {
                 />
               </label>
               <label className="toolbar-field toolbar-field-medium">
-                <span>StyleRef</span>
+                <span>{copy.styleRef}</span>
                 <input
                   value={activeTextBlock.styleRef ?? ''}
                   onChange={(e) =>
@@ -1676,7 +2141,7 @@ function App() {
                 />
               </label>
               <label className="toolbar-field toolbar-field-color">
-                <span>Color</span>
+                <span>{copy.color}</span>
                 <input
                   type="color"
                   value={activeTextBlock.color ?? '#162435'}
@@ -1687,12 +2152,12 @@ function App() {
                   }
                 />
               </label>
-              <button type="button" className={activeTextBlock.bold ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'} onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, bold: !block.bold || undefined } : block)}>
-                Bold
-              </button>
-              <button type="button" className={activeTextBlock.italic ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'} onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, italic: !block.italic || undefined } : block)}>
-                Italic
-              </button>
+              <TooltipButton type="button" className={activeTextBlock.bold ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'} onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, bold: !block.bold || undefined } : block)} tooltip={copy.bold}>
+                {copy.bold}
+              </TooltipButton>
+              <TooltipButton type="button" className={activeTextBlock.italic ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'} onClick={() => updateSelectedBlocks((block) => block.type === 'text' ? { ...block, italic: !block.italic || undefined } : block)} tooltip={copy.italic}>
+                {copy.italic}
+              </TooltipButton>
             </div>
           </>
         )}
@@ -1702,9 +2167,9 @@ function App() {
             <div className="toolbar-sep" />
 
             <div className="toolbar-group toolbar-inline-fields">
-              <span className="toolbar-label">Línea</span>
+              <span className="toolbar-label">{copy.line}</span>
               <label className="toolbar-field toolbar-field-narrow">
-                <span>Thickness</span>
+                <span>{copy.thickness}</span>
                 <input
                   type="number"
                   min={1}
@@ -1718,7 +2183,7 @@ function App() {
                 />
               </label>
               <label className="toolbar-field toolbar-field-color">
-                <span>Color</span>
+                <span>{copy.color}</span>
                 <input
                   type="color"
                   value={activeLineBlock.color}
@@ -1738,16 +2203,17 @@ function App() {
             <div className="toolbar-sep" />
 
             <div className="toolbar-group toolbar-inline-fields">
-              <span className="toolbar-label">Spacer</span>
+              <span className="toolbar-label">{copy.spacer}</span>
               {[4, 8, 12, 16, 24, 32].map((value) => (
-                <button
+                <TooltipButton
                   type="button"
                   key={value}
                   className="toolbar-button"
                   onClick={() => updateSelectedBlocks((block) => block.type === 'spacer' ? { ...block, size: value } : block)}
+                  tooltip={`${copy.spacer}: ${value}px`}
                 >
                   {value}px
-                </button>
+                </TooltipButton>
               ))}
             </div>
           </>
@@ -1758,26 +2224,26 @@ function App() {
             <div className="toolbar-sep" />
 
             <div className="toolbar-group toolbar-inline-fields">
-              <span className="toolbar-label">Imagen</span>
-              <button type="button" className="toolbar-button" onClick={requestImageUpload}>
-                Cargar
-              </button>
-              <div className="toolbar-segment" role="group" aria-label="Image fit">
-                <button type="button" className={activeImageBlock.fit === 'contain' ? 'toolbar-button toolbar-toggle active' : 'toolbar-button'} onClick={() => updateSelectedBlocks((block) => block.type === 'image' ? { ...block, fit: 'contain' } : block)}>
-                  Contain
-                </button>
-                <button type="button" className={activeImageBlock.fit === 'cover' ? 'toolbar-button toolbar-toggle active' : 'toolbar-button'} onClick={() => updateSelectedBlocks((block) => block.type === 'image' ? { ...block, fit: 'cover' } : block)}>
-                  Cover
-                </button>
-                <button type="button" className={activeImageBlock.fit === 'none' ? 'toolbar-button toolbar-toggle active' : 'toolbar-button'} onClick={() => updateSelectedBlocks((block) => block.type === 'image' ? { ...block, fit: 'none' } : block)}>
-                  None
-                </button>
+              <span className="toolbar-label">{copy.image}</span>
+              <TooltipButton type="button" className="toolbar-button" onClick={requestImageUpload} tooltip={copy.loadImage}>
+                {copy.upload}
+              </TooltipButton>
+              <div className="toolbar-segment" role="group" aria-label={copy.imageFit}>
+                <TooltipButton type="button" className={activeImageBlock.fit === 'contain' ? 'toolbar-button toolbar-toggle active' : 'toolbar-button'} onClick={() => updateSelectedBlocks((block) => block.type === 'image' ? { ...block, fit: 'contain' } : block)} tooltip={`${copy.imageFit}: ${copy.contain}`}>
+                  {copy.contain}
+                </TooltipButton>
+                <TooltipButton type="button" className={activeImageBlock.fit === 'cover' ? 'toolbar-button toolbar-toggle active' : 'toolbar-button'} onClick={() => updateSelectedBlocks((block) => block.type === 'image' ? { ...block, fit: 'cover' } : block)} tooltip={`${copy.imageFit}: ${copy.cover}`}>
+                  {copy.cover}
+                </TooltipButton>
+                <TooltipButton type="button" className={activeImageBlock.fit === 'none' ? 'toolbar-button toolbar-toggle active' : 'toolbar-button'} onClick={() => updateSelectedBlocks((block) => block.type === 'image' ? { ...block, fit: 'none' } : block)} tooltip={`${copy.imageFit}: ${copy.none}`}>
+                  {copy.none}
+                </TooltipButton>
               </div>
               <label className="toolbar-field toolbar-field-wide">
-                <span>Fuente</span>
+                <span>{copy.source}</span>
                 <input
                   value={activeImageBlock.source}
-                  placeholder="Ruta o URL"
+                  placeholder={copy.sourcePlaceholder}
                   onChange={(e) =>
                     updateSelectedBlocks((block) =>
                       block.type === 'image'
@@ -1794,6 +2260,151 @@ function App() {
             </div>
           </>
         )}
+
+        {selectionType === 'table' && activeTableBlock && (
+          <>
+            <div className="toolbar-sep" />
+
+            <div className="toolbar-group toolbar-inline-fields">
+              <span className="toolbar-label">{copy.table}</span>
+              <label className="toolbar-field toolbar-field-medium">
+                <span>{copy.source}</span>
+                <input
+                  value={activeTableBlock.dataSource}
+                  onChange={(e) =>
+                    updateSelectedBlocks((block) =>
+                      block.type === 'table' ? { ...block, dataSource: e.target.value || 'items' } : block,
+                    )
+                  }
+                />
+              </label>
+              <label className="toolbar-field toolbar-field-medium">
+                <span>{copy.growth}</span>
+                <select
+                  value={activeTableBlock.growthMode}
+                  onChange={(e) =>
+                    updateSelectedBlocks((block) =>
+                      block.type === 'table'
+                        ? { ...block, growthMode: e.target.value as 'fixed' | 'grow' }
+                        : block,
+                    )
+                  }
+                >
+                  <option value="grow">{copy.growDown}</option>
+                  <option value="fixed">{copy.fixed}</option>
+                </select>
+              </label>
+              <label className="toolbar-field toolbar-field-medium">
+                <span>{copy.overflow}</span>
+                <select
+                  value={activeTableBlock.overflowMode}
+                  onChange={(e) =>
+                    updateSelectedBlocks((block) =>
+                      block.type === 'table'
+                        ? { ...block, overflowMode: e.target.value as 'nextPage' | 'truncate' }
+                        : block,
+                    )
+                  }
+                >
+                  <option value="nextPage">{copy.nextPage}</option>
+                  <option value="truncate">{copy.truncate}</option>
+                </select>
+              </label>
+              <span className="toolbar-info">{copy.columnsCount(activeTableBlock.columns.length)}</span>
+              <TooltipButton
+                type="button"
+                className={activeTableBlock.keepTogether ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'}
+                onClick={() =>
+                  updateSelectedBlocks((block) =>
+                    block.type === 'table' ? { ...block, keepTogether: !block.keepTogether } : block,
+                  )
+                }
+                tooltip={copy.keepTogether}
+              >
+                {copy.keepTogether}
+              </TooltipButton>
+            </div>
+          </>
+        )}
+
+        {selectionType === 'repeat' && activeRepeatBlock && (
+          <>
+            <div className="toolbar-sep" />
+
+            <div className="toolbar-group toolbar-inline-fields">
+              <span className="toolbar-label">{copy.repeat}</span>
+              <label className="toolbar-field toolbar-field-medium">
+                <span>{copy.source}</span>
+                <input
+                  value={activeRepeatBlock.dataSource}
+                  onChange={(e) =>
+                    updateSelectedBlocks((block) =>
+                      block.type === 'repeat' ? { ...block, dataSource: e.target.value || 'items' } : block,
+                    )
+                  }
+                />
+              </label>
+              <label className="toolbar-field toolbar-field-narrow">
+                <span>{copy.gap}</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={64}
+                  value={activeRepeatBlock.itemGap}
+                  onChange={(e) =>
+                    updateSelectedBlocks((block) =>
+                      block.type === 'repeat' ? { ...block, itemGap: Number(e.target.value) || 0 } : block,
+                    )
+                  }
+                />
+              </label>
+              <label className="toolbar-field toolbar-field-medium">
+                <span>{copy.growth}</span>
+                <select
+                  value={activeRepeatBlock.growthMode}
+                  onChange={(e) =>
+                    updateSelectedBlocks((block) =>
+                      block.type === 'repeat'
+                        ? { ...block, growthMode: e.target.value as 'fixed' | 'grow' }
+                        : block,
+                    )
+                  }
+                >
+                  <option value="grow">{copy.growDown}</option>
+                  <option value="fixed">{copy.fixed}</option>
+                </select>
+              </label>
+              <label className="toolbar-field toolbar-field-medium">
+                <span>{copy.overflow}</span>
+                <select
+                  value={activeRepeatBlock.overflowMode}
+                  onChange={(e) =>
+                    updateSelectedBlocks((block) =>
+                      block.type === 'repeat'
+                        ? { ...block, overflowMode: e.target.value as 'nextPage' | 'truncate' }
+                        : block,
+                    )
+                  }
+                >
+                  <option value="nextPage">{copy.nextPage}</option>
+                  <option value="truncate">{copy.truncate}</option>
+                </select>
+              </label>
+              <TooltipButton
+                type="button"
+                className={activeRepeatBlock.keepTogether ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'}
+                onClick={() =>
+                  updateSelectedBlocks((block) =>
+                    block.type === 'repeat' ? { ...block, keepTogether: !block.keepTogether } : block,
+                  )
+                }
+                tooltip={copy.keepTogether}
+              >
+                {copy.keepTogether}
+              </TooltipButton>
+            </div>
+          </>
+        )}
       </section>
     )
   }
@@ -1802,59 +2413,148 @@ function App() {
     <main className={showYamlPanel ? 'editor-app' : 'editor-app yaml-panel-hidden'}>
       <header className="topbar">
         <div className="topbar-copy">
-          <h1>FluentReport Schema Studio</h1>
+          <h1>{copy.appTitle}</h1>
         </div>
         <div className="topbar-meta">
-          <span className="status-pill">{config.name || 'untitled-report'}</span>
-          <span className="status-pill">{config.blocks.length} bloques</span>
+          <span className="status-pill">{config.name || copy.untitledReport}</span>
+          <span className="status-pill">{copy.pageStatus(activePageIndex + 1, config.pages.length)}</span>
+          <span className="status-pill">{copy.blocksStatus(currentPageBlocks.length)}</span>
           <span className="status-pill accent">
-            {selectedIds.length > 0
-              ? `${selectedIds.length} seleccionado${selectedIds.length > 1 ? 's' : ''}`
-              : 'Sin seleccion'}
+            {selectedIds.length > 0 ? copy.selectedStatus(selectedIds.length) : copy.noSelectionStatus}
           </span>
+        </div>
+        <div className="topbar-controls">
+          <label className="topbar-language">
+            <span>{copy.language}</span>
+            <select
+              value={locale}
+              onChange={(event) => {
+                if (isLocale(event.target.value)) {
+                  setLocale(event.target.value)
+                }
+              }}
+            >
+              {LOCALE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
         </div>
       </header>
 
-      <section className="toolbar" aria-label="Editor toolbar">
+      <section className="toolbar toolbar-main" aria-label={copy.editorToolbarAria}>
         {/* LEFT: document + layers dropdowns */}
         <div className="toolbar-group">
           <div className="toolbar-dropdown-wrap">
-            <button
+            <TooltipButton
               ref={docBtnRef}
               type="button"
               className={showDocPanel ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'}
               onClick={() => { setShowDocPanel(v => !v); setShowLayersPanel(false) }}
-              title="Documento"
+              tooltip={copy.document}
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M3 2h7l3 3v9H3V2z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" fill="none"/>
                 <path d="M10 2v3h3" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
                 <path d="M5 7h6M5 9.5h4" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
               </svg>
-              Documento
+              {copy.document}
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginLeft:2}}>
                 <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-            </button>
+            </TooltipButton>
             {showDocPanel && (
               <div className="toolbar-dropdown">
                 <div className="toolbar-dropdown-section">
-                  <div className="toolbar-dropdown-label">Metadata</div>
+                  <div className="toolbar-dropdown-label">{copy.metadata}</div>
                   <label className="toolbar-dropdown-field">
-                    <span>Name</span>
+                    <span>{copy.name}</span>
                     <input value={config.name} onChange={(e) => setConfig((prev) => ({ ...prev, name: e.target.value }))} />
                   </label>
                   <label className="toolbar-dropdown-field">
-                    <span>Título</span>
+                    <span>{copy.title}</span>
                     <input value={config.title} onChange={(e) => setConfig((prev) => ({ ...prev, title: e.target.value }))} />
                   </label>
                   <label className="toolbar-dropdown-field">
-                    <span>Param. company</span>
+                    <span>{copy.companyParam}</span>
                     <input value={config.companyParam} onChange={(e) => setConfig((prev) => ({ ...prev, companyParam: e.target.value }))} />
                   </label>
                   <label className="toolbar-dropdown-field">
-                    <span>Param. period</span>
+                    <span>{copy.periodParam}</span>
                     <input value={config.periodParam} onChange={(e) => setConfig((prev) => ({ ...prev, periodParam: e.target.value }))} />
+                  </label>
+                  <label className="toolbar-dropdown-field">
+                    <span>{copy.dataSources}</span>
+                    <textarea
+                      rows={4}
+                      value={formatNameList(config.dataSources)}
+                      onChange={(e) => setConfig((prev) => ({ ...prev, dataSources: parseNameList(e.target.value) }))}
+                    />
+                  </label>
+                  <div className="toolbar-dropdown-label">{copy.html}</div>
+                  <label className="toolbar-dropdown-field">
+                    <span>{copy.maxWidth}</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={config.htmlRendererOptions.maxWidth}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          htmlRendererOptions: {
+                            ...prev.htmlRendererOptions,
+                            maxWidth: Number(e.target.value) || DEFAULT_HTML_RENDERER_OPTIONS.maxWidth,
+                          },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="toolbar-dropdown-field">
+                    <span>{copy.fontFamily}</span>
+                    <input
+                      value={config.htmlRendererOptions.fontFamily}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          htmlRendererOptions: {
+                            ...prev.htmlRendererOptions,
+                            fontFamily: e.target.value || DEFAULT_HTML_RENDERER_OPTIONS.fontFamily,
+                          },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="toolbar-dropdown-field">
+                    <span>{copy.pageDivider}</span>
+                    <textarea
+                      rows={3}
+                      value={config.htmlRendererOptions.pageDividerStyle}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          htmlRendererOptions: {
+                            ...prev.htmlRendererOptions,
+                            pageDividerStyle: e.target.value || DEFAULT_HTML_RENDERER_OPTIONS.pageDividerStyle,
+                          },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label className="toolbar-dropdown-field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>{copy.outlook}</span>
+                    <input
+                      type="checkbox"
+                      checked={config.htmlRendererOptions.outlookCompatible}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          htmlRendererOptions: {
+                            ...prev.htmlRendererOptions,
+                            outlookCompatible: e.target.checked,
+                          },
+                        }))
+                      }
+                    />
                   </label>
                 </div>
               </div>
@@ -1862,39 +2562,39 @@ function App() {
           </div>
 
           <div className="toolbar-dropdown-wrap">
-            <button
+            <TooltipButton
               ref={layersBtnRef}
               type="button"
               className={showLayersPanel ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'}
               onClick={() => { setShowLayersPanel(v => !v); setShowDocPanel(false) }}
-              title="Capas"
+              tooltip={copy.layers}
             >
               <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M8 2L14 5.5 8 9 2 5.5 8 2z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" fill="none"/>
                 <path d="M2 8.5l6 3.5 6-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round"/>
               </svg>
-              Capas
-              <span className="toolbar-badge">{config.blocks.length}</span>
+              {copy.layers}
+              <span className="toolbar-badge">{currentPageBlocks.length}</span>
               <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg" style={{marginLeft:2}}>
                 <path d="M2 3.5l3 3 3-3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
               </svg>
-            </button>
+            </TooltipButton>
             {showLayersPanel && (
               <div className="toolbar-dropdown">
                 <div className="toolbar-dropdown-section">
-                  <div className="toolbar-dropdown-label">{config.blocks.length} bloques · {selectedIds.length > 0 ? `${selectedIds.length} seleccionado${selectedIds.length > 1 ? 's' : ''}` : 'sin selección'}</div>
+                  <div className="toolbar-dropdown-label">{copy.pageSummary(activePageIndex + 1, currentPageBlocks.length, selectedIds.length)}</div>
                   <div className="block-list">
-                    {config.blocks.map((block, index) => (
+                    {currentPageBlocks.map((block, index) => (
                       <button
                         type="button"
                         key={block.id}
                         className={selectedId === block.id ? 'block-row selected' : 'block-row'}
-                        onClick={() => setPrimarySelection(block.id)}
+                        onClick={(event) => handleSelectionPointer(block.id, event)}
                       >
                         <span className="block-index">{index + 1}</span>
                         <span className="block-row-copy">
-                          <strong>{getBlockTypeLabel(block.type)}</strong>
-                          <small>{getBlockSummary(block)}{block.groupId ? ` · ${block.groupId}` : ''}</small>
+                          <strong>{getBlockTypeLabel(block.type, locale)}</strong>
+                          <small>{getBlockSummary(block, locale)}{block.groupId ? ` · ${block.groupId}` : ''}</small>
                         </span>
                         <span className="block-row-frame">
                           {Math.round(block.frame.width)} x {Math.round(block.frame.height)}
@@ -1910,115 +2610,172 @@ function App() {
 
         <div className="toolbar-sep" />
 
+        <div className="toolbar-group">
+          <span className="toolbar-label">{copy.page}</span>
+          <label className="toolbar-field toolbar-field-medium">
+            <span>{copy.active}</span>
+            <select value={activePage?.id ?? ''} onChange={(e) => selectPage(e.target.value)}>
+              {config.pages.map((page, index) => (
+                <option key={page.id} value={page.id}>{copy.pageLabel(index + 1)}</option>
+              ))}
+            </select>
+          </label>
+          <TooltipButton type="button" className="toolbar-button" onClick={addPage} tooltip={copy.newPage}>
+            {copy.newPage}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => moveActivePage(-1)} disabled={activePageIndex <= 0} tooltip={copy.moveUp}>
+            {copy.moveUp}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => moveActivePage(1)} disabled={activePageIndex >= config.pages.length - 1} tooltip={copy.moveDown}>
+            {copy.moveDown}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={removeActivePage} disabled={config.pages.length <= 1} tooltip={copy.deletePage}>
+            {copy.deletePage}
+          </TooltipButton>
+          <label className="toolbar-field toolbar-field-medium">
+            <span>{copy.moveSelection}</span>
+            <select value={moveTargetPageId} onChange={(e) => setMoveTargetPageId(e.target.value)} disabled={pageMoveOptions.length === 0}>
+              {pageMoveOptions.length === 0 ? (
+                <option value="">{copy.noDestination}</option>
+              ) : (
+                pageMoveOptions.map((page) => {
+                  const absoluteIndex = config.pages.findIndex((candidate) => candidate.id === page.id)
+                  return <option key={page.id} value={page.id}>{copy.pageLabel(absoluteIndex + 1)}</option>
+                })
+              )}
+            </select>
+          </label>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => moveSelectedToPage(moveTargetPageId)} disabled={!moveTargetPageId || selectedIds.length === 0} tooltip={copy.send}>
+            {copy.send}
+          </TooltipButton>
+        </div>
+
+        <div className="toolbar-sep" />
+
         {/* CENTER: insert blocks */}
         <div className="toolbar-group">
-          <span className="toolbar-label">Insertar</span>
-          <button type="button" className="toolbar-button" onClick={() => addBlock('text')} title="Agregar texto">
+          <span className="toolbar-label">{copy.insert}</span>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => addBlock('text')} tooltip={copy.addText}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M2 4h12M8 4v9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
-            Text
-          </button>
-          <button type="button" className="toolbar-button" onClick={() => addBlock('line')} title="Agregar línea">
+            {copy.blockTypes.text}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => addBlock('line')} tooltip={copy.addLine}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M2 8h12" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
-            Line
-          </button>
-          <button type="button" className="toolbar-button" onClick={() => addBlock('spacer')} title="Agregar espaciador">
+            {copy.blockTypes.line}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => addBlock('spacer')} tooltip={copy.addSpacer}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M3 5h10M3 11h10M8 5v6" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
             </svg>
-            Spacer
-          </button>
-          <button type="button" className="toolbar-button" onClick={() => addBlock('pageBreak')} title="Agregar salto de página">
+            {copy.blockTypes.spacer}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => addBlock('pageBreak')} tooltip={copy.addPageBreak}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M2 8h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeDasharray="2 2"/>
               <path d="M5 5l-2 3 2 3M11 5l2 3-2 3" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Break
-          </button>
-          <button type="button" className="toolbar-button" onClick={() => addBlock('image')} title="Agregar imagen">
+            {copy.pageBreak}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => addBlock('image')} tooltip={copy.addImage}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect x="2" y="3" width="12" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" />
               <circle cx="6" cy="6.5" r="1" fill="currentColor" />
               <path d="M4 11l2.5-2.5 2 2L10.5 8l1.5 3" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
-            Image
-          </button>
+            {copy.blockTypes.image}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => addBlock('table')} tooltip={copy.addTable}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="2" y="3" width="12" height="10" rx="1.4" stroke="currentColor" strokeWidth="1.2" />
+              <path d="M2 6.5h12M2 10h12M6 3v10M10 3v10" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
+            </svg>
+            {copy.blockTypes.table}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => addBlock('repeat')} tooltip={copy.addRepeat}>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="3" y="2.5" width="10" height="2.5" rx="1" stroke="currentColor" strokeWidth="1.1" />
+              <rect x="3" y="6.75" width="10" height="2.5" rx="1" stroke="currentColor" strokeWidth="1.1" />
+              <rect x="3" y="11" width="10" height="2.5" rx="1" stroke="currentColor" strokeWidth="1.1" />
+            </svg>
+            {copy.blockTypes.repeat}
+          </TooltipButton>
         </div>
 
         <div className="toolbar-sep" />
 
         {/* ZOOM */}
         <div className="toolbar-group">
-          <div className="toolbar-segment" role="group" aria-label="Zoom">
-            <button type="button" className="toolbar-button toolbar-icon-button" onClick={() => stepZoom(-1)} title="Reducir zoom">
+          <div className="toolbar-segment" role="group" aria-label={copy.zoom}>
+            <TooltipButton type="button" className="toolbar-button toolbar-icon-button" onClick={() => stepZoom(-1)} tooltip={copy.zoomOut}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-            </button>
-            <button type="button" className="toolbar-button toolbar-value-button" onClick={resetZoom} title="Restablecer zoom">
+            </TooltipButton>
+            <TooltipButton type="button" className="toolbar-button toolbar-value-button" onClick={resetZoom} tooltip={copy.resetZoom}>
               {Math.round(canvasZoom * 100)}%
-            </button>
-            <button type="button" className="toolbar-button toolbar-icon-button" onClick={() => stepZoom(1)} title="Aumentar zoom">
+            </TooltipButton>
+            <TooltipButton type="button" className="toolbar-button toolbar-icon-button" onClick={() => stepZoom(1)} tooltip={copy.zoomIn}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 2v8M2 6h8" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/></svg>
-            </button>
+            </TooltipButton>
           </div>
-          <button
+          <TooltipButton
             type="button"
             className={showRulers ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'}
             onClick={() => setShowRulers((v) => !v)}
-            title="Reglas"
+            tooltip={copy.rulers}
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect x="1" y="5" width="14" height="6" rx="1" stroke="currentColor" strokeWidth="1.3" fill="none"/>
               <path d="M4 5v2M7 5v3M10 5v2M13 5v2" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round"/>
             </svg>
-            Reglas
-          </button>
+            {copy.rulers}
+          </TooltipButton>
         </div>
 
         <div className="toolbar-spacer" />
 
         {/* RIGHT: actions */}
         <div className="toolbar-group">
-          <button
+          <TooltipButton
             type="button"
             className={showYamlPanel ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'}
             onClick={() => setShowYamlPanel((value) => !value)}
-            title={showYamlPanel ? 'Ocultar YAML' : 'Mostrar YAML'}
+            tooltip={showYamlPanel ? copy.hideYaml : copy.showYaml}
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M3 4h10M3 8h10M3 12h10" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
             </svg>
             YAML
-          </button>
-          <button
+          </TooltipButton>
+          <TooltipButton
             type="button"
             className="toolbar-button"
             onClick={() => openInspector()}
             disabled={!selectedBlock}
-            title="Abrir inspector"
+            tooltip={copy.openInspector}
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.4"/>
               <path d="M8 7v4M8 5.5v.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
             </svg>
-            Inspector
-          </button>
-          <button type="button" className="toolbar-button" onClick={copyYaml} title="Copiar YAML al portapapeles">
+            {copy.inspector}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={copyYaml} tooltip={copy.copyYamlTitle}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <rect x="5" y="1" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none"/>
               <rect x="2" y="4" width="8" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.3" fill="none" style={{fill: 'var(--bg-a)'}}/>
             </svg>
-            Copiar YAML
-          </button>
-          <button type="button" className="toolbar-button primary" onClick={downloadYaml} title="Descargar archivo .frpt.yaml">
+            {copy.copyYaml}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button primary" onClick={downloadYaml} tooltip={copy.downloadTitle}>
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
               <path d="M8 2v8M5 8l3 3 3-3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
               <path d="M2 13h12" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round"/>
             </svg>
-            Descargar
-          </button>
+            {copy.download}
+          </TooltipButton>
         </div>
       </section>
 
@@ -2043,6 +2800,7 @@ function App() {
                 <div className="designer-canvas-shell">
                   <div
                     className="paper-canvas-viewport"
+                    ref={setCanvasViewportElement}
                     style={{
                       width: `${PAGE_WIDTH * canvasZoom}px`,
                       height: `${PAGE_HEIGHT * canvasZoom}px`,
@@ -2054,6 +2812,7 @@ function App() {
                       style={{ transform: `scale(${canvasZoom})`, transformOrigin: 'top left' }}
                       onMouseDown={(event) => {
                         if (event.target === event.currentTarget) {
+                          event.preventDefault()
                           setPrimarySelection(null)
                         }
                       }}
@@ -2073,7 +2832,7 @@ function App() {
                         />
                       ))}
 
-                      {config.blocks.map((block, index) => (
+                      {currentPageBlocks.map((block, index) => (
                         <div
                           key={block.id}
                           data-block-id={block.id}
@@ -2091,8 +2850,8 @@ function App() {
                             transform: `translate(${block.frame.x}px, ${block.frame.y}px)`,
                             zIndex: index + 1,
                           }}
-                          onMouseDown={() => {
-                            setPrimarySelection(block.id)
+                          onMouseDown={(event) => {
+                            handleSelectionPointer(block.id, event)
                           }}
                           onDoubleClick={() => openInspector(block.id)}
                         >
@@ -2106,93 +2865,90 @@ function App() {
                         </div>
                       ))}
 
-                      <Selecto
-                        dragContainer={pageElement ?? undefined}
-                        selectableTargets={['.canvas-block']}
-                        selectByClick
-                        selectFromInside={false}
-                        continueSelect={false}
-                        hitRate={0}
-                        onDragStart={(event: { inputEvent: MouseEvent; stop: () => void }) => {
-                          const inputTarget = event.inputEvent.target
+                      {selectionBounds && isGroupSelection && (
+                        <div
+                          className="canvas-selection-outline"
+                          style={{
+                            width: `${selectionBounds.width + selectionOutlineInset * 2}px`,
+                            height: `${selectionBounds.height + selectionOutlineInset * 2}px`,
+                            transform: `translate(${selectionBounds.x - selectionOutlineInset}px, ${selectionBounds.y - selectionOutlineInset}px)`,
+                          }}
+                        >
+                          <span className="canvas-selection-outline-label">
+                            {selectedWholeGroupId ? copy.groupLabel(selectedWholeGroupId) : copy.selectedStatus(selectedIds.length)}
+                          </span>
+                        </div>
+                      )}
 
-                          if (!(inputTarget instanceof Element)) {
-                            return
-                          }
-
-                          if (
-                            moveableRef.current?.isMoveableElement(inputTarget) ||
-                            inputTarget.closest('.canvas-block')
-                          ) {
-                            event.stop()
-                          }
-                        }}
-                        onSelectEnd={(
-                          event: {
-                            selected?: Array<HTMLElement | SVGElement>
-                            selectedAfterSelect?: Array<HTMLElement | SVGElement>
-                          },
-                        ) => {
-                          const selectedElements = event.selectedAfterSelect ?? event.selected ?? []
-                          const nextSelection = selectedElements
-                            .filter((element): element is HTMLElement => element instanceof HTMLElement)
-                            .map((element) => element.dataset.blockId)
-                            .filter((value): value is string => Boolean(value))
-
-                          setSelectedIds(expandSelectionForBlocks(config.blocks, nextSelection, nextSelection.at(-1) ?? null))
-                        }}
-                      />
-
-                      <Moveable
-                        ref={moveableRef}
-                        target={
-                          isGroupSelection
-                            ? selectedTargetSelectors
-                            : selectedTargetSelectors[0] ?? null
-                        }
-                        container={pageElement}
-                        origin={false}
-                        draggable
-                        resizable
-                        snappable
-                        groupable={isGroupSelection}
-                        keepRatio={false}
-                        zoom={canvasZoom}
-                        bounds={{ left: 0, top: 0, right: PAGE_WIDTH, bottom: PAGE_HEIGHT }}
-                        verticalGuidelines={CANVAS_VERTICAL_GUIDES}
-                        horizontalGuidelines={CANVAS_HORIZONTAL_GUIDES}
-                        elementGuidelines={elementGuidelines}
-                        snapGap
-                        onDrag={(event: { target: HTMLElement | SVGElement; beforeTranslate: number[] }) => {
-                          handleDrag(event)
-                        }}
-                        onDragGroup={(
-                          event: { events: Array<{ target: HTMLElement | SVGElement; beforeTranslate: number[] }> },
-                        ) => {
-                          event.events.forEach(handleDrag)
-                        }}
-                        onResize={(event: {
-                          target: HTMLElement | SVGElement
-                          width: number
-                          height: number
-                          drag: { beforeTranslate: number[] }
-                        }) => {
-                          handleResize(event)
-                        }}
-                        onResizeGroup={(
-                          event: {
-                            events: Array<{
-                              target: HTMLElement | SVGElement
-                              width: number
-                              height: number
-                              drag: { beforeTranslate: number[] }
-                            }>
-                          },
-                        ) => {
-                          event.events.forEach(handleResize)
-                        }}
-                      />
+                      {selectedTargetSelectors.length === 1 && (
+                        <Moveable
+                          ref={moveableRef}
+                          target={selectedTargetSelectors[0] ?? null}
+                          container={pageElement}
+                          origin={false}
+                          draggable
+                          resizable
+                          snappable
+                          keepRatio={false}
+                          zoom={canvasZoom}
+                          bounds={{ left: 0, top: 0, right: PAGE_WIDTH, bottom: PAGE_HEIGHT }}
+                          verticalGuidelines={CANVAS_VERTICAL_GUIDES}
+                          horizontalGuidelines={CANVAS_HORIZONTAL_GUIDES}
+                          elementGuidelines={elementGuidelines}
+                          snapGap
+                          onDrag={(event: { target: HTMLElement | SVGElement; beforeTranslate: number[] }) => {
+                            handleDrag(event)
+                          }}
+                          onResize={(event: {
+                            target: HTMLElement | SVGElement
+                            width: number
+                            height: number
+                            drag: { beforeTranslate: number[] }
+                          }) => {
+                            handleResize(event)
+                          }}
+                        />
+                      )}
                     </article>
+
+                    <Selecto
+                      container={canvasViewportElement ?? undefined}
+                      dragContainer={canvasViewportElement ?? pageElement ?? undefined}
+                      selectableTargets={['.canvas-block']}
+                      selectByClick
+                      selectFromInside={false}
+                      continueSelect={false}
+                      preventDefault
+                      hitRate={0}
+                      onDragStart={(event: { inputEvent: MouseEvent; stop: () => void }) => {
+                        const inputTarget = event.inputEvent.target
+
+                        if (!(inputTarget instanceof Element)) {
+                          return
+                        }
+
+                        if (
+                          moveableRef.current?.isMoveableElement(inputTarget) ||
+                          inputTarget.closest('.canvas-block')
+                        ) {
+                          event.stop()
+                        }
+                      }}
+                      onSelectEnd={(
+                        event: {
+                          selected?: Array<HTMLElement | SVGElement>
+                          selectedAfterSelect?: Array<HTMLElement | SVGElement>
+                        },
+                      ) => {
+                        const selectedElements = event.selectedAfterSelect ?? event.selected ?? []
+                        const nextSelection = selectedElements
+                          .filter((element): element is HTMLElement => element instanceof HTMLElement)
+                          .map((element) => element.dataset.blockId)
+                          .filter((value): value is string => Boolean(value))
+
+                        setSelectedIds(expandSelectionForBlocks(currentPageBlocks, nextSelection, nextSelection.at(-1) ?? null))
+                      }}
+                    />
                   </div>
                 </div>
               </div>
@@ -2223,14 +2979,14 @@ function App() {
           <section className="panel modal-panel inspector-panel" onClick={(event) => event.stopPropagation()}>
             <div className="panel-header modal-header">
               <div>
-                <h2>Propiedades</h2>
+                <h2>{copy.properties}</h2>
               </div>
               <div className="modal-actions">
                 <span className={selectedBlock ? 'panel-badge accent' : 'panel-badge'}>
-                  {selectedBlock ? getBlockTypeLabel(selectedBlock.type) : 'Sin seleccion'}
+                  {selectedBlock ? getBlockTypeLabel(selectedBlock.type, locale) : copy.noSelectionStatus}
                 </span>
                 <button type="button" className="toolbar-button" onClick={closeInspector}>
-                  Cerrar
+                  {copy.close}
                 </button>
               </div>
             </div>

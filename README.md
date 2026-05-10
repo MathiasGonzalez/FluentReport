@@ -122,8 +122,13 @@ Use `.Landscape()` to swap width and height, or `page.Size(width, height)` for a
 ## Documentation
 
 - [API reference](docs/api.md) — all builders and methods
+- [Editor YAML schema](docs/schema/editor-yaml-schema.md) — canonical schema used by the web editor
 - [RDLC limitations](docs/rdlc-limitations.md) — known constraints and processing flow
 - [UY fiscal document samples](docs/uy-fiscal-samples.md) — salary slip, delivery note, payment receipt
+
+## Editor
+
+The React-based schema editor lives in [editor/fluentreport-editor/README.md](editor/fluentreport-editor/README.md) and is deployed to GitHub Pages through [editor-pages.yml](.github/workflows/editor-pages.yml).
 
 ## Project structure
 
@@ -143,6 +148,10 @@ samples/
 └── FluentReport.Samples/  # Sample documents (PDF, Excel, HTML)
 docs/
 ├── api.md
+├── schema/
+│   ├── editor-yaml-schema.md
+│   ├── editor-yaml-schema.schema.json
+│   └── report-schema-spec.md
 ├── rdlc-limitations.md
 └── uy-fiscal-samples.md
 ```

@@ -1,0 +1,1029 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fluentreport.dev/schemas/editor-yaml-schema.schema.json",
+  "title": "FluentReport editor canonical YAML schema",
+  "description": "Formal definition of the YAML document emitted by editor/fluentreport-editor/src/App.tsx via buildSchema(). The schema persists visual layout, regions and group definitions.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schemaVersion",
+    "name",
+    "metadata",
+    "pageDefaults",
+    "parameters",
+    "dataSources",
+    "assets",
+    "styles",
+    "rendererOptions",
+    "definitions",
+    "pages"
+  ],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "const": "FluentReport"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "metadata": {
+      "$ref": "#/$defs/metadata"
+    },
+    "pageDefaults": {
+      "$ref": "#/$defs/pageSettings"
+    },
+    "parameters": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/parameterDefinition"
+      }
+    },
+    "dataSources": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/dataSourceDefinition"
+      }
+    },
+    "assets": {
+      "type": "object"
+    },
+    "styles": {
+      "type": "object",
+      "minProperties": 0,
+      "additionalProperties": {
+        "$ref": "#/$defs/textStyle"
+      }
+    },
+    "rendererOptions": {
+      "$ref": "#/$defs/rendererOptions"
+    },
+    "definitions": {
+      "$ref": "#/$defs/definitions"
+    },
+    "pages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/pageDefinition"
+      }
+    }
+  },
+  "$defs": {
+    "metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ],
+      "properties": {
+        "title": {
+          "type": "string"
+        }
+      }
+    },
+    "pageSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "size",
+        "orientation",
+        "margin"
+      ],
+      "properties": {
+        "size": {
+          "type": "string",
+          "enum": [
+            "A4",
+            "Letter",
+            "Legal",
+            "A3",
+            "A5"
+          ]
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "margin": {
+          "$ref": "#/$defs/margin"
+        }
+      }
+    },
+    "margin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "top",
+        "right",
+        "bottom",
+        "left"
+      ],
+      "properties": {
+        "top": {
+          "type": "number"
+        },
+        "right": {
+          "type": "number"
+        },
+        "bottom": {
+          "type": "number"
+        },
+        "left": {
+          "type": "number"
+        }
+      }
+    },
+    "frame": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "width": {
+          "type": "number",
+          "minimum": 0
+        },
+        "height": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "parameterDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "required"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "string"
+        },
+        "required": {
+          "type": "boolean"
+        }
+      }
+    },
+    "dataSourceDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "const": "array"
+        }
+      }
+    },
+    "textStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "fontSize": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "fontFamily": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "underline": {
+          "type": "boolean"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        },
+        "background": {
+          "$ref": "#/$defs/color"
+        },
+        "lineSpacing": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "align": {
+          "$ref": "#/$defs/align"
+        }
+      }
+    },
+    "rendererOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "html"
+      ],
+      "properties": {
+        "html": {
+          "$ref": "#/$defs/htmlRendererOptions"
+        }
+      }
+    },
+    "htmlRendererOptions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maxWidth",
+        "fontFamily",
+        "pageDividerStyle",
+        "outlookCompatible"
+      ],
+      "properties": {
+        "maxWidth": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "fontFamily": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pageDividerStyle": {
+          "type": "string",
+          "minLength": 1
+        },
+        "outlookCompatible": {
+          "type": "boolean"
+        }
+      }
+    },
+    "definitions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "groups",
+        "repeatables"
+      ],
+      "properties": {
+        "groups": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/groupDefinition"
+          }
+        },
+        "repeatables": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/repeatableDefinition"
+          }
+        }
+      }
+    },
+    "groupDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "name",
+        "frame",
+        "nodes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "const": "group"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/blockNode"
+          }
+        }
+      }
+    },
+    "repeatableDefinition": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/tableRepeatableDefinition"
+        },
+        {
+          "$ref": "#/$defs/repeatDefinition"
+        }
+      ]
+    },
+    "dataRegionGrowthMode": {
+      "type": "string",
+      "enum": [
+        "fixed",
+        "grow"
+      ]
+    },
+    "dataRegionOverflowMode": {
+      "type": "string",
+      "enum": [
+        "nextPage",
+        "truncate"
+      ]
+    },
+    "tableRepeatableDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "name",
+        "dataSource",
+        "columns",
+        "growthMode",
+        "overflowMode",
+        "keepTogether"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "const": "table"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataSource": {
+          "type": "string",
+          "minLength": 1
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/tableColumn"
+          }
+        },
+        "growthMode": {
+          "$ref": "#/$defs/dataRegionGrowthMode"
+        },
+        "overflowMode": {
+          "$ref": "#/$defs/dataRegionOverflowMode"
+        },
+        "keepTogether": {
+          "type": "boolean"
+        }
+      }
+    },
+    "repeatDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "name",
+        "dataSource",
+        "itemTemplate",
+        "itemGap",
+        "growthMode",
+        "overflowMode",
+        "keepTogether"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "repeat"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataSource": {
+          "type": "string",
+          "minLength": 1
+        },
+        "itemTemplate": {
+          "type": "string"
+        },
+        "itemGap": {
+          "type": "number",
+          "minimum": 0
+        },
+        "growthMode": {
+          "$ref": "#/$defs/dataRegionGrowthMode"
+        },
+        "overflowMode": {
+          "$ref": "#/$defs/dataRegionOverflowMode"
+        },
+        "keepTogether": {
+          "type": "boolean"
+        }
+      }
+    },
+    "tableColumn": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "field",
+        "header",
+        "width"
+      ],
+      "properties": {
+        "field": {
+          "type": "string",
+          "minLength": 1
+        },
+        "header": {
+          "type": "string",
+          "minLength": 1
+        },
+        "width": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "align": {
+          "$ref": "#/$defs/align"
+        }
+      }
+    },
+    "pageDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "size",
+        "orientation",
+        "margin",
+        "regions"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size": {
+          "type": "string",
+          "enum": [
+            "A4",
+            "Letter",
+            "Legal",
+            "A3",
+            "A5"
+          ]
+        },
+        "orientation": {
+          "type": "string",
+          "enum": [
+            "portrait",
+            "landscape"
+          ]
+        },
+        "margin": {
+          "$ref": "#/$defs/margin"
+        },
+        "regions": {
+          "$ref": "#/$defs/pageRegions"
+        }
+      }
+    },
+    "pageRegions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "header",
+        "content",
+        "footer"
+      ],
+      "properties": {
+        "header": {
+          "$ref": "#/$defs/regionDefinition"
+        },
+        "content": {
+          "$ref": "#/$defs/regionDefinition"
+        },
+        "footer": {
+          "$ref": "#/$defs/regionDefinition"
+        }
+      }
+    },
+    "regionDefinition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "frame",
+        "nodes"
+      ],
+      "properties": {
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "nodes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/node"
+          }
+        }
+      }
+    },
+    "node": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/blockNode"
+        },
+        {
+          "$ref": "#/$defs/groupInstanceNode"
+        }
+      ]
+    },
+    "blockNode": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/textNode"
+        },
+        {
+          "$ref": "#/$defs/lineNode"
+        },
+        {
+          "$ref": "#/$defs/spacerNode"
+        },
+        {
+          "$ref": "#/$defs/pageBreakNode"
+        },
+        {
+          "$ref": "#/$defs/imageNode"
+        },
+        {
+          "$ref": "#/$defs/tableNode"
+        },
+        {
+          "$ref": "#/$defs/repeatNode"
+        }
+      ]
+    },
+    "textNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "frame",
+        "zIndex"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "const": "text"
+        },
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "zIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "value": {
+          "type": "string"
+        },
+        "runs": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/textRun"
+          }
+        },
+        "styleRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "align": {
+          "$ref": "#/$defs/align"
+        },
+        "fontSize": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "bold": {
+          "type": "boolean"
+        },
+        "italic": {
+          "type": "boolean"
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        }
+      },
+      "allOf": [
+        {
+          "oneOf": [
+            {
+              "required": [
+                "value"
+              ]
+            },
+            {
+              "required": [
+                "runs"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    "lineNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "frame",
+        "zIndex",
+        "thickness",
+        "color"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "const": "line"
+        },
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "zIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "thickness": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "color": {
+          "$ref": "#/$defs/color"
+        }
+      }
+    },
+    "spacerNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "frame",
+        "zIndex",
+        "size"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "const": "spacer"
+        },
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "zIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "size": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "pageBreakNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "frame",
+        "zIndex"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "const": "pageBreak"
+        },
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "zIndex": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "imageNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "frame",
+        "zIndex",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "const": "image"
+        },
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "zIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "source": {
+          "$ref": "#/$defs/imageSource"
+        },
+        "fit": {
+          "type": "string",
+          "enum": [
+            "contain",
+            "cover",
+            "none"
+          ]
+        },
+        "alt": {
+          "type": "string"
+        }
+      }
+    },
+    "tableNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "frame",
+        "zIndex",
+        "name",
+        "dataSource",
+        "definitionRef",
+        "columns",
+        "growthMode",
+        "overflowMode",
+        "keepTogether"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "const": "table"
+        },
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "zIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataSource": {
+          "type": "string",
+          "minLength": 1
+        },
+        "definitionRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "columns": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/tableColumn"
+          }
+        },
+        "growthMode": {
+          "$ref": "#/$defs/dataRegionGrowthMode"
+        },
+        "overflowMode": {
+          "$ref": "#/$defs/dataRegionOverflowMode"
+        },
+        "keepTogether": {
+          "type": "boolean"
+        }
+      }
+    },
+    "repeatNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "frame",
+        "zIndex",
+        "name",
+        "dataSource",
+        "definitionRef",
+        "itemTemplate",
+        "itemGap",
+        "growthMode",
+        "overflowMode",
+        "keepTogether"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "const": "repeat"
+        },
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "zIndex": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dataSource": {
+          "type": "string",
+          "minLength": 1
+        },
+        "definitionRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "itemTemplate": {
+          "type": "string"
+        },
+        "itemGap": {
+          "type": "number",
+          "minimum": 0
+        },
+        "growthMode": {
+          "$ref": "#/$defs/dataRegionGrowthMode"
+        },
+        "overflowMode": {
+          "$ref": "#/$defs/dataRegionOverflowMode"
+        },
+        "keepTogether": {
+          "type": "boolean"
+        }
+      }
+    },
+    "groupInstanceNode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "groupRef",
+        "frame",
+        "zIndex"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "type": {
+          "type": "string",
+          "const": "groupInstance"
+        },
+        "groupRef": {
+          "type": "string",
+          "minLength": 1
+        },
+        "frame": {
+          "$ref": "#/$defs/frame"
+        },
+        "zIndex": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "imageSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "value"
+      ],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": [
+            "path",
+            "base64"
+          ]
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "textRun": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "value"
+          ],
+          "properties": {
+            "value": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "token"
+          ],
+          "properties": {
+            "token": {
+              "type": "string",
+              "enum": [
+                "currentPage",
+                "totalPages"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9A-Fa-f]{6}$"
+    },
+    "align": {
+      "type": "string",
+      "enum": [
+        "left",
+        "center",
+        "right",
+        "justify"
+      ]
+    }
+  }
+}

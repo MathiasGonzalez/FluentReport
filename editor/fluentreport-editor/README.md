@@ -1,42 +1,63 @@
 # FluentReport Editor
 
-Editor web simple para crear reportes en formato declarativo FluentReport Schema v1.
+Simple web editor for authoring reports with the FluentReport canonical schema.
 
-## Que hace
+## Current capabilities
 
-- Permite crear y ordenar bloques visuales: text, line, spacer, pageBreak.
-- Muestra una vista previa de pagina para edicion rapida.
-- Genera YAML del esquema v1.
-- Permite copiar o descargar el archivo generado con extension frpt.yaml.
+- Create and reorder visual blocks: `text`, `line`, `spacer`, `pageBreak`, `image`, `table`, and `repeat`.
+- Show a page preview for fast visual editing.
+- Generate YAML from the canonical editor schema.
+- Copy or download the generated `.frpt.yaml` file.
+- Switch the editor UI between English and Spanish.
 
-## Ejecutar en desarrollo
+## Run in development
 
-1. Instalar dependencias
+1. Install dependencies
 
+   ```shell
    npm install
+   ```
 
-2. Levantar la app
+2. Start the app
 
+   ```shell
    npm run dev
+   ```
 
-3. Compilar
+3. Build the project
 
+   ```shell
    npm run build
+   ```
 
-## Formato generado
+## Publish to GitHub Pages
 
-La app genera estructura base compatible con la especificacion propuesta en el repositorio:
+The editor is deployed with the workflow in [../../.github/workflows/editor-pages.yml](../../.github/workflows/editor-pages.yml).
 
-- kind: FluentReport
-- schemaVersion: 1
-- pageDefaults
-- parameters
-- styles
-- pages[].content.items
+- Trigger: push to `main` affecting `.github/workflows/editor-pages.yml` or `editor/fluentreport-editor/**`
+- Manual deploy: `workflow_dispatch`
+- Output: `editor/fluentreport-editor/dist`
+- Pages requirement: in the repository settings, set GitHub Pages to deploy from `GitHub Actions`
 
-## Proximas mejoras recomendadas
+The Vite `base` path is set automatically in CI, so the app is served correctly from the repository subpath on GitHub Pages.
 
-1. Soporte de tabla con rows.source y cells.
-2. Soporte de header y footer editables desde UI.
-3. Validacion de schema en cliente con mensajes por nodo.
-4. Integracion con backend .NET para preview real PDF/HTML.
+## Generated format
+
+The app emits the canonical authoring structure documented in [../../docs/schema/editor-yaml-schema.md](../../docs/schema/editor-yaml-schema.md):
+
+- `kind: FluentReport`
+- `schemaVersion: 1`
+- `pageDefaults`
+- `parameters`
+- `dataSources`
+- `styles`
+- `rendererOptions`
+- `definitions`
+- `pages[].regions.*.nodes`
+
+## Recommended next improvements
+
+1. Full table authoring with richer column and row editing.
+2. Editable header and footer areas directly from the UI.
+3. Client-side schema validation with node-level messages.
+4. Integration with the .NET backend for real PDF and HTML preview.
