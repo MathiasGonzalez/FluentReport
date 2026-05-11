@@ -248,7 +248,11 @@ public sealed class SchemaDocumentFactory
             {
                 image = new ImageElement(Convert.FromBase64String(sourceValue));
             }
-            catch
+            catch (FormatException)
+            {
+                return new SpacerElement();
+            }
+            catch (ArgumentException)
             {
                 return new SpacerElement();
             }
@@ -582,7 +586,15 @@ public sealed class SchemaDocumentFactory
         {
             return ReportColor.FromHex(raw);
         }
-        catch
+        catch (ArgumentException)
+        {
+            return fallback;
+        }
+        catch (FormatException)
+        {
+            return fallback;
+        }
+        catch (OverflowException)
         {
             return fallback;
         }
