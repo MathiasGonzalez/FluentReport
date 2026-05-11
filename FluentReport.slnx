@@ -5,12 +5,14 @@
     <Project Path="src/FluentReport.Excel/FluentReport.Excel.csproj" />
     <Project Path="src/FluentReport.Html/FluentReport.Html.csproj" />
     <Project Path="src/FluentReport.Rdlc/FluentReport.Rdlc.csproj" />
+    <Project Path="src/FluentReport.Schema/FluentReport.Schema.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/FluentReport.Tests/FluentReport.Tests.csproj" />
     <Project Path="tests/FluentReport.Excel.Tests/FluentReport.Excel.Tests.csproj" />
     <Project Path="tests/FluentReport.Html.Tests/FluentReport.Html.Tests.csproj" />
     <Project Path="tests/FluentReport.Rdlc.Tests/FluentReport.Rdlc.Tests.csproj" />
+    <Project Path="tests/FluentReport.Schema.Tests/FluentReport.Schema.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/FluentReport.Samples/FluentReport.Samples.csproj" />

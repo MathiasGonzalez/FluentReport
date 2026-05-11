@@ -6,6 +6,7 @@
 > using FluentReport.Core;      // PageSizes
 > using FluentReport.Elements;  // ChartType
 > using FluentReport.Styling;   // ReportColor, TextStyle
+> using FluentReport.Schema;    // Schema import (optional package)
 > ```
 
 ---
@@ -22,7 +23,7 @@
 | `.GenerateHtml(path\|stream\|—)` | Renders to full HTML *(requires FluentReport.Html)* |
 | `.GenerateHtmlFragment()` | Renders to an inline-style HTML fragment for embedding in emails *(requires FluentReport.Html)* |
 
-For RDLC import overloads see the [RDLC section](#rdlc-import) below.
+For RDLC and YAML/JSON schema import overloads see the [RDLC section](#rdlc-import) and [Schema import section](#schema-import) below.
 
 ---
 
@@ -442,3 +443,92 @@ Unrecognized colors fall back to black.
 Both SSRS 2005 and 2008+ XML namespaces are accepted automatically.
 
 > For known limitations and the internal processing flow see [rdlc-limitations.md](rdlc-limitations.md).
+
+---
+
+## Schema Import
+
+`FluentReport.Schema` converts schema files from the editor (`.yaml`, `.yml`, `.json`) into a standard `Document`.
+
+```shell
+dotnet add package FluentReport.Schema
+```
+
+### API overloads
+
+| Method | Source |
+|--------|--------|
+| `DocumentSchemaExtensions.FromSchema(path, dataSources?, parameters?)` | File path |
+| `DocumentSchemaExtensions.FromSchemaStream(stream, format?, dataSources?, parameters?)` | `Stream` |
+| `DocumentSchemaExtensions.FromSchemaYaml(yaml, dataSources?, parameters?)` | YAML `string` |
+| `DocumentSchemaExtensions.FromSchemaJson(json, dataSources?, parameters?)` | JSON `string` |
+
+All four overloads share:
+- `dataSources` — `IDictionary<string, IEnumerable<object>>` — rows per data source name.
+- `parameters` — `IDictionary<string, object>` — values used in templates like `{{ parameters.period }}`.
+
+### Mapping YAML => fluent API
+
+| YAML node | FluentReport equivalent |
+|-----------|-------------------------|
+| `type: text` | `.Text(...)` / `TextElement` |
+| `type: line` | `.Line(...)` / `LineElement` |
+| `type: spacer` | `.Spacer(...)` / `SpacerElement` |
+| `type: pageBreak` | `.PageBreak()` / `PageBreakElement` |
+| `type: image` | `.Image(...)` / `ImageElement` |
+| `type: table` | `.Table(...)` / `TableElement` |
+| `type: repeat` | `.List(...)` / `ListElement` |
+| `type: groupInstance` | group expansion from `definitions.groups` |
+| `styles.*` + `styleRef` | `TextStyle` merge |
+| `{{ parameters.* }}` / `{{ row.* }}` | template resolution before render |
+
+### Example: YAML and equivalent fluent shape
+
+YAML:
+
+```yaml
+pages:
+  - id: p1
+    regions:
+      content:
+        nodes:
+          - type: text
+            value: "Revenue Report - {{ parameters.period }}"
+            styleRef: title
+          - type: line
+            thickness: 1
+          - type: table
+            dataSource: sales
+            columns:
+              - field: region
+                header: Region
+                width: 2
+              - field: revenue
+                header: Revenue
+                width: 1
+                align: right
+```
+
+Equivalent fluent shape:
+
+```csharp
+page.Content().Column(col =>
+{
+    col.Item().Text("Revenue Report - ...").FontSize(20).Bold().AlignCenter();
+    col.Item().Line(1);
+    col.Item().Table(table =>
+    {
+        table.ColumnsDefinition(c =>
+        {
+            c.RelativeColumn(2);
+            c.RelativeColumn(1);
+        });
+        table.Header(h =>
+        {
+            h.Cell().Text("Region").Bold();
+            h.Cell().AlignRight().Text("Revenue").Bold();
+        });
+        // repeated data rows from dataSources["sales"]
+    });
+});
+```

@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <!-- NuGet package metadata -->
+    <PackageId>FluentReport.Schema</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Mathías González Benítez</Authors>
+    <Description>YAML/JSON schema translation layer for FluentReport — import editor schema files and render them via the FluentReport pipeline (PDF, PNG, Excel, HTML).</Description>
+    <PackageTags>schema;yaml;json;report;fluent</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <RepositoryUrl>https://github.com/MathiasGonzalez/FluentReport</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" Version="17.1.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FluentReport\FluentReport.csproj" />
+  </ItemGroup>
+</Project>
