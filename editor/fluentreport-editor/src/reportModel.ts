@@ -122,6 +122,8 @@ export type ReportConfig = {
   periodParam: string
   dataSources: string[]
   htmlRendererOptions: HtmlRendererOptions
+  /** When false, the footer pagination node is omitted from the exported schema. Defaults to true. */
+  showPageNumbers?: boolean
   pages: PageDefinition[]
   blocks: Block[]
 }

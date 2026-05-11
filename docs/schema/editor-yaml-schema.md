@@ -348,6 +348,8 @@ A `text` node can use either `value` or `runs`.
   color: "#D8D8D8"
 ```
 
+The importer infers direction from the frame: when `frame.height > frame.width` the line is rendered **vertically**; otherwise it is rendered horizontally.
+
 ### `spacer`
 
 ```yaml
@@ -380,6 +382,14 @@ A `text` node can use either `value` or `runs`.
   fit: contain
   alt: Logo
 ```
+
+Supported `source.mode` values:
+
+| `mode` | Description |
+|--------|-------------|
+| `path` | Local file path (relative paths are resolved from the schema file's directory) |
+| `base64` | Base64-encoded image bytes directly in the YAML/JSON value |
+| `bytes` | Alias for `base64` |
 
 ### `table`
 
@@ -449,3 +459,24 @@ That enables:
 - persistence of tables as repeatable definitions from the editor
 - persistence of repeat/list blocks as reusable definitions from the editor
 - a cleaner separation between document state and ephemeral editor state
+
+## Runtime validation behavior
+
+The editor schema contract is consumed at runtime by `FluentReport.Schema` in strict mode.
+
+Current runtime behavior is fail-fast: invalid contracts produce explicit exceptions instead of silent fallback.
+
+Validation currently enforced:
+
+- `schemaVersion` must be supported by the runtime (currently `1`)
+- `type` must be a supported node type
+- `styleRef` must exist in `styles`
+- `groupInstance.groupRef` must exist in `definitions.groups`
+- `definitionRef` used by `table`/`repeat` must exist and match expected type
+- referenced `dataSource` must be provided at import time
+- colors must be valid (`InvalidOperationException` on invalid values)
+- `image.source.value` is required
+- `image.source.mode` must be `path`, `base64`, or `bytes`
+- `base64`/`bytes` image content must be valid base64
+
+This strict behavior improves consistency and debuggability of the end-to-end flow `schema -> Document -> renderer`.

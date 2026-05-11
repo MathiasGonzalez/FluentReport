@@ -54,7 +54,15 @@ public sealed class SkiaDrawingCanvas(SKCanvas canvas) : IDrawingCanvas
     public void DrawText(string text, float x, float y, DrawTextAlign align, TextStyle style)
     {
         using var typeface = SkiaFonts.CreateTypeface(style);
-        using var font = new SKFont(typeface, style.FontSize);
+        // Edging.Antialias: grayscale AA — platform-independent, no per-channel RGB shift.
+        //   (Edging.SubpixelAntialias uses LCD sub-pixel rendering tied to the physical display
+        //    geometry, which differs between Windows/Linux/macOS and causes golden snapshot drift.)
+        // Subpixel = false: snap glyph origins to whole pixels so x/y positions are reproducible.
+        using var font = new SKFont(typeface, style.FontSize)
+        {
+            Edging = SKFontEdging.Antialias,
+            Subpixel = false,
+        };
         using var paint = new SKPaint { Color = ToSk(style.EffectiveColor), IsAntialias = true };
         var skAlign = align switch
         {

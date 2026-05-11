@@ -1,7 +1,17 @@
 # FluentReport Report Schema v1 (Proposal)
 
-> Note: this document describes a broad proposal for `Schema v1`.
-> The exact contract currently exported by the editor is documented in [docs/editor-yaml-schema.md](./editor-yaml-schema.md).
+> **Status:** This document is an early design proposal. It was superseded during implementation.
+> The normative schema actually exported by the editor and consumed by `FluentReport.Schema` is defined in
+> [docs/editor-yaml-schema.md](./editor-yaml-schema.md).
+>
+> **Sections of this proposal that were NOT implemented:**
+> - `type: column` and `type: row` as composable node types inside regions (the importer only supports flat node lists with absolute frames)
+> - `rows.source` / `rows.cells` table syntax (replaced by `dataSource` + `columns[]`)
+> - `dataSources[*].requiredFields`
+> - `visibleWhen` conditional rendering
+>
+> **What was implemented** aligns with the editor schema: `text`, `line`, `spacer`, `pageBreak`, `image`, `table`, `repeat`, `groupInstance` nodes; `styles`, `styleRef`, `parameters`, `dataSources`, `rendererOptions`, and pipe functions (`upper`, `lower`, `trim`, `currency`, `number(fmt)`, `date(fmt)`).
+
 
 ## 1. Goal
 

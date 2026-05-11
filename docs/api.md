@@ -88,6 +88,7 @@ The core composition block. Every table cell, column/row item, and page zone ret
 | `.List<T>(items, template, spacing)` | `ContainerBuilder` | Repeats a template per collection item |
 | `.Chart()` | `ChartBuilder` | Bar or line chart |
 | `.Subreport(Document)` | `ContainerBuilder` | Embeds a nested `Document` inline |
+| `.Canvas(width, height, draw)` | `ContainerBuilder` | Renders arbitrary vector drawing commands at a fixed size |
 
 ### Visual decorators
 

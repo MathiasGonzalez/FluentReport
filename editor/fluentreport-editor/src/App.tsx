@@ -1,9 +1,9 @@
 import Guides from '@scena/guides'
-import { forwardRef, useEffect, useMemo, useRef, useState, type ButtonHTMLAttributes, type CSSProperties } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Moveable from 'react-moveable'
 import Selecto from 'react-selecto'
 import './App.css'
+import { TooltipButton } from './components/TooltipButton'
 import {
   EDITOR_COPY,
   EDITOR_LANGUAGE_STORAGE_KEY,
@@ -20,7 +20,6 @@ import {
   PAGE_MARGIN,
   PAGE_WIDTH,
   getSelectionBounds,
-  isAlign,
   type Align,
   type Block,
   type BlockFrame,
@@ -28,500 +27,52 @@ import {
   type ImageFit,
   type PageDefinition,
   type ReportConfig,
-  type TableColumn,
 } from './reportModel'
+import {
+  CANVAS_HORIZONTAL_GUIDES,
+  CANVAS_VERTICAL_GUIDES,
+  clampFrame,
+  createBlock,
+  expandSelectionForBlocks,
+  formatNameList,
+  formatTableColumns,
+  getBlockSelector,
+  getBlockSummary,
+  getBlockTypeLabel,
+  getNextZoom,
+  initialConfig,
+  isExactGroupSelection,
+  isTextEntryTarget,
+  nextBlockId,
+  nextGroupId,
+  nextPageId,
+  parseNameList,
+  parseTableColumns,
+} from './editor/editorHelpers'
+import {
+  clearDraftConfig,
+  createProjectFileContent,
+  getDraftSavedAt,
+  loadDraftConfig,
+  parseProjectFileContent,
+  saveDraftConfig,
+} from './editor/projectStorage'
 import { buildSchema, toYaml } from './reportSchema'
-
-const CANVAS_VERTICAL_GUIDES = [0, PAGE_MARGIN, PAGE_WIDTH / 2, PAGE_WIDTH - PAGE_MARGIN, PAGE_WIDTH]
-const CANVAS_HORIZONTAL_GUIDES = [0, PAGE_HEADER_Y, PAGE_HEIGHT / 2, PAGE_FOOTER_Y, PAGE_HEIGHT]
-const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2]
 
 type GuidesInstance = Guides & {
   scroll: (pos: number, nextZoom?: number) => void
   zoomTo: (nextZoom: number, nextGuidesZoom?: number) => void
   resize: (nextZoom?: number) => void
 }
-
-const initialConfig: ReportConfig = {
-  name: 'revenue-by-region',
-  title: 'Revenue Report - {{ parameters.period }}',
-  companyParam: 'companyName',
-  periodParam: 'period',
-  dataSources: ['sales'],
-  htmlRendererOptions: { ...DEFAULT_HTML_RENDERER_OPTIONS },
-  pages: [{ id: 'p1' }],
-  blocks: [
-    {
-      id: 'b-1',
-      pageId: 'p1',
-      type: 'text',
-      value: '{{ parameters.companyName }}',
-      styleRef: 'h2',
-      frame: { x: 72, y: 96, width: 280, height: 48 },
-    },
-    {
-      id: 'b-2',
-      pageId: 'p1',
-      type: 'line',
-      thickness: 1,
-      color: '#D8D8D8',
-      frame: { x: 72, y: 172, width: 650, height: 6 },
-    },
-    {
-      id: 'b-3',
-      pageId: 'p1',
-      type: 'text',
-      value: 'Revenue Report - {{ parameters.period }}',
-      styleRef: 'title',
-      align: 'center',
-      frame: { x: 154, y: 214, width: 486, height: 72 },
-    },
-    {
-      id: 'b-4',
-      pageId: 'p1',
-      type: 'spacer',
-      size: 12,
-      frame: { x: 72, y: 314, width: 220, height: 28 },
-    },
-    {
-      id: 'b-5',
-      pageId: 'p1',
-      type: 'table',
-      name: 'sales-table',
-      dataSource: 'sales',
-      growthMode: 'grow',
-      overflowMode: 'nextPage',
-      keepTogether: false,
-      columns: [
-        { id: 'col-region', field: 'region', header: 'Region', width: 2 },
-        { id: 'col-month', field: 'month', header: 'Month', width: 2 },
-        { id: 'col-revenue', field: 'revenue', header: 'Revenue', width: 1, align: 'right' },
-      ],
-      frame: { x: 72, y: 372, width: 520, height: 144 },
-    },
-  ],
-}
-
-let idCounter = 100
-let groupCounter = 1
-let pageCounter = 1
-
-function nextId() {
-  idCounter += 1
-  return `b-${idCounter}`
-}
-
-function nextGroupId() {
-  groupCounter += 1
-  return `g-${groupCounter}`
-}
-
-function nextPageId() {
-  pageCounter += 1
-  return `p${pageCounter}`
-}
-
-function getBlockSelector(blockId: string) {
-  return `.canvas-block[data-block-id="${blockId}"]`
-}
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max)
-}
-
-type TooltipButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  tooltip: string
-}
-
-const TooltipButton = forwardRef<HTMLButtonElement, TooltipButtonProps>(function TooltipButton(
-  { tooltip, children, className, ...buttonProps },
-  ref,
-) {
-  const buttonRef = useRef<HTMLButtonElement | null>(null)
-  const [isTooltipVisible, setIsTooltipVisible] = useState(false)
-  const [tooltipPlacement, setTooltipPlacement] = useState<'top' | 'bottom'>('top')
-  const [tooltipStyle, setTooltipStyle] = useState<CSSProperties>()
-  const ariaLabel = buttonProps['aria-label'] ?? tooltip
-
-  function assignRef(element: HTMLButtonElement | null) {
-    buttonRef.current = element
-
-    if (typeof ref === 'function') {
-      ref(element)
-      return
-    }
-
-    if (ref) {
-      ref.current = element
-    }
-  }
-
-  function updateTooltipPosition() {
-    const element = buttonRef.current
-    if (!element) {
-      return
-    }
-
-    const rect = element.getBoundingClientRect()
-    const showAbove = rect.top > 56
-
-    setTooltipPlacement(showAbove ? 'top' : 'bottom')
-    setTooltipStyle({
-      left: rect.left + rect.width / 2,
-      top: showAbove ? rect.top - 10 : rect.bottom + 10,
-    })
-  }
-
-  function showTooltip() {
-    updateTooltipPosition()
-    setIsTooltipVisible(true)
-  }
-
-  function hideTooltip() {
-    setIsTooltipVisible(false)
-  }
-
-  useEffect(() => {
-    if (!isTooltipVisible) {
-      return
-    }
-
-    const handleViewportChange = () => updateTooltipPosition()
-
-    window.addEventListener('resize', handleViewportChange)
-    window.addEventListener('scroll', handleViewportChange, true)
-
-    return () => {
-      window.removeEventListener('resize', handleViewportChange)
-      window.removeEventListener('scroll', handleViewportChange, true)
-    }
-  }, [isTooltipVisible])
-
-  return (
-    <>
-      <button
-        ref={assignRef}
-        {...buttonProps}
-        className={className}
-        aria-label={ariaLabel}
-        onMouseEnter={(event) => {
-          buttonProps.onMouseEnter?.(event)
-          showTooltip()
-        }}
-        onMouseLeave={(event) => {
-          buttonProps.onMouseLeave?.(event)
-          hideTooltip()
-        }}
-        onFocus={(event) => {
-          buttonProps.onFocus?.(event)
-          showTooltip()
-        }}
-        onBlur={(event) => {
-          buttonProps.onBlur?.(event)
-          hideTooltip()
-        }}
-      >
-        {children}
-      </button>
-      {isTooltipVisible && tooltipStyle && typeof document !== 'undefined'
-        ? createPortal(
-            <span
-              className={[
-                'toolbar-tooltip',
-                tooltipPlacement === 'bottom' ? 'bottom' : '',
-                'visible',
-              ].filter(Boolean).join(' ')}
-              role="tooltip"
-              style={tooltipStyle}
-            >
-              {tooltip}
-            </span>,
-            document.body,
-          )
-        : null}
-    </>
-  )
-})
-
-function createDefaultTableColumns(): TableColumn[] {
-  return [
-    { id: 'col-region', field: 'region', header: 'Region', width: 2 },
-    { id: 'col-month', field: 'month', header: 'Month', width: 2 },
-    { id: 'col-revenue', field: 'revenue', header: 'Revenue', width: 1, align: 'right' },
-  ]
-}
-
-function createDefaultRepeatTemplate() {
-  return '{{ row.title }}\n{{ row.description }}'
-}
-
-function formatTableColumns(columns: TableColumn[]): string {
-  return columns
-    .map((column) => [column.field, column.header, String(column.width), column.align ?? 'left'].join(' | '))
-    .join('\n')
-}
-
-function formatNameList(values: string[]): string {
-  return values.join('\n')
-}
-
-function parseNameList(input: string): string[] {
-  return [...new Set(input.split(/\r?\n|,/).map((value) => value.trim()).filter(Boolean))]
-}
-
-function parseTableColumns(input: string, previousColumns: TableColumn[]): TableColumn[] {
-  const parsed = input
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((line, index) => {
-      const [fieldRaw, headerRaw, widthRaw, alignRaw] = line.split('|').map((part) => part.trim())
-      const field = fieldRaw || `column${index + 1}`
-      const width = Number(widthRaw)
-
-      return {
-        id: previousColumns[index]?.id ?? `col-${field}`,
-        field,
-        header: headerRaw || field,
-        width: Number.isFinite(width) && width > 0 ? width : 1,
-        ...(alignRaw && isAlign(alignRaw) ? { align: alignRaw } : {}),
-      }
-    })
-
-  return parsed.length > 0 ? parsed : previousColumns
-}
-
-function getMinimumFrame(type: BlockType) {
-  if (type === 'line') {
-    return { width: 80, height: 4 }
-  }
-
-  if (type === 'table') {
-    return { width: 240, height: 120 }
-  }
-
-  if (type === 'repeat') {
-    return { width: 220, height: 120 }
-  }
-
-  if (type === 'image') {
-    return { width: 120, height: 80 }
-  }
-
-  if (type === 'spacer') {
-    return { width: 80, height: 16 }
-  }
-
-  if (type === 'pageBreak') {
-    return { width: 120, height: 40 }
-  }
-
-  return { width: 120, height: 40 }
-}
-
-function clampFrame(frame: BlockFrame, type: BlockType): BlockFrame {
-  const minimum = getMinimumFrame(type)
-  const width = clamp(frame.width, minimum.width, PAGE_WIDTH)
-  const height = clamp(frame.height, minimum.height, PAGE_HEIGHT)
-
-  return {
-    width,
-    height,
-    x: clamp(frame.x, 0, PAGE_WIDTH - width),
-    y: clamp(frame.y, 0, PAGE_HEIGHT - height),
-  }
-}
-
-function createBlock(type: BlockType, index: number, pageId: string): Block {
-  const baseFrame = clampFrame(
-    {
-      x: 72,
-      y: 96 + index * 84,
-      width:
-        type === 'line'
-          ? 520
-          : type === 'table'
-            ? 420
-            : type === 'repeat'
-              ? 320
-          : type === 'pageBreak'
-            ? 180
-            : type === 'spacer'
-              ? 220
-              : type === 'image'
-                ? 240
-                : 260,
-      height:
-        type === 'line'
-          ? 6
-          : type === 'spacer'
-            ? 28
-            : type === 'pageBreak'
-              ? 40
-              : type === 'image'
-                ? 160
-                : type === 'table'
-                  ? 148
-                  : type === 'repeat'
-                    ? 160
-                  : 72,
-    },
-    type,
-  )
-
-  if (type === 'text') {
-    return { id: nextId(), pageId, type: 'text', value: 'New text block', frame: baseFrame }
-  }
-
-  if (type === 'line') {
-    return { id: nextId(), pageId, type: 'line', thickness: 1, color: '#D8D8D8', frame: baseFrame }
-  }
-
-  if (type === 'spacer') {
-    return { id: nextId(), pageId, type: 'spacer', size: 10, frame: baseFrame }
-  }
-
-  if (type === 'image') {
-    return { id: nextId(), pageId, type: 'image', source: '', sourceMode: 'path', fit: 'contain', alt: 'Image', frame: baseFrame }
-  }
-
-  if (type === 'table') {
-    return {
-      id: nextId(),
-      pageId,
-      type: 'table',
-      name: 'table-block',
-      dataSource: 'items',
-      growthMode: 'grow',
-      overflowMode: 'nextPage',
-      keepTogether: false,
-      columns: createDefaultTableColumns(),
-      frame: baseFrame,
-    }
-  }
-
-  if (type === 'repeat') {
-    return {
-      id: nextId(),
-      pageId,
-      type: 'repeat',
-      name: 'repeat-block',
-      dataSource: 'items',
-      itemTemplate: createDefaultRepeatTemplate(),
-      itemGap: 10,
-      growthMode: 'grow',
-      overflowMode: 'nextPage',
-      keepTogether: false,
-      frame: baseFrame,
-    }
-  }
-
-  return { id: nextId(), pageId, type: 'pageBreak', frame: baseFrame }
-}
-
-function getBlockTypeLabel(type: BlockType, locale: Locale): string {
-  return EDITOR_COPY[locale].blockTypes[type]
-}
-
-function getGrowthModeLabel(mode: 'fixed' | 'grow', locale: Locale) {
-  const copy = EDITOR_COPY[locale]
-  return mode === 'grow' ? copy.growDown : copy.fixed
-}
-
-function getOverflowModeLabel(mode: 'nextPage' | 'truncate', locale: Locale) {
-  const copy = EDITOR_COPY[locale]
-  return mode === 'nextPage' ? copy.nextPage : copy.truncate
-}
-
-function getBlockSummary(block: Block, locale: Locale): string {
-  const copy = EDITOR_COPY[locale]
-
-  if (block.type === 'text') {
-    return block.value || copy.emptyTextBlock
-  }
-
-  if (block.type === 'line') {
-    return `${block.thickness}px · ${block.color}`
-  }
-
-  if (block.type === 'spacer') {
-    return copy.spacerSummary(block.size)
-  }
-
-  if (block.type === 'image') {
-    return block.source ? block.alt || block.source : copy.emptyImageBlock
-  }
-
-  if (block.type === 'table') {
-    return `${block.dataSource} · ${copy.columnsCount(block.columns.length)} · ${getGrowthModeLabel(block.growthMode, locale)} / ${getOverflowModeLabel(block.overflowMode, locale)}`
-  }
-
-  if (block.type === 'repeat') {
-    return `${block.dataSource} · ${copy.gap} ${block.itemGap} · ${getGrowthModeLabel(block.growthMode, locale)} / ${getOverflowModeLabel(block.overflowMode, locale)}`
-  }
-
-  return copy.forceNewPage
-}
-
-function expandSelectionForBlocks(blocks: Block[], blockIds: string[], primaryId?: string | null) {
-  if (blockIds.length === 0) {
-    return []
-  }
-
-  const directIds = new Set(blockIds)
-  const groupIds = new Set(
-    blocks
-      .filter((block) => directIds.has(block.id) && block.groupId)
-      .map((block) => block.groupId as string),
-  )
-  const orderedIds = blocks
-    .filter((block) => directIds.has(block.id) || (block.groupId && groupIds.has(block.groupId)))
-    .map((block) => block.id)
-
-  if (primaryId && orderedIds.includes(primaryId)) {
-    return [...orderedIds.filter((id) => id !== primaryId), primaryId]
-  }
-
-  return orderedIds
-}
-
-function getGroupBlockIds(blocks: Block[], groupId: string) {
-  return blocks.filter((block) => block.groupId === groupId).map((block) => block.id)
-}
-
-function isExactGroupSelection(blocks: Block[], selectedIds: string[], groupId: string) {
-  const groupBlockIds = getGroupBlockIds(blocks, groupId)
-
-  return (
-    groupBlockIds.length > 1
-    && groupBlockIds.length === selectedIds.length
-    && groupBlockIds.every((id) => selectedIds.includes(id))
-  )
-}
-
-function isTextEntryTarget(target: EventTarget | null) {
-  if (!(target instanceof HTMLElement)) {
-    return false
-  }
-
-  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
-}
-
-function getNextZoom(currentZoom: number, direction: -1 | 1): number {
-  const currentIndex = ZOOM_LEVELS.findIndex((level) => level >= currentZoom)
-  const safeIndex = currentIndex === -1 ? ZOOM_LEVELS.length - 1 : currentIndex
-  const nextIndex = clamp(safeIndex + direction, 0, ZOOM_LEVELS.length - 1)
-
-  return ZOOM_LEVELS[nextIndex]
-}
-
 function App() {
-  const [config, setConfig] = useState<ReportConfig>(initialConfig)
+  const bootConfig = useMemo(() => loadDraftConfig() ?? initialConfig, [])
+
+  const [config, setConfig] = useState<ReportConfig>(bootConfig)
   const [locale, setLocale] = useState<Locale>(getInitialLocale)
-  const [activePageId, setActivePageId] = useState<string>(initialConfig.pages[0]?.id ?? 'p1')
+  const [activePageId, setActivePageId] = useState<string>(bootConfig.pages[0]?.id ?? 'p1')
   const [selectedIds, setSelectedIds] = useState<string[]>(() => {
-    const initialPageId = initialConfig.pages[0]?.id ?? 'p1'
-    const firstBlock = initialConfig.blocks.find((block) => block.pageId === initialPageId)
+    const initialPageId = bootConfig.pages[0]?.id ?? 'p1'
+    const firstBlock = bootConfig.blocks.find((block) => block.pageId === initialPageId)
     return firstBlock ? [firstBlock.id] : []
   })
   const [canvasZoom, setCanvasZoom] = useState(1)
@@ -530,15 +81,24 @@ function App() {
   const [showYamlPanel, setShowYamlPanel] = useState(false)
   const [showLayersPanel, setShowLayersPanel] = useState(false)
   const [showDocPanel, setShowDocPanel] = useState(false)
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(getDraftSavedAt)
   const [moveTargetPageId, setMoveTargetPageId] = useState<string>('')
   const [pageElement, setPageElement] = useState<HTMLElement | null>(null)
   const [canvasViewportElement, setCanvasViewportElement] = useState<HTMLDivElement | null>(null)
+  const canvasZoomRef = useRef(1)
   const layersBtnRef = useRef<HTMLButtonElement | null>(null)
   const docBtnRef = useRef<HTMLButtonElement | null>(null)
   const topRulerRef = useRef<HTMLDivElement | null>(null)
   const leftRulerRef = useRef<HTMLDivElement | null>(null)
   const stageRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const projectFileInputRef = useRef<HTMLInputElement | null>(null)
+  const selectedIdsRef = useRef<string[]>([])
+  const selectedGroupIdsRef = useRef<string[]>([])
+  const removeSelectedBlockRef = useRef<() => void>(() => {})
+  const duplicateSelectedRef = useRef<() => void>(() => {})
+  const groupSelectedRef = useRef<() => void>(() => {})
+  const ungroupSelectedRef = useRef<() => void>(() => {})
   const moveableRef = useRef<Moveable | null>(null)
   const horizontalGuidesRef = useRef<GuidesInstance | null>(null)
   const verticalGuidesRef = useRef<GuidesInstance | null>(null)
@@ -549,6 +109,19 @@ function App() {
       window.localStorage.setItem(EDITOR_LANGUAGE_STORAGE_KEY, locale)
     }
   }, [locale])
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const savedAt = saveDraftConfig(config)
+      if (savedAt) {
+        setLastSavedAt(savedAt)
+      }
+    }, 450)
+
+    return () => {
+      window.clearTimeout(timeoutId)
+    }
+  }, [config])
 
   const schemaObject = useMemo(() => buildSchema(config), [config])
   const yamlOutput = useMemo(() => toYaml(schemaObject), [schemaObject])
@@ -573,7 +146,10 @@ function App() {
     selectedBlocks.length > 0 && selectedBlocks.every((block) => block.type === selectedBlocks[0].type)
       ? selectedBlocks[0].type
       : null
-  const selectedGroupIds = [...new Set(selectedBlocks.map((block) => block.groupId).filter((value): value is string => Boolean(value)))]
+  const selectedGroupIds = useMemo(
+    () => [...new Set(selectedBlocks.map((block) => block.groupId).filter((value): value is string => Boolean(value)))],
+    [selectedBlocks],
+  )
   const selectedWholeGroupId =
     selectedGroupIds.length === 1 && isExactGroupSelection(currentPageBlocks, selectedIds, selectedGroupIds[0])
       ? selectedGroupIds[0]
@@ -581,22 +157,26 @@ function App() {
   const selectionBounds = getSelectionBounds(selectedBlocks)
   const selectionOutlineInset = selectedWholeGroupId ? 7 : isGroupSelection ? 4 : 0
   const pageMoveOptions = config.pages.filter((page) => page.id !== activePage?.id)
+  const fallbackMoveTargetPageId = pageMoveOptions[0]?.id ?? ''
+  const resolvedMoveTargetPageId =
+    pageMoveOptions.some((page) => page.id === moveTargetPageId) ? moveTargetPageId : fallbackMoveTargetPageId
 
   const selectedBlock = currentPageBlocks.find((b) => b.id === selectedId) ?? null
+  const savedTimeLabel =
+    lastSavedAt
+      ? copy.lastSaved(
+          new Date(lastSavedAt).toLocaleTimeString(locale === 'es' ? 'es-UY' : 'en-US', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+        )
+      : copy.neverSaved
 
   useEffect(() => {
-    const fallbackPageId = pageMoveOptions[0]?.id ?? ''
+    canvasZoomRef.current = canvasZoom
+  }, [canvasZoom])
 
-    setMoveTargetPageId((current) => {
-      if (pageMoveOptions.some((page) => page.id === current)) {
-        return current
-      }
-
-      return fallbackPageId
-    })
-  }, [pageMoveOptions])
-
-  function syncGuidesScroll(nextZoom = canvasZoom) {
+  const syncGuidesScroll = useCallback((nextZoom = canvasZoomRef.current) => {
     const stage = stageRef.current
     if (!stage) {
       return
@@ -604,7 +184,7 @@ function App() {
 
     horizontalGuidesRef.current?.scroll(stage.scrollLeft, nextZoom)
     verticalGuidesRef.current?.scroll(stage.scrollTop, nextZoom)
-  }
+  }, [])
 
   useEffect(() => {
     const topRulerHost = topRulerRef.current
@@ -643,13 +223,13 @@ function App() {
     const syncAfterPaint = requestAnimationFrame(() => {
       horizontalGuides.resize()
       verticalGuides.resize()
-      syncGuidesScroll(canvasZoom)
+      syncGuidesScroll(canvasZoomRef.current)
     })
 
     const handleResize = () => {
       horizontalGuides.resize()
       verticalGuides.resize()
-      syncGuidesScroll(canvasZoom)
+      syncGuidesScroll(canvasZoomRef.current)
     }
 
     window.addEventListener('resize', handleResize)
@@ -664,7 +244,7 @@ function App() {
       topRulerHost.replaceChildren()
       leftRulerHost.replaceChildren()
     }
-  }, [])
+  }, [syncGuidesScroll])
 
   useEffect(() => {
     horizontalGuidesRef.current?.zoomTo(canvasZoom)
@@ -672,7 +252,7 @@ function App() {
     horizontalGuidesRef.current?.resize(canvasZoom)
     verticalGuidesRef.current?.resize(canvasZoom)
     syncGuidesScroll(canvasZoom)
-  }, [canvasZoom])
+  }, [canvasZoom, syncGuidesScroll])
 
   useEffect(() => {
     if (!showRulers || !pageElement) {
@@ -688,7 +268,7 @@ function App() {
     return () => {
       cancelAnimationFrame(syncAfterPaint)
     }
-  }, [canvasZoom, pageElement, showRulers])
+  }, [canvasZoom, pageElement, showRulers, syncGuidesScroll])
 
   useEffect(() => {
     if (!isInspectorOpen && !showLayersPanel && !showDocPanel) {
@@ -723,46 +303,6 @@ function App() {
       window.removeEventListener('mousedown', handleClickOutside)
     }
   }, [isInspectorOpen, showLayersPanel, showDocPanel])
-
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (isTextEntryTarget(event.target)) {
-        return
-      }
-
-      const isMeta = event.metaKey || event.ctrlKey
-      const key = event.key.toLowerCase()
-
-      if ((event.key === 'Delete' || event.key === 'Backspace') && selectedIds.length > 0) {
-        event.preventDefault()
-        removeSelectedBlock()
-        return
-      }
-
-      if (isMeta && !event.shiftKey && key === 'd' && selectedIds.length > 0) {
-        event.preventDefault()
-        duplicateSelected()
-        return
-      }
-
-      if (isMeta && !event.shiftKey && key === 'g' && selectedIds.length > 1) {
-        event.preventDefault()
-        groupSelected()
-        return
-      }
-
-      if (isMeta && event.shiftKey && key === 'g' && selectedGroupIds.length > 0) {
-        event.preventDefault()
-        ungroupSelected()
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown)
-    }
-  }, [selectedIds, selectedGroupIds])
 
   function setSelection(ids: string[], primaryId?: string | null) {
     setSelectedIds(expandSelectionForBlocks(currentPageBlocks, ids, primaryId))
@@ -926,7 +466,7 @@ function App() {
     setSelectedIds(movedIds)
   }
 
-  function removeSelectedBlock() {
+  const removeSelectedBlock = useCallback(() => {
     if (selectedIds.length === 0) {
       return
     }
@@ -936,7 +476,7 @@ function App() {
       blocks: prev.blocks.filter((block) => !selectedIds.includes(block.id)),
     }))
     setSelectedIds([])
-  }
+  }, [selectedIds])
 
   function updateSelectedBlock(updater: (current: Block) => Block) {
     if (!selectedId) {
@@ -995,7 +535,7 @@ function App() {
     })
   }
 
-  function duplicateSelected() {
+  const duplicateSelected = useCallback(() => {
     if (selectedIds.length === 0) {
       return
     }
@@ -1017,7 +557,7 @@ function App() {
             : undefined
           const clone = {
             ...block,
-            id: nextId(),
+            id: nextBlockId(),
             groupId: nextGroup,
             frame: clampFrame(
               {
@@ -1037,25 +577,86 @@ function App() {
     })
 
     setSelectedIds(nextSelection)
-  }
+  }, [selectedIds])
 
-  function groupSelected() {
+  const groupSelected = useCallback(() => {
     if (selectedIds.length < 2) {
       return
     }
 
     const groupId = nextGroupId()
 
-    updateSelectedBlocks((block) => ({ ...block, groupId }))
-  }
+    setConfig((prev) => ({
+      ...prev,
+      blocks: prev.blocks.map((block) =>
+        selectedIds.includes(block.id) ? { ...block, groupId } : block,
+      ),
+    }))
+  }, [selectedIds])
 
-  function ungroupSelected() {
+  const ungroupSelected = useCallback(() => {
     if (selectedIds.length === 0) {
       return
     }
 
-    updateSelectedBlocks((block) => ({ ...block, groupId: undefined }))
-  }
+    setConfig((prev) => ({
+      ...prev,
+      blocks: prev.blocks.map((block) =>
+        selectedIds.includes(block.id) ? { ...block, groupId: undefined } : block,
+      ),
+    }))
+  }, [selectedIds])
+
+  useEffect(() => {
+    selectedIdsRef.current = selectedIds
+    selectedGroupIdsRef.current = selectedGroupIds
+    removeSelectedBlockRef.current = removeSelectedBlock
+    duplicateSelectedRef.current = duplicateSelected
+    groupSelectedRef.current = groupSelected
+    ungroupSelectedRef.current = ungroupSelected
+  }, [duplicateSelected, groupSelected, removeSelectedBlock, selectedGroupIds, selectedIds, ungroupSelected])
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (isTextEntryTarget(event.target)) {
+        return
+      }
+
+      const isMeta = event.metaKey || event.ctrlKey
+      const key = event.key.toLowerCase()
+      const currentSelectedIds = selectedIdsRef.current
+      const currentSelectedGroupIds = selectedGroupIdsRef.current
+
+      if ((event.key === 'Delete' || event.key === 'Backspace') && currentSelectedIds.length > 0) {
+        event.preventDefault()
+        removeSelectedBlockRef.current()
+        return
+      }
+
+      if (isMeta && !event.shiftKey && key === 'd' && currentSelectedIds.length > 0) {
+        event.preventDefault()
+        duplicateSelectedRef.current()
+        return
+      }
+
+      if (isMeta && !event.shiftKey && key === 'g' && currentSelectedIds.length > 1) {
+        event.preventDefault()
+        groupSelectedRef.current()
+        return
+      }
+
+      if (isMeta && event.shiftKey && key === 'g' && currentSelectedGroupIds.length > 0) {
+        event.preventDefault()
+        ungroupSelectedRef.current()
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [])
 
   function alignSelection(mode: 'left' | 'center' | 'right' | 'top' | 'middle' | 'bottom') {
     if (!selectionBounds || selectedIds.length === 0) {
@@ -1228,6 +829,61 @@ function App() {
     a.download = `${config.name || 'report'}.frpt.yaml`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  function saveDraftNow() {
+    const savedAt = saveDraftConfig(config)
+    if (savedAt) {
+      setLastSavedAt(savedAt)
+    }
+  }
+
+  function clearDraftNow() {
+    clearDraftConfig()
+    setLastSavedAt(null)
+  }
+
+  function downloadProjectFile() {
+    const content = createProjectFileContent(config)
+    const blob = new Blob([content], { type: 'application/json;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = `${config.name || 'report'}.frpt.json`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }
+
+  function requestProjectImport() {
+    projectFileInputRef.current?.click()
+  }
+
+  function loadProjectFile(file: File | null) {
+    if (!file) {
+      return
+    }
+
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      const content = typeof reader.result === 'string' ? reader.result : ''
+      const parsedConfig = parseProjectFileContent(content)
+
+      if (!parsedConfig) {
+        window.alert(copy.importProjectError)
+        return
+      }
+
+      setConfig(parsedConfig)
+      setActivePageId(parsedConfig.pages[0]?.id ?? 'p1')
+      setSelectedIds([])
+      const savedAt = saveDraftConfig(parsedConfig)
+      if (savedAt) {
+        setLastSavedAt(savedAt)
+      }
+    }
+
+    reader.readAsText(file)
   }
 
   async function copyYaml() {
@@ -2422,6 +2078,7 @@ function App() {
           <span className="status-pill accent">
             {selectedIds.length > 0 ? copy.selectedStatus(selectedIds.length) : copy.noSelectionStatus}
           </span>
+          <span className="status-pill">{savedTimeLabel}</span>
         </div>
         <div className="topbar-controls">
           <label className="topbar-language">
@@ -2556,6 +2213,19 @@ function App() {
                       }
                     />
                   </label>
+                  <label className="toolbar-dropdown-field" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span>{copy.showPageNumbers}</span>
+                    <input
+                      type="checkbox"
+                      checked={config.showPageNumbers !== false}
+                      onChange={(e) =>
+                        setConfig((prev) => ({
+                          ...prev,
+                          showPageNumbers: e.target.checked,
+                        }))
+                      }
+                    />
+                  </label>
                 </div>
               </div>
             )}
@@ -2634,7 +2304,7 @@ function App() {
           </TooltipButton>
           <label className="toolbar-field toolbar-field-medium">
             <span>{copy.moveSelection}</span>
-            <select value={moveTargetPageId} onChange={(e) => setMoveTargetPageId(e.target.value)} disabled={pageMoveOptions.length === 0}>
+            <select value={resolvedMoveTargetPageId} onChange={(e) => setMoveTargetPageId(e.target.value)} disabled={pageMoveOptions.length === 0}>
               {pageMoveOptions.length === 0 ? (
                 <option value="">{copy.noDestination}</option>
               ) : (
@@ -2645,7 +2315,7 @@ function App() {
               )}
             </select>
           </label>
-          <TooltipButton type="button" className="toolbar-button" onClick={() => moveSelectedToPage(moveTargetPageId)} disabled={!moveTargetPageId || selectedIds.length === 0} tooltip={copy.send}>
+          <TooltipButton type="button" className="toolbar-button" onClick={() => moveSelectedToPage(resolvedMoveTargetPageId)} disabled={!resolvedMoveTargetPageId || selectedIds.length === 0} tooltip={copy.send}>
             {copy.send}
           </TooltipButton>
         </div>
@@ -2738,6 +2408,18 @@ function App() {
 
         {/* RIGHT: actions */}
         <div className="toolbar-group">
+          <TooltipButton type="button" className="toolbar-button" onClick={saveDraftNow} tooltip={copy.saveDraftTitle}>
+            {copy.saveDraft}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={clearDraftNow} tooltip={copy.clearDraftTitle}>
+            {copy.clearDraft}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={requestProjectImport} tooltip={copy.importProjectTitle}>
+            {copy.importProject}
+          </TooltipButton>
+          <TooltipButton type="button" className="toolbar-button" onClick={downloadProjectFile} tooltip={copy.exportProjectTitle}>
+            {copy.exportProject}
+          </TooltipButton>
           <TooltipButton
             type="button"
             className={showYamlPanel ? 'toolbar-button toolbar-toggle active' : 'toolbar-button toolbar-toggle'}
@@ -2970,6 +2652,17 @@ function App() {
         className="visually-hidden"
         onChange={(event) => {
           loadImageFile(event.target.files?.[0] ?? null)
+          event.target.value = ''
+        }}
+      />
+
+      <input
+        ref={projectFileInputRef}
+        type="file"
+        accept="application/json,.json,.frpt.json"
+        className="visually-hidden"
+        onChange={(event) => {
+          loadProjectFile(event.target.files?.[0] ?? null)
           event.target.value = ''
         }}
       />

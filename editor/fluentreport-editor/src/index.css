@@ -1,18 +1,18 @@
 @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
 :root {
-  --bg-a: #eef3f8;
-  --bg-b: #e6ecf3;
+  --bg-a: #f0f4f8;
+  --bg-b: #e5edf5;
   --panel: rgba(255, 255, 255, 0.96);
   --panel-alt: rgba(247, 250, 252, 0.96);
-  --stroke: #d6dee7;
-  --stroke-strong: #c1ccd8;
+  --stroke: #d3dde8;
+  --stroke-strong: #bfccd9;
   --ink: #162435;
   --ink-soft: #415367;
   --ink-dim: #6a7b8f;
-  --mint-deep: #0e6077;
+  --mint-deep: #0a627d;
   --mint-soft: #e6f2f6;
-  --panel-shadow: 0 10px 28px rgba(26, 41, 58, 0.08);
+  --panel-shadow: 0 14px 36px rgba(22, 38, 56, 0.1);
   --font-sans: 'Sora', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
 }
@@ -34,8 +34,9 @@ body {
   font-family: var(--font-sans);
   color: var(--ink);
   background:
-    radial-gradient(circle at 10% 0%, rgba(14, 96, 119, 0.08), transparent 34%),
-    radial-gradient(circle at 100% 0%, rgba(73, 104, 138, 0.08), transparent 28%),
+    radial-gradient(circle at 12% -8%, rgba(10, 98, 125, 0.1), transparent 30%),
+    radial-gradient(circle at 100% -10%, rgba(56, 93, 132, 0.1), transparent 26%),
+    radial-gradient(circle at 50% 110%, rgba(10, 98, 125, 0.05), transparent 34%),
     linear-gradient(165deg, var(--bg-a), var(--bg-b));
 }
 

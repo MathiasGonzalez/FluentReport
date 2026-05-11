@@ -15,6 +15,7 @@ namespace FluentReport.Schema;
 /// </summary>
 public sealed class SchemaDocumentFactory
 {
+    private const int SupportedSchemaVersion = 1;
     private static readonly Regex TemplateRegex = new("\\{\\{\\s*(?<expr>[^}]+)\\s*\\}\\}", RegexOptions.Compiled);
 
     private readonly IDictionary<string, IEnumerable<object>> _dataSources;
@@ -85,6 +86,15 @@ public sealed class SchemaDocumentFactory
 
     private Document Build(ReportSchema schema)
     {
+        if (!string.IsNullOrWhiteSpace(schema.Kind) &&
+            !string.Equals(schema.Kind, "FluentReport", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new NotSupportedException($"Document kind '{schema.Kind}' is not supported. Expected 'FluentReport'.");
+        }
+
+        if (schema.SchemaVersion != SupportedSchemaVersion)
+            throw new NotSupportedException($"Schema version '{schema.SchemaVersion}' is not supported. Supported version: {SupportedSchemaVersion}.");
+
         if (schema.Pages is null || schema.Pages.Count == 0)
             throw new ArgumentException("Schema must contain at least one page.", nameof(schema));
 
@@ -170,11 +180,8 @@ public sealed class SchemaDocumentFactory
             "table" => BuildTable(node),
             "repeat" => BuildRepeat(node),
             "groupinstance" => BuildGroupInstance(node),
-            _ => null
+            _ => throw new InvalidOperationException($"Unsupported node type '{node.Type}'{FormatNodeSuffix(node)}.")
         };
-
-        if (element == null)
-            return null;
 
         if (!type.Equals("text", StringComparison.OrdinalIgnoreCase)
             && TryParseHorizontalAlignment(node.Align, out var align))
@@ -227,7 +234,7 @@ public sealed class SchemaDocumentFactory
         };
 
         if (!string.IsNullOrWhiteSpace(node.Color))
-            line.Color = ParseColor(node.Color!, ReportColor.Black);
+            line.Color = ParseColor(node.Color!, $"line color{FormatNodeSuffix(node)}");
 
         var frame = node.Frame;
         if (frame?.Height > frame?.Width)
@@ -241,6 +248,9 @@ public sealed class SchemaDocumentFactory
         var sourceValue = ResolveTemplate(node.Source?.Value ?? string.Empty, row);
         var mode = (node.Source?.Mode ?? "path").ToLowerInvariant();
 
+        if (string.IsNullOrWhiteSpace(sourceValue))
+            throw new InvalidOperationException($"Image source value is required{FormatNodeSuffix(node)}.");
+
         ImageElement image;
         if (mode is "base64" or "bytes")
         {
@@ -250,20 +260,24 @@ public sealed class SchemaDocumentFactory
             }
             catch (FormatException)
             {
-                return new SpacerElement();
+                throw new InvalidOperationException($"Image source is not valid base64{FormatNodeSuffix(node)}.");
             }
             catch (ArgumentException)
             {
-                return new SpacerElement();
+                throw new InvalidOperationException($"Image source is not valid base64{FormatNodeSuffix(node)}.");
             }
         }
-        else
+        else if (mode == "path")
         {
             var path = sourceValue;
             if (!Path.IsPathRooted(path) && !string.IsNullOrWhiteSpace(_baseDirectory))
                 path = Path.Combine(_baseDirectory!, path);
 
             image = new ImageElement(path);
+        }
+        else
+        {
+            throw new InvalidOperationException($"Unsupported image source mode '{node.Source?.Mode}'{FormatNodeSuffix(node)}.");
         }
 
         if (node.Frame?.Width > 0)
@@ -324,8 +338,11 @@ public sealed class SchemaDocumentFactory
 
     private IElement? BuildGroupInstance(SchemaNode node)
     {
-        if (string.IsNullOrWhiteSpace(node.GroupRef) || !_groups.TryGetValue(node.GroupRef, out var group))
-            return null;
+        if (string.IsNullOrWhiteSpace(node.GroupRef))
+            throw new InvalidOperationException($"groupInstance requires 'groupRef'{FormatNodeSuffix(node)}.");
+
+        if (!_groups.TryGetValue(node.GroupRef, out var group))
+            throw new InvalidOperationException($"Group definition '{node.GroupRef}' was not found{FormatNodeSuffix(node)}.");
 
         var region = new RegionNode { Nodes = group.Nodes ?? [] };
         return BuildRegion(region);
@@ -346,11 +363,15 @@ public sealed class SchemaDocumentFactory
             return null;
 
         if (!_repeatables.TryGetValue(definitionRef, out var definition))
-            return null;
+            throw new InvalidOperationException($"Repeatable definition '{definitionRef}' was not found.");
 
-        return string.Equals(definition.Type, expectedType, StringComparison.OrdinalIgnoreCase)
-            ? definition
-            : null;
+        if (!string.Equals(definition.Type, expectedType, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                $"Repeatable definition '{definitionRef}' has type '{definition.Type}', expected '{expectedType}'.");
+        }
+
+        return definition;
     }
 
     private IEnumerable<Dictionary<string, object?>> GetDataRows(string? dataSourceName)
@@ -359,7 +380,7 @@ public sealed class SchemaDocumentFactory
             return [];
 
         if (!_dataSources.TryGetValue(dataSourceName, out var rows))
-            return [];
+            throw new InvalidOperationException($"Data source '{dataSourceName}' was not provided.");
 
         return rows.Select(ToDictionary);
     }
@@ -515,20 +536,29 @@ public sealed class SchemaDocumentFactory
     {
         var style = new TextStyle();
 
-        if (!string.IsNullOrWhiteSpace(node.StyleRef) && _styles.TryGetValue(node.StyleRef, out var styleRef))
+        if (!string.IsNullOrWhiteSpace(node.StyleRef))
+        {
+            if (!_styles.TryGetValue(node.StyleRef, out var styleRef))
+                throw new InvalidOperationException($"Style '{node.StyleRef}' was not found{FormatNodeSuffix(node)}.");
+
             ApplyTextStyle(style, styleRef);
+        }
 
         if (node.FontSize.HasValue) style.FontSize = node.FontSize.Value;
         if (!string.IsNullOrWhiteSpace(node.FontFamily)) style.FontFamily = node.FontFamily;
         if (node.Bold.HasValue) style.Bold = node.Bold.Value;
         if (node.Italic.HasValue) style.Italic = node.Italic.Value;
         if (node.Underline.HasValue) style.Underline = node.Underline.Value;
-        if (!string.IsNullOrWhiteSpace(node.Color)) style.Color = ParseColor(node.Color!, style.Color);
+        if (!string.IsNullOrWhiteSpace(node.Color))
+            style.Color = ParseColor(node.Color!, $"text color{FormatNodeSuffix(node)}");
         if (node.LineSpacing.HasValue) style.LineSpacing = node.LineSpacing.Value;
         if (TryParseTextAlignment(node.Align, out var align)) style.Alignment = align;
 
         return style;
     }
+
+    private static string FormatNodeSuffix(SchemaNode node)
+        => string.IsNullOrWhiteSpace(node.Id) ? string.Empty : $" (node '{node.Id}')";
 
     private static void ApplyTextStyle(TextStyle target, TextStyle source)
     {
@@ -549,7 +579,8 @@ public sealed class SchemaDocumentFactory
         if (style.Bold.HasValue) target.Bold = style.Bold.Value;
         if (style.Italic.HasValue) target.Italic = style.Italic.Value;
         if (style.Underline.HasValue) target.Underline = style.Underline.Value;
-        if (!string.IsNullOrWhiteSpace(style.Color)) target.Color = ParseColor(style.Color!, target.Color);
+        if (!string.IsNullOrWhiteSpace(style.Color))
+            target.Color = ParseColor(style.Color!, "style color");
         if (style.LineSpacing.HasValue) target.LineSpacing = style.LineSpacing.Value;
         if (TryParseTextAlignment(style.Align, out var align)) target.Alignment = align;
     }
@@ -580,23 +611,23 @@ public sealed class SchemaDocumentFactory
         return !string.IsNullOrWhiteSpace(value);
     }
 
-    private static ReportColor ParseColor(string raw, ReportColor fallback)
+    private static ReportColor ParseColor(string raw, string context)
     {
         try
         {
             return ReportColor.FromHex(raw);
         }
-        catch (ArgumentException)
+        catch (ArgumentException ex)
         {
-            return fallback;
+            throw new InvalidOperationException($"Invalid {context}: '{raw}'.", ex);
         }
-        catch (FormatException)
+        catch (FormatException ex)
         {
-            return fallback;
+            throw new InvalidOperationException($"Invalid {context}: '{raw}'.", ex);
         }
-        catch (OverflowException)
+        catch (OverflowException ex)
         {
-            return fallback;
+            throw new InvalidOperationException($"Invalid {context}: '{raw}'.", ex);
         }
     }
 

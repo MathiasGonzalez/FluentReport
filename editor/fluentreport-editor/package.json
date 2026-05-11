@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@radix-ui/react-tooltip": "^1.2.8",
     "@scena/guides": "^0.29.2",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",

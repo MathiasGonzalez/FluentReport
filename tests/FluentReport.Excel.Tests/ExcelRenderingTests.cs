@@ -2,6 +2,7 @@ using ClosedXML.Excel;
 using FluentReport;
 using FluentReport.Core;
 using FluentReport.Excel;
+using FluentReport.Schema;
 
 namespace FluentReport.Excel.Tests;
 
@@ -263,6 +264,77 @@ public class ExcelRenderingTests
 
         Assert.NotEmpty(bytes);
     }
+
+        // ── Schema integration ───────────────────────────────────────────────────
+
+        [Fact]
+        public void GenerateExcel_FromSchemaJson_WritesExpectedCellValue()
+        {
+                                const string json = """
+                                                {
+                                                    "kind": "FluentReport",
+                                                    "schemaVersion": 1,
+                                                    "pages": [
+                                                        {
+                                                            "id": "p1",
+                                                            "regions": {
+                                                                "content": {
+                                                                    "nodes": [
+                                                                        {
+                                                                            "id": "t1",
+                                                                            "type": "text",
+                                                                            "value": "Hello from schema"
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                                """;
+
+                                var bytes = DocumentSchemaExtensions.FromSchemaJson(json).GenerateExcel();
+
+                using var ms = new MemoryStream(bytes);
+                using var workbook = new XLWorkbook(ms);
+                var sheet = workbook.Worksheet(1);
+                Assert.Equal("Hello from schema", sheet.Cell(1, 1).GetString());
+        }
+
+        [Fact]
+        public void GenerateExcel_FromSchemaJson_WithMissingDataSource_Throws()
+        {
+                                const string json = """
+                                                {
+                                                    "kind": "FluentReport",
+                                                    "schemaVersion": 1,
+                                                    "pages": [
+                                                        {
+                                                            "id": "p1",
+                                                            "regions": {
+                                                                "content": {
+                                                                    "nodes": [
+                                                                        {
+                                                                            "id": "table-1",
+                                                                            "type": "table",
+                                                                            "dataSource": "sales",
+                                                                            "columns": [
+                                                                                {
+                                                                                    "field": "region",
+                                                                                    "header": "Region"
+                                                                                }
+                                                                            ]
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                                """;
+
+                                Assert.Throws<InvalidOperationException>(() => DocumentSchemaExtensions.FromSchemaJson(json).GenerateExcel());
+        }
 
     [Fact]
     public void GenerateExcel_WritesToStream()

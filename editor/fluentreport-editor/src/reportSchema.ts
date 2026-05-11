@@ -210,7 +210,7 @@ function getPageRegions(): { header: SchemaRegion; content: SchemaRegion; footer
   }
 }
 
-function buildPageRegions(blocks: Block[]) {
+function buildPageRegions(blocks: Block[], showPageNumbers: boolean) {
   const zIndexById = new Map(blocks.map((block, index) => [block.id, index]))
   const emittedGroups = new Set<string>()
   const regions = getPageRegions()
@@ -244,21 +244,23 @@ function buildPageRegions(blocks: Block[]) {
     ]
   })
 
-  regions.footer.nodes = [
-    {
-      id: 'footer-pagination',
-      type: 'text',
-      frame: serializeFrame(regions.footer.frame),
-      zIndex: 0,
-      align: 'center',
-      runs: [
-        { value: 'Page ' },
-        { token: 'currentPage' },
-        { value: ' of ' },
-        { token: 'totalPages' },
-      ],
-    },
-  ]
+  regions.footer.nodes = showPageNumbers
+    ? [
+        {
+          id: 'footer-pagination',
+          type: 'text',
+          frame: serializeFrame(regions.footer.frame),
+          zIndex: 0,
+          align: 'center',
+          runs: [
+            { value: 'Page ' },
+            { token: 'currentPage' },
+            { value: ' of ' },
+            { token: 'totalPages' },
+          ],
+        },
+      ]
+    : []
 
   return regions
 }
@@ -557,7 +559,10 @@ export function buildSchema(config: ReportConfig) {
     pages: config.pages.map((page) => ({
       id: page.id,
       ...DEFAULT_PAGE_SETTINGS,
-      regions: buildPageRegions(config.blocks.filter((block) => block.pageId === page.id)),
+      regions: buildPageRegions(
+        config.blocks.filter((block) => block.pageId === page.id),
+        config.showPageNumbers !== false,
+      ),
     })),
   }
 }

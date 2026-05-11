@@ -2,6 +2,7 @@ using FluentReport;
 using FluentReport.Builders;
 using FluentReport.Core;
 using FluentReport.Html;
+using FluentReport.Schema;
 
 namespace FluentReport.Html.Tests;
 
@@ -250,6 +251,68 @@ public class HtmlRenderingTests
         var fragment = SimpleDocument().GenerateHtmlFragment(OutlookOptions);
         Assert.DoesNotContain("o:OfficeDocumentSettings", fragment);
     }
+
+        // ── Schema integration ───────────────────────────────────────────────────
+
+        [Fact]
+        public void GenerateHtml_FromSchemaJson_RendersExpectedContent()
+        {
+                                const string json = """
+                                                {
+                                                    "kind": "FluentReport",
+                                                    "schemaVersion": 1,
+                                                    "pages": [
+                                                        {
+                                                            "id": "p1",
+                                                            "regions": {
+                                                                "content": {
+                                                                    "nodes": [
+                                                                        {
+                                                                            "id": "t1",
+                                                                            "type": "text",
+                                                                            "value": "Hello from schema"
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                                """;
+
+                                var html = DocumentSchemaExtensions.FromSchemaJson(json).GenerateHtml();
+
+                Assert.Contains("Hello from schema", html);
+                Assert.Contains("<!DOCTYPE html>", html);
+        }
+
+        [Fact]
+        public void GenerateHtml_FromSchemaJson_WithUnknownNodeType_Throws()
+        {
+                                const string json = """
+                                                {
+                                                    "kind": "FluentReport",
+                                                    "schemaVersion": 1,
+                                                    "pages": [
+                                                        {
+                                                            "id": "p1",
+                                                            "regions": {
+                                                                "content": {
+                                                                    "nodes": [
+                                                                        {
+                                                                            "id": "x1",
+                                                                            "type": "unsupportedType"
+                                                                        }
+                                                                    ]
+                                                                }
+                                                            }
+                                                        }
+                                                    ]
+                                                }
+                                                """;
+
+                                Assert.Throws<InvalidOperationException>(() => DocumentSchemaExtensions.FromSchemaJson(json).GenerateHtml());
+        }
 
     // ── File / stream overloads ───────────────────────────────────────────────
 
