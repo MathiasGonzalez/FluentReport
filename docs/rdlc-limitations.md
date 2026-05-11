@@ -2,7 +2,7 @@
 
 ## Limitations
 
-1. **Expressions** — Only `=Fields!X.Value`, `=Parameters!X.Value`, and literals are evaluated. Any other expression (aggregates, `IIF`, `Format`, `Globals!`, concatenations) is replaced with an empty string.
+1. **Expressions** — Supported: `=Fields!X.Value`, `=First(Fields!X.Value, "DataSet")`, `=Parameters!X.Value`, `=IIF(...)`, `=Switch(...)`, and literals. Other expressions (aggregates, `Format`, `Globals!`, concatenations, arithmetic) are replaced with an empty string.
 
 2. **Advanced Tablix** — `<RowGroups>` / `<ColumnGroups>` with multiple hierarchy levels are not processed. The parser detects detail rows via `<Group>` presence and falls back to expression heuristics; complex structures may not render as expected.
 

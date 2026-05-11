@@ -1,3 +1,4 @@
+using FluentReport.Core;
 using FluentReport.Elements;
 using FluentReport.Styling;
 
@@ -172,6 +173,16 @@ public class ContainerBuilder
     public ContainerBuilder Subreport(Document nested)
     {
         _child = new SubreportElement(nested);
+        return this;
+    }
+
+    /// <summary>
+    /// Renders arbitrary drawing commands at a fixed size.
+    /// Useful for vector graphics regions imported from external sources.
+    /// </summary>
+    public ContainerBuilder Canvas(float width, float height, Action<IDrawingCanvas, Position, Size> draw)
+    {
+        _child = new CanvasElement(width, height, draw);
         return this;
     }
 

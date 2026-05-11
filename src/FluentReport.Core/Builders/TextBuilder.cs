@@ -27,6 +27,16 @@ public class TextBuilder
     public TextBuilder AlignJustify() { _text.Style.Alignment = TextAlignment.Justify; return this; }
     public TextBuilder LineSpacing(float spacing) { _text.Style.LineSpacing = spacing; return this; }
 
+    /// <summary>
+    /// Applies a visual rotation (in degrees, counter-clockwise) to the rendered text.
+    /// <para>
+    /// <b>Important:</b> Rotation is a render-only transform. Text measurement and layout
+    /// calculations do not account for the rotated bounding box, so rotated text may
+    /// overlap neighbouring elements or be clipped at page/container edges.
+    /// </para>
+    /// </summary>
+    public TextBuilder Rotate(float degrees) { _text.Style.Rotation = degrees; return this; }
+
     public ContainerBuilder Padding(float all) => _parent?.Padding(all) ?? throw new InvalidOperationException("No parent container");
     public ContainerBuilder PaddingVertical(float v) => _parent?.PaddingVertical(v) ?? throw new InvalidOperationException("No parent container");
     public ContainerBuilder PaddingHorizontal(float h) => _parent?.PaddingHorizontal(h) ?? throw new InvalidOperationException("No parent container");

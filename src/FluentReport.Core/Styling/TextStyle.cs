@@ -11,6 +11,9 @@ public class TextStyle
     public TextAlignment Alignment { get; set; } = TextAlignment.Left;
     public float LineSpacing { get; set; } = 1.2f;
 
+    /// <summary>Rotation angle in degrees, counter-clockwise (PDF convention). Default 0 = horizontal.</summary>
+    public float Rotation { get; set; } = 0f;
+
     /// <summary>
     /// Optional delegate that overrides <see cref="Bold"/> at render time.
     /// The delegate receives no arguments; close over any data context you need.
@@ -49,6 +52,7 @@ public class TextStyle
         Color = Color,
         Alignment = Alignment,
         LineSpacing = LineSpacing,
+        Rotation = Rotation,
         BoldResolver = BoldResolver,
         ItalicResolver = ItalicResolver,
         ColorResolver = ColorResolver

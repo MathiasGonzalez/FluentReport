@@ -2,17 +2,17 @@
 
 [![NuGet](https://img.shields.io/nuget/v/FluentReport.Excel.svg?label=FluentReport.Excel)](https://www.nuget.org/packages/FluentReport.Excel)
 
-Renderer **Excel (.xlsx)** para FluentReport. Genera planillas Excel directamente desde el mismo fluent API que se usa para PDF, usando **ClosedXML** como motor de escritura.
+**Excel (.xlsx)** renderer for FluentReport. Generates Excel spreadsheets directly from the same fluent API used for PDF, using **ClosedXML** as the writing engine.
 
-## Instalación
+## Installation
 
 ```shell
 dotnet add package FluentReport.Excel
 ```
 
-> Requiere también `FluentReport` (se instala automáticamente como dependencia transitiva).
+> Also requires `FluentReport` (installed automatically as a transitive dependency).
 
-## Uso rápido
+## Quick start
 
 ```csharp
 using FluentReport;
@@ -27,7 +27,7 @@ Document.Create(c =>
         page.MarginAll(40);
 
         page.Header()
-            .Text("Resumen de Ventas").FontSize(18).Bold().AlignCenter();
+            .Text("Sales Summary").FontSize(18).Bold().AlignCenter();
 
         page.Content().Table(table =>
         {
@@ -41,54 +41,54 @@ Document.Create(c =>
 
             table.Header(h =>
             {
-                h.Cell().Background("#4472C4").Padding(4).Text("Región").Bold().Color("#FFFFFF");
-                h.Cell().Background("#4472C4").Padding(4).Text("Unidades").Bold().Color("#FFFFFF");
-                h.Cell().Background("#4472C4").Padding(4).Text("Ingresos").Bold().Color("#FFFFFF");
+                h.Cell().Background("#4472C4").Padding(4).Text("Region").Bold().Color("#FFFFFF");
+                h.Cell().Background("#4472C4").Padding(4).Text("Units").Bold().Color("#FFFFFF");
+                h.Cell().Background("#4472C4").Padding(4).Text("Revenue").Bold().Color("#FFFFFF");
             });
 
-            table.Cell().Padding(4).Text("Norte");
+            table.Cell().Padding(4).Text("North");
             table.Cell().Padding(4).Text("1.200");
             table.Cell().Padding(4).Text("$48.000");
         });
     });
 })
-.GenerateExcel("reporte.xlsx");
+.GenerateExcel("report.xlsx");
 ```
 
-## API de generación
+## Generation API
 
-| Método | Descripción |
+| Method | Description |
 |--------|-------------|
-| `.GenerateExcel(filePath)` | Guarda el `.xlsx` en disco |
-| `.GenerateExcel(stream)` | Escribe el `.xlsx` en un `Stream` |
-| `.GenerateExcel()` | Devuelve el `.xlsx` como `byte[]` |
+| `.GenerateExcel(filePath)` | Saves the `.xlsx` to disk |
+| `.GenerateExcel(stream)` | Writes the `.xlsx` to a `Stream` |
+| `.GenerateExcel()` | Returns the `.xlsx` as `byte[]` |
 
-## Comportamiento por elemento
+## Element behavior
 
-| Elemento | Comportamiento en Excel |
+| Element | Behavior in Excel |
 |----------|------------------------|
-| `Text(...)` | Celda con formato (negrita, color, tamaño, alineación) |
-| `Column(...)` | Apila elementos en filas consecutivas |
-| `Row(...)` | Coloca elementos en columnas del mismo rango de filas |
-| `Table(...)` | Filas y columnas proporcionales a la definición |
-| `Header` / `Footer` | Al inicio y al final del worksheet |
-| `Line(...)` | Borde inferior en la fila actual |
-| `PageBreak()` | Crea un nuevo worksheet en el workbook |
-| `Background(...)` | Color de fondo de celda |
-| `Border(...)` | Borde de celda |
-| `AlignCenter()` / `AlignRight()` | Alineación horizontal |
-| `Padding(...)` | Ignorado (Excel no tiene padding por celda) |
-| `Spacer(...)` | Fila vacía |
-| `Image(...)` | No soportado |
+| `Text(...)` | Formatted cell (bold, color, size, alignment) |
+| `Column(...)` | Stacks elements in consecutive rows |
+| `Row(...)` | Places elements in columns within the same row range |
+| `Table(...)` | Rows and columns proportional to definition |
+| `Header` / `Footer` | At the start and end of the worksheet |
+| `Line(...)` | Bottom border on the current row |
+| `PageBreak()` | Creates a new worksheet in the workbook |
+| `Background(...)` | Cell background color |
+| `Border(...)` | Cell border |
+| `AlignCenter()` / `AlignRight()` | Horizontal alignment |
+| `Padding(...)` | Ignored (Excel has no per-cell padding) |
+| `Spacer(...)` | Empty row |
+| `Image(...)` | Not supported |
 
-## Paquetes del ecosistema
+## Ecosystem packages
 
-| Paquete | Función |
+| Package | Purpose |
 |---------|---------|
-| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Modelo y API fluent |
-| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | Renderer PDF |
-| `FluentReport.Excel` | Renderer Excel — este paquete |
-| [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | Renderer HTML / email |
-| [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | Importador RDLC / SSRS |
+| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Model and fluent API |
+| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer |
+| `FluentReport.Excel` | Excel renderer - this package |
+| [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer |
+| [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
 
-> 📖 Documentación completa en el [repositorio](https://github.com/MathiasGonzalez/FluentReport).
+> Full documentation is available in the [repository](https://github.com/MathiasGonzalez/FluentReport).

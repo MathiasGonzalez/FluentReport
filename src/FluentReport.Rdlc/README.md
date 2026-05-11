@@ -2,80 +2,85 @@
 
 [![NuGet](https://img.shields.io/nuget/v/FluentReport.Rdlc.svg?label=FluentReport.Rdlc)](https://www.nuget.org/packages/FluentReport.Rdlc)
 
-Importador **RDLC / SSRS** para FluentReport. Convierte archivos `.rdlc` (Visual Studio Report Designer / SQL Server Reporting Services) en documentos FluentReport, permitiendo renderizarlos como **PDF**, **Excel** o **HTML** sin dependencias de SSRS.
+**RDLC / SSRS** importer for FluentReport. Converts `.rdlc` files (Visual Studio Report Designer / SQL Server Reporting Services) into FluentReport documents, allowing them to be rendered as **PDF**, **Excel**, or **HTML** without SSRS dependencies.
 
-## Instalación
+## Installation
 
 ```shell
 dotnet add package FluentReport.Rdlc
 ```
 
-## Uso rápido
+## Quick start
 
 ```csharp
 using FluentReport.Rdlc;
 
-// Desde un archivo en disco
+// From a file on disk
 var doc = DocumentRdlcExtensions.FromRdlc(
-    "reportes/catalogo.rdlc",
+    "reports/catalog.rdlc",
     datasets: new Dictionary<string, IEnumerable<object>>
     {
-        ["Productos"] = productos.Cast<object>()
+        ["Products"] = products.Cast<object>()
     },
     parameters: new Dictionary<string, object>
     {
-        ["Empresa"] = "Acme Corp."
+        ["Company"] = "Acme Corp."
     });
 
-doc.GeneratePdf("catalogo.pdf");
+doc.GeneratePdf("catalog.pdf");
 
-// Desde un Stream (útil con recursos embebidos)
+// From a Stream (useful with embedded resources)
 using var stream = Assembly.GetExecutingAssembly()
-    .GetManifestResourceStream("MyApp.Reports.catalogo.rdlc")!;
+    .GetManifestResourceStream("MyApp.Reports.catalog.rdlc")!;
 var doc2 = DocumentRdlcExtensions.FromRdlcStream(stream, datasets, parameters);
-doc2.GenerateExcel("catalogo.xlsx");
+doc2.GenerateExcel("catalog.xlsx");
 
-// Desde una cadena XML
+// From an XML string
 var doc3 = DocumentRdlcExtensions.FromRdlcXml(xmlString, datasets, parameters);
 ```
 
 ## API
 
-| Método | Descripción |
+| Method | Description |
 |--------|-------------|
-| `FromRdlc(path, datasets, parameters)` | Importa desde archivo |
-| `FromRdlcStream(stream, datasets, parameters)` | Importa desde `Stream` |
-| `FromRdlcXml(xml, datasets, parameters)` | Importa desde `string` XML |
+| `FromRdlc(path, datasets, parameters)` | Imports from file |
+| `FromRdlcStream(stream, datasets, parameters)` | Imports from `Stream` |
+| `FromRdlcXml(xml, datasets, parameters)` | Imports from XML `string` |
 
-## Elementos RDLC soportados
+## Supported RDLC elements
 
-| Elemento RDLC | Equivalente FluentReport |
+| RDLC element | FluentReport equivalent |
 |---------------|--------------------------|
 | `Textbox` | `TextElement` |
 | `Line` | `LineElement` |
 | `Image` | `ImageElement` |
-| `Tablix` | `TableElement` (con datos y `ColSpan`) |
-| `PageHeader` / `PageFooter` | Header / Footer de página |
-| Márgenes y tamaño de página | `PageSettings` |
+| `Tablix` | `TableElement` (with data and `ColSpan`) |
+| `PageHeader` / `PageFooter` | Page header / footer |
+| Margins and page size | `PageSettings` |
 
-## Expresiones soportadas
+## Supported expressions
 
-| Expresión | Resultado |
+| Expression | Result |
 |-----------|-----------|
-| `=Fields!NombreCampo.Value` | Valor del campo en el dataset |
-| `=Parameters!NombreParam.Value` | Valor del parámetro |
-| Literal (sin `=`) | Texto estático |
+| `=Fields!FieldName.Value` | Field value from the dataset |
+| `=First(Fields!FieldName.Value, "DataSetName")` | Field value from the first row of the named dataset |
+| `=Parameters!ParamName.Value` | Parameter value |
+| `=IIF(condition, trueValue, falseValue)` | Conditional expression (supports simple equality checks) |
+| `=Switch(cond1, val1, cond2, val2, ...)` | Multi-branch conditional expression |
+| Literal (without `=`) | Static text |
 
-> 📄 Full documentation and limitations: [`docs/api.md#rdlc-import`](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/api.md#rdlc-import) · [`docs/rdlc-limitations.md`](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/rdlc-limitations.md)
+Unsupported/unknown expressions still resolve to an empty string.
 
-## Paquetes del ecosistema
+> Full documentation and limitations: [`docs/api.md#rdlc-import`](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/api.md#rdlc-import) · [`docs/rdlc-limitations.md`](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/rdlc-limitations.md)
 
-| Paquete | Función |
+## Ecosystem packages
+
+| Package | Purpose |
 |---------|---------|
-| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Modelo y API fluent |
-| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | Renderer PDF |
-| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Renderer Excel |
-| [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | Renderer HTML / email |
-| `FluentReport.Rdlc` | Importador RDLC — este paquete |
+| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Model and fluent API |
+| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer |
+| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel renderer |
+| [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer |
+| `FluentReport.Rdlc` | RDLC importer - this package |
 
-> 📖 Documentación completa en el [repositorio](https://github.com/MathiasGonzalez/FluentReport).
+> Full documentation is available in the [repository](https://github.com/MathiasGonzalez/FluentReport).

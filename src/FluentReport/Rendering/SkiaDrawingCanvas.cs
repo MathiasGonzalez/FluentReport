@@ -62,7 +62,21 @@ public sealed class SkiaDrawingCanvas(SKCanvas canvas) : IDrawingCanvas
             DrawTextAlign.Right => SKTextAlign.Right,
             _ => SKTextAlign.Left
         };
-        canvas.DrawText(text, x, y, skAlign, font, paint);
+
+        if (style.Rotation != 0f)
+        {
+            // PDF rotation is CCW (positive = CCW). In Skia (Y-down) the same visual effect
+            // requires the opposite sign: rotate CW by the same magnitude.
+            canvas.Save();
+            canvas.Translate(x, y);
+            canvas.RotateDegrees(-style.Rotation);
+            canvas.DrawText(text, 0, 0, skAlign, font, paint);
+            canvas.Restore();
+        }
+        else
+        {
+            canvas.DrawText(text, x, y, skAlign, font, paint);
+        }
     }
 
     public void DrawImageBytes(byte[] bytes, float x, float y, float width, float height)
@@ -106,6 +120,9 @@ public sealed class SkiaDrawingCanvas(SKCanvas canvas) : IDrawingCanvas
 
     public float MeasureText(string text, float fontSize, string? fontFamily = null)
         => _measurer.MeasureText(text, fontSize, fontFamily);
+
+    public float GetTextAscent(TextStyle style)
+        => _measurer.GetTextAscent(style);
 
     public List<string> WrapText(string text, TextStyle style, float maxWidth)
         => _measurer.WrapText(text, style, maxWidth);

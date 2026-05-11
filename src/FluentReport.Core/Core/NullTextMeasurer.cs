@@ -21,6 +21,10 @@ internal sealed class NullTextMeasurer : ITextMeasurer
         => throw new InvalidOperationException(
             "No ITextMeasurer is configured. Set MeasureContext.Measurer before calling Measure() on text-bearing elements.");
 
+    public float GetTextAscent(TextStyle style)
+        => throw new InvalidOperationException(
+            "No ITextMeasurer is configured. Set MeasureContext.Measurer before calling Measure() on text-bearing elements.");
+
     public List<string> WrapText(string text, TextStyle style, float maxWidth)
         => throw new InvalidOperationException(
             "No ITextMeasurer is configured. Set MeasureContext.Measurer before calling Measure() on text-bearing elements.");

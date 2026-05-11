@@ -7,6 +7,8 @@ namespace FluentReport.Html.Tests;
 
 public class HtmlRenderingTests
 {
+    private static readonly HtmlRendererOptions OutlookOptions = new() { OutlookCompatible = true };
+
     private static Document SimpleDocument(Action<PageBuilder>? configure = null) =>
         Document.Create(c =>
         {
@@ -187,6 +189,66 @@ public class HtmlRenderingTests
 
         Assert.Contains("Page One Content", html);
         Assert.Contains("Page Two Content", html);
+    }
+
+    // ── OutlookCompatible ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void GenerateHtml_OutlookCompatible_AddsRolePresentationToTables()
+    {
+        var html = SimpleDocument().GenerateHtml(OutlookOptions);
+        Assert.Contains("role=\"presentation\"", html);
+    }
+
+    [Fact]
+    public void GenerateHtml_Default_DoesNotAddRolePresentationToTables()
+    {
+        var html = SimpleDocument().GenerateHtml();
+        Assert.DoesNotContain("role=\"presentation\"", html);
+    }
+
+    [Fact]
+    public void GenerateHtml_OutlookCompatible_AddsBgcolorAttribute()
+    {
+        var html = SimpleDocument().GenerateHtml(OutlookOptions);
+        Assert.Contains("bgcolor=", html);
+    }
+
+    [Fact]
+    public void GenerateHtml_Default_DoesNotAddBgcolorAttribute()
+    {
+        var html = SimpleDocument().GenerateHtml();
+        Assert.DoesNotContain("bgcolor=", html);
+    }
+
+    [Fact]
+    public void GenerateHtml_OutlookCompatible_InjectsOfficeDocumentSettingsBlock()
+    {
+        var html = SimpleDocument().GenerateHtml(OutlookOptions);
+        Assert.Contains("o:OfficeDocumentSettings", html);
+        Assert.Contains("o:PixelsPerInch", html);
+    }
+
+    [Fact]
+    public void GenerateHtml_Default_DoesNotInjectOfficeDocumentSettingsBlock()
+    {
+        var html = SimpleDocument().GenerateHtml();
+        Assert.DoesNotContain("o:OfficeDocumentSettings", html);
+    }
+
+    [Fact]
+    public void GenerateHtml_OutlookCompatible_OfficeDocumentSettingsHasXmlnsDeclaration()
+    {
+        var html = SimpleDocument().GenerateHtml(OutlookOptions);
+        Assert.Contains("xmlns:o=\"urn:schemas-microsoft-com:office:office\"", html);
+    }
+
+    [Fact]
+    public void GenerateHtmlFragment_OutlookCompatible_DoesNotContainOfficeDocumentSettings()
+    {
+        // The OfficeDocumentSettings block belongs in <head> — it must NOT appear in fragments.
+        var fragment = SimpleDocument().GenerateHtmlFragment(OutlookOptions);
+        Assert.DoesNotContain("o:OfficeDocumentSettings", fragment);
     }
 
     // ── File / stream overloads ───────────────────────────────────────────────
