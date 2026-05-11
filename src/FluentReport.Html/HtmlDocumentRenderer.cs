@@ -46,7 +46,7 @@ public class HtmlDocumentRenderer
         sb.AppendLine("  <title>Document</title>");
         if (_options.OutlookCompatible)
         {
-            sb.AppendLine("  <!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch><o:AllowPNG/></o:OfficeDocumentSettings></xml><![endif]-->");
+            sb.AppendLine("  <!--[if mso]><xml><o:OfficeDocumentSettings xmlns:o=\"urn:schemas-microsoft-com:office:office\"><o:PixelsPerInch>96</o:PixelsPerInch><o:AllowPNG/></o:OfficeDocumentSettings></xml><![endif]-->");
         }
         sb.AppendLine("</head>");
         sb.AppendLine($"<body style=\"margin: 0; padding: 20px 0; background-color: #f5f5f5; font-family: {Encode(_options.FontFamily)};\">");

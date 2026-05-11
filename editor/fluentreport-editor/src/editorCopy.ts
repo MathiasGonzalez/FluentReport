@@ -4,7 +4,7 @@ export const EDITOR_LANGUAGE_STORAGE_KEY = 'fluentreport-editor-locale'
 
 export const LOCALE_OPTIONS: Array<{ value: Locale; label: string }> = [
   { value: 'en', label: 'English' },
-  { value: 'es', label: 'Espanol' },
+  { value: 'es', label: 'Español' },
 ]
 
 export function isLocale(value: string): value is Locale {
