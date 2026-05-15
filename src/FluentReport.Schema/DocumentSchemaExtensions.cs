@@ -125,4 +125,23 @@ public static class DocumentSchemaExtensions
     /// </summary>
     public static ValidationResult ValidateSchemaJson(string json)
         => SchemaValidator.ValidateJson(json);
+
+    /// <summary>
+    /// Converts a FluentReport schema (YAML or JSON) to equivalent C# <c>Document.Create()</c>
+    /// fluent-API code. Useful for migrating a declarative schema to programmatic code.
+    /// </summary>
+    /// <param name="schema">Schema YAML or JSON content.</param>
+    /// <param name="format">
+    /// Optional format hint: <c>"yaml"</c> or <c>"json"</c>.
+    /// When omitted the format is auto-detected from the first character of the content.
+    /// </param>
+    /// <returns>A C# source-code string.</returns>
+    public static string ToFluentCSharp(string schema, string? format = null)
+    {
+        bool isJson = !string.IsNullOrWhiteSpace(format)
+            ? string.Equals(format.Trim(), "json", StringComparison.OrdinalIgnoreCase)
+            : schema.TrimStart() is { Length: > 0 } t && (t[0] == '{' || t[0] == '[');
+
+        return SchemaCodeGenerator.GenerateCSharp(schema, isJson);
+    }
 }

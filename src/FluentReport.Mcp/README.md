@@ -35,7 +35,8 @@ The server communicates over **stdio** (standard MCP transport). Configure it in
 | `render_to_html` | Renders schema → HTML string (full page or fragment) |
 | `render_to_excel` | Renders schema → base64 XLSX |
 | `list_node_types` | Returns documentation for all supported node types |
-| `get_schema_template` | Returns a ready-to-use YAML template (`minimal`, `invoice`, `table_report`) |
+| `get_schema_template` | Returns a ready-to-use YAML template (`minimal`, `invoice`, `table_report`, and Uruguayan document types — see below) |
+| `schema_to_csharp` | Converts a YAML/JSON schema to equivalent C# `Document.Create()` fluent-API code |
 
 ## Typical agent workflow
 
@@ -45,7 +46,35 @@ The server communicates over **stdio** (standard MCP transport). Configure it in
 3. validate_schema(schema)              → check for errors without rendering
 4. render_to_html(schema, dataSources)  → preview in the chat window
 5. render_to_pdf(schema, dataSources)   → final output
+6. schema_to_csharp(schema)             → optional: get equivalent C# code
 ```
+
+## Schema → C# workflow (for image/description-based generation)
+
+When an AI agent sees a document image or receives a natural-language description,
+it can use the MCP tools to produce ready-to-compile C# code:
+
+```
+1. get_schema_template("invoice")       → start from the closest template
+   — or —
+   list_node_types()                    → discover available elements
+2. Build / adjust the schema            → match the image or description
+3. validate_schema(schema)              → confirm there are no errors
+4. schema_to_csharp(schema)             → convert to C# Document.Create() code
+```
+
+## Uruguayan document templates
+
+`get_schema_template` supports these Uruguayan fiscal and legal document types:
+
+| useCase | Document |
+|---------|----------|
+| `factura_uy` | e-Factura / CFE (DGI) |
+| `recibo_sueldo_uy` | Recibo de Sueldo (MTSS) |
+| `remito_uy` | Remito de Entrega (DGI Res. 2.530/991) |
+| `recibo_pago_uy` | Recibo de Pago (Cód. Comercio) |
+
+YAML examples with inline usage instructions are also available in [`examples/uy-docs/`](../../examples/uy-docs/).
 
 ## Data sources format
 
