@@ -333,13 +333,14 @@ public sealed class SchemaDocumentFactory
     {
         var table = new TableElement();
         var columns = ResolveTableColumns(node);
+        bool headerBold = node.HeaderBold ?? true;
 
         foreach (var column in columns)
         {
             table.Columns.Add(new TableColumnDefinition { RelativeWidth = column.Width ?? 1 });
 
             var headerText = new TextElement(column.Header ?? column.Field ?? string.Empty);
-            headerText.Style.Bold = true;
+            headerText.Style.Bold = headerBold;
             if (TryParseTextAlignment(column.Align, out var headerAlign))
                 headerText.Style.Alignment = headerAlign;
 
@@ -358,8 +359,10 @@ public sealed class SchemaDocumentFactory
             }
         }
 
-        table.BorderWidth = 0.5f;
-        table.BorderColor = ReportColor.LightGray;
+        table.BorderWidth = node.CellBorderWidth ?? 0.5f;
+        table.BorderColor = !string.IsNullOrWhiteSpace(node.CellBorderColor)
+            ? ParseColor(node.CellBorderColor!, $"cellBorderColor{FormatNodeSuffix(node)}")
+            : ReportColor.LightGray;
         return table;
     }
 

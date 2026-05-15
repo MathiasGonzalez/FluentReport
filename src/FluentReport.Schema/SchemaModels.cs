@@ -150,6 +150,9 @@ internal sealed class SchemaNode
     public string? GrowthMode { get; set; }
     public string? OverflowMode { get; set; }
     public bool? KeepTogether { get; set; }
+    public float? CellBorderWidth { get; set; }
+    public string? CellBorderColor { get; set; }
+    public bool? HeaderBold { get; set; }
 
     // group instance
     public string? GroupRef { get; set; }
