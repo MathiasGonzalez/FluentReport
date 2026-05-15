@@ -1,0 +1,203 @@
+kind: FluentReport
+schemaVersion: 1
+name: recibo-pago-uy
+metadata:
+  title: "Recibo de Pago Nº {{parameters.numero}}"
+
+# ──────────────────────────────────────────────────────────────────
+# Recibo de Pago – Uruguay
+# Comprobante de pago emitido por el beneficiario.
+# Base legal: Código de Comercio, Ley 16.060.
+# Campos: beneficiario, pagador, monto (cifra y letras), concepto, forma de pago.
+#
+# Uso con FluentReport.Schema:
+#   var doc = DocumentSchemaExtensions.FromSchemaYaml(
+#       File.ReadAllText("recibo-pago.frpt.yaml"),
+#       parameters: new Dictionary<string,object>
+#       {
+#           ["numero"]="RP-2026-00001",
+#           ["fecha"]="01/06/2026",
+#           ["benef_nombre"]="Empresa Demo S.A.", ["benef_rut"]="21234567-1",
+#           ["benef_domicilio"]="Av. 18 de Julio 1234, Montevideo",
+#           ["pagador_nombre"]="Cliente S.A.", ["pagador_rut"]="21234568-0",
+#           ["concepto"]="Pago de factura A 00000001 – Servicios Mayo 2026",
+#           ["monto_cifra"]="$ 41.300", ["monto_letras"]="Cuarenta y un mil trescientos pesos uruguayos",
+#           ["moneda"]="Pesos Uruguayos (UYU)",
+#           ["forma_pago"]="Transferencia bancaria",
+#           ["cuenta"]="Cuenta: 001-XXXXXX-X – BROU"
+#       }
+#   );
+# ──────────────────────────────────────────────────────────────────
+
+pageDefaults:
+  size: A4
+  orientation: portrait
+  margin:
+    top: 40
+    right: 40
+    bottom: 50
+    left: 40
+
+parameters:
+  numero:
+    type: string
+    required: true
+  fecha:
+    type: string
+    required: true
+  benef_nombre:
+    type: string
+    required: true
+  benef_rut:
+    type: string
+    required: true
+  benef_domicilio:
+    type: string
+  pagador_nombre:
+    type: string
+    required: true
+  pagador_rut:
+    type: string
+  concepto:
+    type: string
+    required: true
+  monto_cifra:
+    type: string
+    required: true
+  monto_letras:
+    type: string
+    required: true
+  moneda:
+    type: string
+  forma_pago:
+    type: string
+  cuenta:
+    type: string
+
+styles:
+  heading:
+    fontSize: 13
+    bold: true
+  label:
+    fontSize: 9
+    bold: true
+    color: "#444444"
+  body:
+    fontSize: 9
+  small:
+    fontSize: 8
+    color: "#444444"
+  sectionTitle:
+    fontSize: 10
+    bold: true
+    color: "#003366"
+  amount:
+    fontSize: 22
+    bold: true
+    color: "#003366"
+    align: center
+  legal:
+    fontSize: 7
+    color: "#444444"
+    align: center
+
+pages:
+  - regions:
+      header:
+        nodes:
+          - type: text
+            value: "{{parameters.benef_nombre}}"
+            styleRef: heading
+
+          - type: text
+            value: "RUT: {{parameters.benef_rut}}  |  {{parameters.benef_domicilio}}"
+            styleRef: small
+
+          - type: line
+            thickness: 0.5
+            color: "#AAAAAA"
+
+          - type: text
+            value: RECIBO DE PAGO
+            styleRef: sectionTitle
+            align: center
+
+          - type: text
+            value: "Nº: {{parameters.numero}}  |  Fecha: {{parameters.fecha}}"
+            styleRef: label
+            align: center
+
+      content:
+        nodes:
+          - type: text
+            value: "Recibí de:"
+            styleRef: sectionTitle
+
+          - type: text
+            value: "{{parameters.pagador_nombre}}"
+            styleRef: body
+
+          - type: text
+            value: "RUT: {{parameters.pagador_rut}}"
+            styleRef: body
+
+          - type: spacer
+            size: 8
+
+          - type: text
+            value: "{{parameters.monto_cifra}}"
+            styleRef: amount
+
+          - type: text
+            value: "({{parameters.monto_letras}}) – {{parameters.moneda}}"
+            styleRef: body
+            align: center
+
+          - type: spacer
+            size: 8
+
+          - type: text
+            value: "En concepto de:"
+            styleRef: label
+
+          - type: text
+            value: "{{parameters.concepto}}"
+            styleRef: body
+
+          - type: spacer
+            size: 6
+
+          - type: text
+            value: "Forma de pago: {{parameters.forma_pago}}"
+            styleRef: body
+
+          - type: text
+            value: "{{parameters.cuenta}}"
+            styleRef: body
+
+          - type: spacer
+            size: 24
+
+          - type: line
+            thickness: 0.5
+            color: "#AAAAAA"
+
+          - type: text
+            value: "Firma: _______________________"
+            styleRef: small
+            align: right
+
+          - type: text
+            value: "{{parameters.benef_nombre}}"
+            styleRef: small
+            align: right
+
+      footer:
+        nodes:
+          - type: line
+            thickness: 0.5
+            color: "#AAAAAA"
+
+          - type: text
+            value: "El presente recibo cancela totalmente la obligación indicada en el concepto (Código de Comercio, Ley 16.060)."
+            styleRef: legal

@@ -1,0 +1,245 @@
+kind: FluentReport
+schemaVersion: 1
+name: recibo-sueldo-uy
+metadata:
+  title: "Recibo de Sueldo – {{parameters.trab_nombre}} – {{parameters.periodo_desc}}"
+
+# ──────────────────────────────────────────────────────────────────
+# Recibo de Sueldo – Uruguay
+# Comprobante obligatorio conforme al Decreto-Ley 14.188 (MTSS).
+# Incluye: empleador, trabajador, período, haberes, descuentos BPS/IRPF y neto.
+#
+# Uso con FluentReport.Schema:
+#   var doc = DocumentSchemaExtensions.FromSchemaYaml(
+#       File.ReadAllText("recibo-sueldo.frpt.yaml"),
+#       dataSources: new Dictionary<string, IEnumerable<object>>
+#       {
+#           ["haberes"] = new[]
+#           {
+#               new Dictionary<string,object> { ["concepto"]="Sueldo nominal", ["monto"]="$ 60.000" },
+#               new Dictionary<string,object> { ["concepto"]="Horas extra",    ["monto"]="$ 3.000"  },
+#               new Dictionary<string,object> { ["concepto"]="Viáticos",       ["monto"]="$ 1.500"  },
+#           },
+#           ["descuentos"] = new[]
+#           {
+#               new Dictionary<string,object> { ["concepto"]="BPS Jubilación",    ["tasa"]="15 %",   ["monto"]="$ 9.450" },
+#               new Dictionary<string,object> { ["concepto"]="BPS FONASA",        ["tasa"]="3 %",    ["monto"]="$ 1.890" },
+#               new Dictionary<string,object> { ["concepto"]="BPS Seg. Desempleo",["tasa"]="0.125 %",["monto"]="$    79" },
+#               new Dictionary<string,object> { ["concepto"]="IRPF",             ["tasa"]="—",      ["monto"]="$ 1.200" },
+#               new Dictionary<string,object> { ["concepto"]="FRL",              ["tasa"]="1 %",    ["monto"]="$   630" },
+#           }
+#       },
+#       parameters: new Dictionary<string,object>
+#       {
+#           ["emp_nombre"]="Empresa Demo S.A.", ["emp_rut"]="21234567-1",
+#           ["emp_domicilio"]="Av. 18 de Julio 1234, Montevideo",
+#           ["trab_nombre"]="Juan Carlos Pérez López", ["trab_ci"]="1.234.567-8",
+#           ["trab_cargo"]="Desarrollador", ["trab_legajo"]="00123", ["trab_bps"]="987654321",
+#           ["periodo_desc"]="Mayo 2026", ["periodo_from"]="01/05/2026",
+#           ["periodo_to"]="31/05/2026", ["fecha_pago"]="05/06/2026",
+#           ["total_haberes"]="$ 64.500", ["total_descuentos"]="$ 13.249", ["neto_liquidar"]="$ 51.251"
+#       }
+#   );
+# ──────────────────────────────────────────────────────────────────
+
+pageDefaults:
+  size: A4
+  orientation: portrait
+  margin:
+    top: 40
+    right: 40
+    bottom: 50
+    left: 40
+
+parameters:
+  emp_nombre:
+    type: string
+    required: true
+  emp_rut:
+    type: string
+    required: true
+  emp_domicilio:
+    type: string
+  trab_nombre:
+    type: string
+    required: true
+  trab_ci:
+    type: string
+  trab_cargo:
+    type: string
+  trab_legajo:
+    type: string
+  trab_bps:
+    type: string
+  periodo_desc:
+    type: string
+    required: true
+  periodo_from:
+    type: string
+  periodo_to:
+    type: string
+  fecha_pago:
+    type: string
+    required: true
+  total_haberes:
+    type: string
+    required: true
+  total_descuentos:
+    type: string
+    required: true
+  neto_liquidar:
+    type: string
+    required: true
+
+dataSources:
+  haberes:
+    type: array
+  descuentos:
+    type: array
+
+styles:
+  heading:
+    fontSize: 13
+    bold: true
+  label:
+    fontSize: 9
+    bold: true
+    color: "#444444"
+  body:
+    fontSize: 9
+  small:
+    fontSize: 8
+    color: "#444444"
+  sectionTitle:
+    fontSize: 10
+    bold: true
+    color: "#003366"
+  netoPay:
+    fontSize: 14
+    bold: true
+    color: "#003366"
+    align: right
+  legal:
+    fontSize: 7
+    color: "#444444"
+    align: center
+
+pages:
+  - regions:
+      header:
+        nodes:
+          - type: text
+            value: "{{parameters.emp_nombre}}"
+            styleRef: heading
+
+          - type: text
+            value: "RUT: {{parameters.emp_rut}}  |  {{parameters.emp_domicilio}}"
+            styleRef: small
+
+          - type: line
+            thickness: 0.5
+            color: "#AAAAAA"
+
+          - type: text
+            value: RECIBO DE SUELDO
+            styleRef: sectionTitle
+            align: center
+
+          - type: text
+            value: "Período: {{parameters.periodo_desc}}  ({{parameters.periodo_from}} – {{parameters.periodo_to}})  |  Fecha de pago: {{parameters.fecha_pago}}"
+            styleRef: label
+            align: center
+
+      content:
+        nodes:
+          - type: text
+            value: Datos del Trabajador
+            styleRef: sectionTitle
+
+          - type: text
+            value: "Nombre: {{parameters.trab_nombre}}"
+            styleRef: body
+
+          - type: text
+            value: "C.I.: {{parameters.trab_ci}}  |  Cargo: {{parameters.trab_cargo}}  |  Legajo: {{parameters.trab_legajo}}  |  N° BPS: {{parameters.trab_bps}}"
+            styleRef: small
+
+          - type: spacer
+            size: 8
+
+          - type: text
+            value: Haberes
+            styleRef: sectionTitle
+
+          - type: table
+            dataSource: haberes
+            borderWidth: 0.5
+            borderColor: "#DDDDDD"
+            columns:
+              - field: concepto
+                header: Concepto
+                width: 4
+              - field: monto
+                header: Monto
+                width: 2
+                align: right
+
+          - type: spacer
+            size: 6
+
+          - type: text
+            value: Descuentos
+            styleRef: sectionTitle
+
+          - type: table
+            dataSource: descuentos
+            borderWidth: 0.5
+            borderColor: "#DDDDDD"
+            columns:
+              - field: concepto
+                header: Concepto
+                width: 4
+              - field: tasa
+                header: Tasa
+                width: 1
+                align: center
+              - field: monto
+                header: Monto
+                width: 2
+                align: right
+
+          - type: spacer
+            size: 8
+
+          - type: line
+            thickness: 1
+            color: "#003366"
+
+          - type: text
+            value: "Total haberes: {{parameters.total_haberes}}"
+            styleRef: body
+            align: right
+
+          - type: text
+            value: "Total descuentos: {{parameters.total_descuentos}}"
+            styleRef: body
+            align: right
+
+          - type: text
+            value: "NETO A LIQUIDAR: {{parameters.neto_liquidar}}"
+            styleRef: netoPay
+
+      footer:
+        nodes:
+          - type: line
+            thickness: 0.5
+            color: "#AAAAAA"
+
+          - type: text
+            value: "Comprobante obligatorio conforme al Decreto-Ley 14.188 (MTSS). Tasas BPS: Jubilación 15 %, FONASA 3 %, Seg. Desempleo 0.125 %, FRL 1 %."
+            styleRef: legal
+
+          - type: text
+            value: "Firma del trabajador en conformidad: _______________________"
+            styleRef: legal
+            align: right

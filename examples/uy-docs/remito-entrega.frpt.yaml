@@ -1,0 +1,207 @@
+kind: FluentReport
+schemaVersion: 1
+name: remito-entrega-uy
+metadata:
+  title: "Remito de Entrega Nº {{parameters.numero}}"
+
+# ──────────────────────────────────────────────────────────────────
+# Remito de Entrega – Uruguay
+# Documento requerido por DGI para bienes en tránsito.
+# Resolución DGI Nº 2.530/991.
+# Campos: remitente, destinatario, lugar de entrega, transportista, artículos.
+#
+# Uso con FluentReport.Schema:
+#   var doc = DocumentSchemaExtensions.FromSchemaYaml(
+#       File.ReadAllText("remito-entrega.frpt.yaml"),
+#       dataSources: new Dictionary<string, IEnumerable<object>>
+#       {
+#           ["items"] = new[]
+#           {
+#               new Dictionary<string,object>
+#               { ["cantidad"]="5", ["unidad"]="unid.", ["descripcion"]="Producto A", ["observaciones"]="" },
+#               new Dictionary<string,object>
+#               { ["cantidad"]="2", ["unidad"]="caja",  ["descripcion"]="Producto B", ["observaciones"]="Frágil" },
+#           }
+#       },
+#       parameters: new Dictionary<string,object>
+#       {
+#           ["numero"]="R 00000001",
+#           ["fecha"]="01/06/2026", ["hora"]="09:00",
+#           ["remitente_nombre"]="Empresa Demo S.A.", ["remitente_rut"]="21234567-1",
+#           ["remitente_domicilio"]="Av. 18 de Julio 1234, Montevideo",
+#           ["destinatario_nombre"]="Cliente S.R.L.", ["destinatario_rut"]="21234568-0",
+#           ["destinatario_domicilio"]="Rambla Rep. de México 6125, Montevideo",
+#           ["lugar_entrega"]="Rambla Rep. de México 6125, Montevideo",
+#           ["transportista"]="Transporte Demo S.A. – Patente ABC 1234"
+#       }
+#   );
+# ──────────────────────────────────────────────────────────────────
+
+pageDefaults:
+  size: A4
+  orientation: portrait
+  margin:
+    top: 40
+    right: 40
+    bottom: 50
+    left: 40
+
+parameters:
+  numero:
+    type: string
+    required: true
+  fecha:
+    type: string
+    required: true
+  hora:
+    type: string
+  remitente_nombre:
+    type: string
+    required: true
+  remitente_rut:
+    type: string
+    required: true
+  remitente_domicilio:
+    type: string
+  destinatario_nombre:
+    type: string
+    required: true
+  destinatario_rut:
+    type: string
+  destinatario_domicilio:
+    type: string
+  lugar_entrega:
+    type: string
+  transportista:
+    type: string
+
+dataSources:
+  items:
+    type: array
+
+styles:
+  heading:
+    fontSize: 13
+    bold: true
+  label:
+    fontSize: 9
+    bold: true
+    color: "#444444"
+  body:
+    fontSize: 9
+  small:
+    fontSize: 8
+    color: "#444444"
+  sectionTitle:
+    fontSize: 10
+    bold: true
+    color: "#003366"
+  docNumber:
+    fontSize: 13
+    bold: true
+    color: "#003366"
+    align: center
+  legal:
+    fontSize: 7
+    color: "#444444"
+    align: center
+
+pages:
+  - regions:
+      header:
+        nodes:
+          - type: text
+            value: "{{parameters.remitente_nombre}}"
+            styleRef: heading
+
+          - type: text
+            value: "RUT: {{parameters.remitente_rut}}  |  {{parameters.remitente_domicilio}}"
+            styleRef: small
+
+          - type: line
+            thickness: 0.5
+            color: "#AAAAAA"
+
+          - type: text
+            value: REMITO DE ENTREGA
+            styleRef: docNumber
+
+          - type: text
+            value: "Nº: {{parameters.numero}}  |  Fecha: {{parameters.fecha}}  Hora: {{parameters.hora}}"
+            styleRef: label
+            align: center
+
+      content:
+        nodes:
+          - type: text
+            value: Destinatario
+            styleRef: sectionTitle
+
+          - type: text
+            value: "Razón social: {{parameters.destinatario_nombre}}"
+            styleRef: body
+
+          - type: text
+            value: "RUT: {{parameters.destinatario_rut}}  |  {{parameters.destinatario_domicilio}}"
+            styleRef: body
+
+          - type: text
+            value: "Lugar de entrega: {{parameters.lugar_entrega}}"
+            styleRef: body
+
+          - type: text
+            value: "Transportista: {{parameters.transportista}}"
+            styleRef: body
+
+          - type: spacer
+            size: 8
+
+          - type: text
+            value: Artículos
+            styleRef: sectionTitle
+
+          - type: table
+            dataSource: items
+            borderWidth: 0.5
+            borderColor: "#DDDDDD"
+            columns:
+              - field: cantidad
+                header: Cantidad
+                width: 1
+                align: center
+              - field: unidad
+                header: Unidad
+                width: 1
+                align: center
+              - field: descripcion
+                header: Descripción
+                width: 5
+              - field: observaciones
+                header: Obs.
+                width: 2
+
+          - type: spacer
+            size: 24
+
+          - type: text
+            value: "Firma remitente: _______________________        Firma receptor: _______________________"
+            styleRef: small
+
+      footer:
+        nodes:
+          - type: line
+            thickness: 0.5
+            color: "#AAAAAA"
+
+          - type: text
+            value: "Documento requerido por DGI para bienes en tránsito – Resolución DGI Nº 2.530/991."
+            styleRef: legal
+
+          - type: text
+            styleRef: legal
+            align: center
+            runs:
+              - value: "Página "
+              - token: currentPage
+              - value: " de "
+              - token: totalPages

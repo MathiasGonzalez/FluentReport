@@ -1,0 +1,235 @@
+kind: FluentReport
+schemaVersion: 1
+name: factura-electronica-uy
+metadata:
+  title: "e-Factura – {{parameters.serie_numero}}"
+
+# ──────────────────────────────────────────────────────────────────
+# e-Factura (CFE) – Uruguay
+# Documento fiscal electrónico conforme a Resolución DGI / normativa CFE.
+# Campos: emisor, receptor, detalle de líneas, IVA desglosado, total.
+#
+# Uso con FluentReport.Schema:
+#   var doc = DocumentSchemaExtensions.FromSchemaYaml(
+#       File.ReadAllText("factura-electronica.frpt.yaml"),
+#       dataSources: new Dictionary<string, IEnumerable<object>>
+#       {
+#           ["lineas"] = new[]
+#           {
+#               new Dictionary<string,object>
+#               {
+#                   ["cant"]="2", ["descripcion"]="Servicio de consultoría",
+#                   ["precio_unitario"]="$ 10.000", ["iva"]="22%", ["total"]="$ 20.000"
+#               }
+#           }
+#       },
+#       parameters: new Dictionary<string,object>
+#       {
+#           ["emisor_nombre"]="Empresa Demo S.A.", ["emisor_rut"]="21234567-1",
+#           ["emisor_domicilio"]="Av. 18 de Julio 1234, Montevideo",
+#           ["tipo_documento"]="e-Factura", ["serie_numero"]="A 00000001",
+#           ["fecha_emision"]="01/06/2026",
+#           ["receptor_nombre"]="Cliente S.A.", ["receptor_rut"]="21234568-0",
+#           ["receptor_direccion"]="Rambla Rep. de México 6125, Montevideo",
+#           ["subtotal"]="$ 36.000", ["iva_10"]="$ 900", ["iva_22"]="$ 4.400", ["total"]="$ 41.300"
+#       }
+#   );
+# ──────────────────────────────────────────────────────────────────
+
+pageDefaults:
+  size: A4
+  orientation: portrait
+  margin:
+    top: 40
+    right: 40
+    bottom: 50
+    left: 40
+
+parameters:
+  emisor_nombre:
+    type: string
+    required: true
+  emisor_nombre_comercial:
+    type: string
+  emisor_rut:
+    type: string
+    required: true
+  emisor_domicilio:
+    type: string
+  tipo_documento:
+    type: string
+    required: true
+  serie_numero:
+    type: string
+    required: true
+  fecha_emision:
+    type: string
+    required: true
+  receptor_nombre:
+    type: string
+    required: true
+  receptor_rut:
+    type: string
+  receptor_direccion:
+    type: string
+  subtotal:
+    type: string
+  iva_10:
+    type: string
+  iva_22:
+    type: string
+  total:
+    type: string
+
+dataSources:
+  lineas:
+    type: array
+
+styles:
+  heading:
+    fontSize: 13
+    bold: true
+  subheading:
+    fontSize: 11
+    bold: true
+  label:
+    fontSize: 9
+    bold: true
+    color: "#444444"
+  body:
+    fontSize: 9
+  small:
+    fontSize: 8
+    color: "#444444"
+  docBox:
+    fontSize: 13
+    bold: true
+    color: "#003366"
+    align: center
+  totalLine:
+    fontSize: 11
+    bold: true
+  legal:
+    fontSize: 7
+    color: "#444444"
+    align: center
+
+pages:
+  - regions:
+      header:
+        nodes:
+          - type: text
+            value: "{{parameters.emisor_nombre}}"
+            styleRef: heading
+
+          - type: text
+            value: "{{parameters.emisor_nombre_comercial}}"
+            styleRef: subheading
+
+          - type: text
+            value: "RUT: {{parameters.emisor_rut}}  |  {{parameters.emisor_domicilio}}"
+            styleRef: small
+
+          - type: line
+            thickness: 0.5
+            color: "#AAAAAA"
+
+          - type: text
+            value: "{{parameters.tipo_documento}}  N°: {{parameters.serie_numero}}"
+            styleRef: docBox
+
+          - type: text
+            value: "Fecha de emisión: {{parameters.fecha_emision}}"
+            styleRef: label
+
+      content:
+        nodes:
+          - type: text
+            value: Receptor
+            styleRef: subheading
+
+          - type: text
+            value: "Razón social: {{parameters.receptor_nombre}}"
+            styleRef: body
+
+          - type: text
+            value: "RUT: {{parameters.receptor_rut}}  |  {{parameters.receptor_direccion}}"
+            styleRef: body
+
+          - type: spacer
+            size: 8
+
+          - type: text
+            value: Detalle
+            styleRef: subheading
+
+          - type: table
+            dataSource: lineas
+            borderWidth: 0.5
+            borderColor: "#DDDDDD"
+            columns:
+              - field: cant
+                header: Cant.
+                width: 1
+                align: center
+              - field: descripcion
+                header: Descripción
+                width: 4
+              - field: precio_unitario
+                header: P. Unitario
+                width: 1.5
+                align: right
+              - field: iva
+                header: IVA
+                width: 0.8
+                align: center
+              - field: total
+                header: Total
+                width: 1.5
+                align: right
+
+          - type: spacer
+            size: 8
+
+          - type: text
+            value: "Subtotal (sin IVA): {{parameters.subtotal}}"
+            styleRef: body
+            align: right
+
+          - type: text
+            value: "IVA 10%: {{parameters.iva_10}}"
+            styleRef: body
+            align: right
+
+          - type: text
+            value: "IVA 22%: {{parameters.iva_22}}"
+            styleRef: body
+            align: right
+
+          - type: line
+            thickness: 1
+            color: "#003366"
+
+          - type: text
+            value: "TOTAL: {{parameters.total}}"
+            styleRef: totalLine
+            align: right
+
+      footer:
+        nodes:
+          - type: line
+            thickness: 0.5
+            color: "#AAAAAA"
+
+          - type: text
+            value: "Documento fiscal electrónico emitido conforme a la normativa CFE vigente de DGI Uruguay."
+            styleRef: legal
+
+          - type: text
+            styleRef: legal
+            align: center
+            runs:
+              - value: "Página "
+              - token: currentPage
+              - value: " de "
+              - token: totalPages
