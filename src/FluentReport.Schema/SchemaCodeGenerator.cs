@@ -187,6 +187,10 @@ public static class SchemaCodeGenerator
     {
         var style = ResolveStyle(node.StyleRef, schema);
 
+        // Emit container decorators (padding, background, outer border, non-text alignment)
+        // before the content method — mirrors the order in SchemaDocumentFactory.BuildNode.
+        EmitContainerDecorators(sb, node);
+
         switch (node.Type?.ToLowerInvariant())
         {
             case "text":
@@ -206,7 +210,7 @@ public static class SchemaCodeGenerator
                 break;
 
             case "image":
-                EmitImageNode(sb, node, indent);
+                EmitImageNode(sb, node);
                 break;
 
             case "table":
@@ -224,6 +228,56 @@ public static class SchemaCodeGenerator
             default:
                 sb.Append($".Text(\"/* unknown type: {node.Type} */\")");
                 break;
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Container decorators
+    // ─────────────────────────────────────────────────────────────────────────
+
+    private static void EmitContainerDecorators(StringBuilder sb, SchemaNode node)
+    {
+        // Padding
+        float padUniform = node.Padding ?? 0;
+        float padTop     = node.PaddingTop    ?? node.PaddingVertical   ?? padUniform;
+        float padBottom  = node.PaddingBottom ?? node.PaddingVertical   ?? padUniform;
+        float padLeft    = node.PaddingLeft   ?? node.PaddingHorizontal ?? padUniform;
+        float padRight   = node.PaddingRight  ?? node.PaddingHorizontal ?? padUniform;
+
+        bool hasPadding = padTop != 0 || padBottom != 0 || padLeft != 0 || padRight != 0;
+        if (hasPadding)
+        {
+            if (padTop == padBottom && padBottom == padLeft && padLeft == padRight)
+            {
+                sb.Append($".Padding({Fmt(padTop)})");
+            }
+            else if (padTop == padBottom && padLeft == padRight)
+            {
+                if (padTop   != 0) sb.Append($".PaddingVertical({Fmt(padTop)})");
+                if (padLeft  != 0) sb.Append($".PaddingHorizontal({Fmt(padLeft)})");
+            }
+            else
+            {
+                if (padTop    != 0) sb.Append($".PaddingTop({Fmt(padTop)})");
+                if (padBottom != 0) sb.Append($".PaddingBottom({Fmt(padBottom)})");
+                if (padLeft   != 0) sb.Append($".PaddingLeft({Fmt(padLeft)})");
+                if (padRight  != 0) sb.Append($".PaddingRight({Fmt(padRight)})");
+            }
+        }
+
+        // Background
+        if (!string.IsNullOrWhiteSpace(node.Background))
+            sb.Append($".Background({Q(node.Background!)})");
+
+        // Outer container border (node.BorderWidth / node.BorderColor)
+        if (node.BorderWidth is not null)
+            sb.Append($".Border({Fmt(node.BorderWidth.Value)}, {Q(node.BorderColor ?? "#000000")})");
+
+        // Alignment for non-text nodes (text handles alignment via TextBuilder.AlignX())
+        if (!string.Equals(node.Type, "text", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(node.Align))
+        {
+            sb.Append($".{AlignMethod(node.Align)}");
         }
     }
 
@@ -272,29 +326,19 @@ public static class SchemaCodeGenerator
     // Image node
     // ─────────────────────────────────────────────────────────────────────────
 
-    private static void EmitImageNode(StringBuilder sb, SchemaNode node, string indent)
+    private static void EmitImageNode(StringBuilder sb, SchemaNode node)
     {
         var mode  = node.Source?.Mode  ?? "path";
         var value = node.Source?.Value ?? "";
 
-        string bytesExpr = mode switch
-        {
-            "path"   => $"File.ReadAllBytes({Q(value)})",
-            "base64" => $"Convert.FromBase64String({Q(value)})",
-            _        => "Array.Empty<byte>() /* provide image bytes */",
-        };
+        // ContainerBuilder.Image(string path) / Image(byte[] bytes) — no fit parameter in the fluent API.
+        if (mode.Equals("path", StringComparison.OrdinalIgnoreCase))
+            sb.Append($".Image({Q(value)})");
+        else
+            sb.Append($".Image(Convert.FromBase64String({Q(value)}))");
 
-        var fit = node.Fit?.ToLowerInvariant() switch
-        {
-            "cover"     => "ImageScaling.Cover",
-            "fill"      => "ImageScaling.Fill",
-            "fitheight" => "ImageScaling.FitHeight",
-            _           => "ImageScaling.FitWidth",
-        };
-
-        sb.AppendLine();
-        sb.AppendLine($"{indent}.Image({bytesExpr}, {fit})");
-        sb.Append($"{indent}");
+        if (!string.IsNullOrWhiteSpace(node.Fit))
+            sb.Append($" /* fit: {node.Fit} — set ImageElement.Fit after building if needed */");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -347,15 +391,15 @@ public static class SchemaCodeGenerator
         }
         sb.AppendLine($"{indent}    // }}");
 
-        if (node.BorderWidth is not null)
+        // Cell borders — use CellBorderWidth/CellBorderColor (per-cell grid lines).
+        // Must be called inside the configure block via TableBuilder.BorderEachCell().
+        if (node.CellBorderWidth is not null)
         {
-            sb.AppendLine($"{indent}}})");
-            sb.Append($"{indent}.BorderEachCell({Fmt(node.BorderWidth.Value)}, {Q(node.BorderColor ?? "#CCCCCC")})");
+            sb.AppendLine();
+            sb.AppendLine($"{indent}    table.BorderEachCell({Fmt(node.CellBorderWidth.Value)}, {Q(node.CellBorderColor ?? "#CCCCCC")});");
         }
-        else
-        {
-            sb.Append($"{indent}}})");
-        }
+
+        sb.Append($"{indent}}})");
     }
 
     // ─────────────────────────────────────────────────────────────────────────

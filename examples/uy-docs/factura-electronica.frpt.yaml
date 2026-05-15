@@ -165,8 +165,8 @@ pages:
 
           - type: table
             dataSource: lineas
-            borderWidth: 0.5
-            borderColor: "#DDDDDD"
+            cellBorderWidth: 0.5
+            cellBorderColor: "#DDDDDD"
             columns:
               - field: cant
                 header: Cant.

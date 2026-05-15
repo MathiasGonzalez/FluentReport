@@ -173,8 +173,8 @@ pages:
 
           - type: table
             dataSource: haberes
-            borderWidth: 0.5
-            borderColor: "#DDDDDD"
+            cellBorderWidth: 0.5
+            cellBorderColor: "#DDDDDD"
             columns:
               - field: concepto
                 header: Concepto
@@ -193,8 +193,8 @@ pages:
 
           - type: table
             dataSource: descuentos
-            borderWidth: 0.5
-            borderColor: "#DDDDDD"
+            cellBorderWidth: 0.5
+            cellBorderColor: "#DDDDDD"
             columns:
               - field: concepto
                 header: Concepto

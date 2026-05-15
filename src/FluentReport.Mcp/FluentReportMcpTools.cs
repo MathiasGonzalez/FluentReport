@@ -142,7 +142,7 @@ public sealed class FluentReportMcpTools
             new { type = "spacer", description = "Inserts blank vertical space. Key property: size (float, points)." },
             new { type = "pagebreak", description = "Forces a page break. No additional properties required." },
             new { type = "image", description = "Renders an image. Key properties: source.value (file path or base64 string), source.mode (path|base64|bytes), fit (cover|fill|fitwidth|fitheight|none), frame.width, frame.height." },
-            new { type = "table", description = "Renders a data table. Key properties: dataSource, columns (array of {field, header, width, align}), definitionRef, borderWidth, borderColor, padding, background." },
+            new { type = "table", description = "Renders a data table. Key properties: dataSource, columns (array of {field, header, width, align}), definitionRef, cellBorderWidth, cellBorderColor (per-cell grid lines), padding, background. Note: borderWidth/borderColor apply an outer container border around the whole table, not cell borders." },
             new { type = "repeat", description = "Renders repeated items. Key properties: dataSource, itemTemplate (with {{row.field}} bindings), itemGap (float), definitionRef." },
             new { type = "groupInstance", description = "Inserts a reusable group from definitions.groups. Key property: groupRef." },
         };
@@ -556,8 +556,8 @@ public sealed class FluentReportMcpTools
 
                   - type: table
                     dataSource: lineas
-                    borderWidth: 0.5
-                    borderColor: "#DDDDDD"
+                    cellBorderWidth: 0.5
+                    cellBorderColor: "#DDDDDD"
                     columns:
                       - field: cant
                         header: Cant.
@@ -762,8 +762,8 @@ public sealed class FluentReportMcpTools
 
                   - type: table
                     dataSource: haberes
-                    borderWidth: 0.5
-                    borderColor: "#DDDDDD"
+                    cellBorderWidth: 0.5
+                    cellBorderColor: "#DDDDDD"
                     columns:
                       - field: concepto
                         header: Concepto
@@ -782,8 +782,8 @@ public sealed class FluentReportMcpTools
 
                   - type: table
                     dataSource: descuentos
-                    borderWidth: 0.5
-                    borderColor: "#DDDDDD"
+                    cellBorderWidth: 0.5
+                    cellBorderColor: "#DDDDDD"
                     columns:
                       - field: concepto
                         header: Concepto
@@ -964,8 +964,8 @@ public sealed class FluentReportMcpTools
 
                   - type: table
                     dataSource: items
-                    borderWidth: 0.5
-                    borderColor: "#DDDDDD"
+                    cellBorderWidth: 0.5
+                    cellBorderColor: "#DDDDDD"
                     columns:
                       - field: cantidad
                         header: Cantidad
