@@ -6,6 +6,7 @@
     <Project Path="src/FluentReport.Html/FluentReport.Html.csproj" />
     <Project Path="src/FluentReport.Rdlc/FluentReport.Rdlc.csproj" />
     <Project Path="src/FluentReport.Schema/FluentReport.Schema.csproj" />
+    <Project Path="src/FluentReport.Mcp/FluentReport.Mcp.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/FluentReport.Tests/FluentReport.Tests.csproj" />

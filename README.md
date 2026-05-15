@@ -21,8 +21,9 @@
 | [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel (.xlsx) renderer (ClosedXML) |
 | [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML/email renderer (inline styles) |
 | [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC/SSRS importer |
-| [`FluentReport.Schema`](https://www.nuget.org/packages/FluentReport.Schema) | YAML/JSON schema importer |
+| [`FluentReport.Schema`](https://www.nuget.org/packages/FluentReport.Schema) | YAML/JSON schema importer + validator |
 | [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Core model without rendering dependencies — install directly only if implementing a custom renderer |
+| `FluentReport.Mcp` _(tool)_ | MCP server — exposes all rendering and validation tools to AI coding agents |
 
 ## Supported targets
 
@@ -47,7 +48,8 @@ dotnet add package FluentReport           # PDF
 dotnet add package FluentReport.Excel     # + Excel
 dotnet add package FluentReport.Html      # + HTML/email
 dotnet add package FluentReport.Rdlc      # + RDLC import
-dotnet add package FluentReport.Schema    # + YAML/JSON schema import
+dotnet add package FluentReport.Schema    # + YAML/JSON schema import + validation
+dotnet tool install -g FluentReport.Mcp   # MCP server for AI agents
 ```
 
 ## Quick start
@@ -122,17 +124,26 @@ For Excel, HTML, RDLC, and schema usage see the individual package READMEs:
 
 Use `.Landscape()` to swap width and height, or `page.Size(width, height)` for a custom size.
 
+## AI-first design
+
+FluentReport is designed to be used directly by AI coding agents without a visual editor. The recommended agent workflow:
+
+1. **`validate_schema`** — iterate on a YAML schema and get structured errors (`code`/`message`/`path`) without exceptions
+2. **`render_to_html`** — preview the output in the chat window
+3. **`render_to_pdf`** — produce the final file
+
+No visual editor needed. See [`docs/agent-quickstart.md`](docs/agent-quickstart.md) for a complete end-to-end guide, and [src/FluentReport.Mcp/README.md](src/FluentReport.Mcp/README.md) for MCP server setup.
+
 ## Documentation
 
+- [AI coding agent quickstart](docs/agent-quickstart.md) — minimal end-to-end flow, binding syntax, renderer differences, common errors
+- [MCP server setup](src/FluentReport.Mcp/README.md) — use FluentReport from any AI agent via Model Context Protocol
 - [API reference](docs/api.md) — all builders and methods
-- [Editor YAML schema](docs/schema/editor-yaml-schema.md) — canonical schema used by the web editor
-- [Schema v1 proposal](docs/schema/report-schema-spec.md) — proposal and translator scope
+- [YAML schema reference](docs/schema/report-schema.md) — schema contract, binding grammar, style precedence, renderer compatibility
+- [JSON Schema validator](docs/schema/report-schema.schema.json) — machine-readable validation rules
+- [Schema v1 proposal](docs/schema/report-schema-spec.md) — historical design proposal (not normative)
 - [RDLC limitations](docs/rdlc-limitations.md) — known constraints and processing flow
 - [UY fiscal document samples](docs/uy-fiscal-samples.md) — salary slip, delivery note, payment receipt
-
-## Editor
-
-The React-based schema editor lives in [editor/fluentreport-editor/README.md](editor/fluentreport-editor/README.md) and is deployed to GitHub Pages through [editor-pages.yml](.github/workflows/editor-pages.yml).
 
 ## Project structure
 
@@ -143,7 +154,8 @@ src/
 ├── FluentReport.Excel/    # Excel renderer (ClosedXML)
 ├── FluentReport.Html/     # HTML renderer
 ├── FluentReport.Rdlc/     # RDLC importer
-└── FluentReport.Schema/   # YAML/JSON schema importer
+├── FluentReport.Schema/   # YAML/JSON schema importer + validator
+└── FluentReport.Mcp/      # MCP server (dotnet global tool for AI agents)
 tests/
 ├── FluentReport.Tests/
 ├── FluentReport.Excel.Tests/
@@ -153,11 +165,12 @@ tests/
 samples/
 └── FluentReport.Samples/  # Sample documents (PDF, Excel, HTML)
 docs/
+├── agent-quickstart.md      # AI coding agent guide (start here)
 ├── api.md
 ├── schema/
-│   ├── editor-yaml-schema.md
-│   ├── editor-yaml-schema.schema.json
-│   └── report-schema-spec.md
+│   ├── report-schema.md             # normative schema contract
+│   ├── report-schema.schema.json
+│   └── report-schema-spec.md    # historical proposal
 ├── rdlc-limitations.md
 └── uy-fiscal-samples.md
 ```

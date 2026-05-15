@@ -1,7 +1,40 @@
-# FluentReport Report Schema v1 (Proposal)
+# FluentReport Report Schema v1 (Historical Proposal — DO NOT USE AS REFERENCE)
 
-> Note: this document describes a broad proposal for `Schema v1`.
-> The exact contract currently exported by the editor is documented in [docs/editor-yaml-schema.md](./editor-yaml-schema.md).
+> [!CAUTION]
+> **This document is an archived design proposal. It does not reflect the current implementation.**
+>
+> If you are building on FluentReport or using an AI coding agent, use the canonical references instead:
+>
+> - **Normative schema contract** → [report-schema.md](./report-schema.md)
+> - **Machine-readable validation** → [report-schema.schema.json](./report-schema.schema.json)
+> - **Import API and quick start** → [FluentReport.Schema README](../../src/FluentReport.Schema/README.md)
+> - **Complete agent-first guide** → [agent-quickstart.md](../agent-quickstart.md)
+>
+> This file is retained only for historical context about design decisions made during the v1 proposal phase.
+
+---
+
+## What was implemented vs. proposed
+
+The following sections of this proposal were **NOT implemented** and differ from the live runtime:
+
+| Proposed feature | Status | Current runtime equivalent |
+|-----------------|--------|---------------------------|
+| `type: column` / `type: row` as composable nodes inside regions | ✗ Not implemented | Flat node lists with absolute `frame` coordinates |
+| `rows.source` / `rows.cells` table syntax | ✗ Not implemented | `dataSource` + `columns[]` |
+| `dataSources[*].requiredFields` | ✗ Not implemented | Validation is done at import call site |
+| `visibleWhen` conditional rendering | ✗ Not implemented | No conditional nodes in v1 |
+
+The following features described in this proposal **were implemented** and match the live schema:
+
+- Node types: `text`, `line`, `spacer`, `pageBreak`, `image`, `table`, `repeat`, `groupInstance`
+- Document sections: `styles`, `styleRef`, `parameters`, `dataSources`, `rendererOptions`
+- Pipe functions in template expressions: `upper`, `lower`, `trim`, `currency`, `number(fmt)`, `date(fmt)`
+
+---
+
+*Original proposal text follows for historical reference.*
+
 
 ## 1. Goal
 

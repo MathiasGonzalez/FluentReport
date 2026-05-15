@@ -5,10 +5,44 @@ internal sealed class ReportSchema
     public string? Kind { get; set; }
     public int SchemaVersion { get; set; }
     public string? Name { get; set; }
+    public MetadataNode? Metadata { get; set; }
     public PageDefaultsNode? PageDefaults { get; set; }
+    public Dictionary<string, ParameterNode>? Parameters { get; set; }
+    public Dictionary<string, DataSourceNode>? DataSources { get; set; }
+    public object? Assets { get; set; }
     public Dictionary<string, TextStyleNode>? Styles { get; set; }
+    public RendererOptionsNode? RendererOptions { get; set; }
     public DefinitionsNode? Definitions { get; set; }
     public List<SchemaPageNode>? Pages { get; set; }
+}
+
+internal sealed class MetadataNode
+{
+    public string? Title { get; set; }
+}
+
+internal sealed class ParameterNode
+{
+    public string? Type { get; set; }
+    public bool? Required { get; set; }
+}
+
+internal sealed class DataSourceNode
+{
+    public string? Type { get; set; }
+}
+
+internal sealed class RendererOptionsNode
+{
+    public HtmlRendererOptionsNode? Html { get; set; }
+}
+
+internal sealed class HtmlRendererOptionsNode
+{
+    public int? MaxWidth { get; set; }
+    public string? FontFamily { get; set; }
+    public string? PageDividerStyle { get; set; }
+    public bool? OutlookCompatible { get; set; }
 }
 
 internal sealed class PageDefaultsNode
@@ -35,6 +69,9 @@ internal sealed class DefinitionsNode
 internal sealed class GroupDefinitionNode
 {
     public string? Id { get; set; }
+    public string? Type { get; set; }
+    public string? Name { get; set; }
+    public FrameNode? Frame { get; set; }
     public List<SchemaNode>? Nodes { get; set; }
 }
 
@@ -42,10 +79,14 @@ internal sealed class RepeatableDefinitionNode
 {
     public string? Id { get; set; }
     public string? Type { get; set; }
+    public string? Name { get; set; }
     public string? DataSource { get; set; }
     public List<TableColumnNode>? Columns { get; set; }
     public string? ItemTemplate { get; set; }
     public float? ItemGap { get; set; }
+    public string? GrowthMode { get; set; }
+    public string? OverflowMode { get; set; }
+    public bool? KeepTogether { get; set; }
 }
 
 internal sealed class SchemaPageNode
@@ -97,6 +138,7 @@ internal sealed class SchemaNode
     // image
     public ImageSourceNode? Source { get; set; }
     public string? Fit { get; set; }
+    public string? Alt { get; set; }
 
     // table/repeat
     public string? Name { get; set; }
@@ -105,9 +147,27 @@ internal sealed class SchemaNode
     public List<TableColumnNode>? Columns { get; set; }
     public string? ItemTemplate { get; set; }
     public float? ItemGap { get; set; }
+    public string? GrowthMode { get; set; }
+    public string? OverflowMode { get; set; }
+    public bool? KeepTogether { get; set; }
+    public float? CellBorderWidth { get; set; }
+    public string? CellBorderColor { get; set; }
+    public bool? HeaderBold { get; set; }
 
     // group instance
     public string? GroupRef { get; set; }
+
+    // container decorators (apply to any node type)
+    public float? Padding { get; set; }
+    public float? PaddingTop { get; set; }
+    public float? PaddingBottom { get; set; }
+    public float? PaddingLeft { get; set; }
+    public float? PaddingRight { get; set; }
+    public float? PaddingHorizontal { get; set; }
+    public float? PaddingVertical { get; set; }
+    public string? Background { get; set; }
+    public float? BorderWidth { get; set; }
+    public string? BorderColor { get; set; }
 }
 
 internal sealed class FrameNode
@@ -146,6 +206,7 @@ internal sealed class TextStyleNode
     public bool? Italic { get; set; }
     public bool? Underline { get; set; }
     public string? Color { get; set; }
+    public string? Background { get; set; }
     public float? LineSpacing { get; set; }
     public string? Align { get; set; }
 }

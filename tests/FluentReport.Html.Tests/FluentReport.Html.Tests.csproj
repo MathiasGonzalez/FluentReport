@@ -20,6 +20,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\FluentReport\FluentReport.csproj" />
     <ProjectReference Include="..\..\src\FluentReport.Html\FluentReport.Html.csproj" />
+    <ProjectReference Include="..\..\src\FluentReport.Schema\FluentReport.Schema.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

@@ -102,7 +102,12 @@ public class DocumentRenderer(DocumentSettings settings) : IPageImagesProvider
         int height = (int)Math.Ceiling(pageSettings.Size.Height * scale);
 
         var imageInfo = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
-        using var surface = SKSurface.Create(imageInfo)
+        // Use Unknown pixel geometry to disable LCD sub-pixel antialiasing.
+        // Without this, Skia infers the geometry from the physical display (e.g. RgbH on Windows,
+        // Unknown on Linux/macOS), causing text to rasterise differently on each platform.
+        // Unknown forces grayscale AA, which is OS-independent and produces reproducible pixels.
+        var surfaceProps = new SKSurfaceProperties(SKSurfacePropsFlags.None, SKPixelGeometry.Unknown);
+        using var surface = SKSurface.Create(imageInfo, surfaceProps)
             ?? throw new InvalidOperationException(
                 $"Failed to create SKSurface ({width}x{height}). The requested dimensions may be too large or insufficient memory is available.");
         var skCanvas = surface.Canvas;
