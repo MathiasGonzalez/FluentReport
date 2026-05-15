@@ -183,6 +183,46 @@ public sealed class SchemaDocumentFactory
             _ => throw new InvalidOperationException($"Unsupported node type '{node.Type}'{FormatNodeSuffix(node)}.")
         };
 
+        // Apply container decorators in the same order as ContainerBuilder.Build():
+        // padding → border/background → alignment
+
+        float padUniform = node.Padding ?? 0;
+        float padTop    = node.PaddingTop    ?? node.PaddingVertical   ?? padUniform;
+        float padBottom = node.PaddingBottom ?? node.PaddingVertical   ?? padUniform;
+        float padLeft   = node.PaddingLeft   ?? node.PaddingHorizontal ?? padUniform;
+        float padRight  = node.PaddingRight  ?? node.PaddingHorizontal ?? padUniform;
+        bool hasPadding = padTop != 0 || padBottom != 0 || padLeft != 0 || padRight != 0;
+
+        if (hasPadding)
+        {
+            element = new PaddingElement
+            {
+                Child = element,
+                Top    = padTop,
+                Bottom = padBottom,
+                Left   = padLeft,
+                Right  = padRight
+            };
+        }
+
+        bool hasBg     = !string.IsNullOrWhiteSpace(node.Background);
+        bool hasBorder = node.BorderWidth.HasValue;
+        if (hasBg || hasBorder)
+        {
+            var borderEl = new BorderElement { Child = element };
+            if (hasBg)
+                borderEl.BackgroundColor = ParseColor(node.Background!, $"background{FormatNodeSuffix(node)}");
+            if (hasBorder)
+                borderEl.Border = new Styling.BorderStyle
+                {
+                    Width = node.BorderWidth!.Value,
+                    Color = !string.IsNullOrWhiteSpace(node.BorderColor)
+                        ? ParseColor(node.BorderColor!, $"border color{FormatNodeSuffix(node)}")
+                        : ReportColor.Black
+                };
+            element = borderEl;
+        }
+
         if (!type.Equals("text", StringComparison.OrdinalIgnoreCase)
             && TryParseHorizontalAlignment(node.Align, out var align))
         {

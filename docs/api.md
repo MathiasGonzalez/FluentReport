@@ -449,7 +449,7 @@ Both SSRS 2005 and 2008+ XML namespaces are accepted automatically.
 
 ## Schema Import
 
-`FluentReport.Schema` converts schema files from the editor (`.yaml`, `.yml`, `.json`) into a standard `Document`.
+`FluentReport.Schema` converts schema files (`.yaml`, `.yml`, `.json`) into a standard `Document`.
 
 ```shell
 dotnet add package FluentReport.Schema

@@ -153,6 +153,18 @@ internal sealed class SchemaNode
 
     // group instance
     public string? GroupRef { get; set; }
+
+    // container decorators (apply to any node type)
+    public float? Padding { get; set; }
+    public float? PaddingTop { get; set; }
+    public float? PaddingBottom { get; set; }
+    public float? PaddingLeft { get; set; }
+    public float? PaddingRight { get; set; }
+    public float? PaddingHorizontal { get; set; }
+    public float? PaddingVertical { get; set; }
+    public string? Background { get; set; }
+    public float? BorderWidth { get; set; }
+    public string? BorderColor { get; set; }
 }
 
 internal sealed class FrameNode

@@ -112,4 +112,17 @@ public static class DocumentSchemaExtensions
         var factory = new SchemaDocumentFactory(dataSources, parameters);
         return factory.ParseFromJson(json);
     }
+
+    /// <summary>
+    /// Validates a schema YAML string without rendering a document.
+    /// Returns structured <see cref="ValidationResult"/> instead of throwing exceptions.
+    /// </summary>
+    public static ValidationResult ValidateSchema(string yaml)
+        => SchemaValidator.Validate(yaml);
+
+    /// <summary>
+    /// Validates a schema JSON string without rendering a document.
+    /// </summary>
+    public static ValidationResult ValidateSchemaJson(string json)
+        => SchemaValidator.ValidateJson(json);
 }

@@ -1,21 +1,15 @@
-# Canonical YAML Schema for the FluentReport Editor
+# FluentReport YAML Schema Reference
 
 ## Goal
 
-This document defines the YAML currently exported by the editor located at `editor/fluentreport-editor` and explains how it maps to the visual model edited by the user on the canvas.
+This document defines the canonical YAML schema accepted by `FluentReport.Schema` (`FromSchemaYaml` / `FromSchemaJson`).
 
-The normative source of the current contract is the editor code:
+Mechanical validation is defined in [report-schema.schema.json](./report-schema.schema.json).
 
-- `buildSchema(config)` in `editor/fluentreport-editor/src/reportSchema.ts`
-- `toYaml(value)` in `editor/fluentreport-editor/src/reportSchema.ts`
+## Schema contract
 
-Mechanical validation is defined in [docs/editor-yaml-schema.schema.json](./editor-yaml-schema.schema.json).
+The schema is a canonical authoring document. The following fields are preserved:
 
-## Principles of the current contract
-
-The editor exports a canonical authoring document. That means the YAML must no longer lose important visual decisions from the canvas.
-
-The current contract persists:
 
 - `metadata.title`
 - `frame.x`, `frame.y`, `frame.width`, `frame.height`
@@ -25,9 +19,9 @@ The current contract persists:
 - group definitions built from `groupId`
 - group instances placed on the page
 
-Current functional limits:
+Supported element types:
 
-- the editor exposes `text`, `line`, `spacer`, `pageBreak`, `image`, `table`, and `repeat`
+- `text`, `line`, `spacer`, `pageBreak`, `image`, `table`, and `repeat`
 - `table` is also exported as a definition under `definitions.repeatables`
 - `repeat/list` is also exported as a definition under `definitions.repeatables`
 
@@ -480,3 +474,217 @@ Validation currently enforced:
 - `base64`/`bytes` image content must be valid base64
 
 This strict behavior improves consistency and debuggability of the end-to-end flow `schema -> Document -> renderer`.
+
+---
+
+## Binding expression reference
+
+### Syntax
+
+All binding expressions use double-brace delimiters and are resolved at import time (before rendering). The resolved string replaces the expression in place.
+
+```
+{{ expression }}
+{{ expression | pipe }}
+{{ expression | pipe(argument) }}
+```
+
+Multiple expressions can appear in the same string:
+
+```yaml
+value: "{{ parameters.companyName }} — Report for {{ parameters.period }}"
+```
+
+Whitespace inside the braces is ignored: `{{ row.name }}` and `{{row.name}}` are equivalent.
+
+### Expression contexts
+
+| Location in schema | Available root | Example |
+|-------------------|---------------|---------|
+| Any node `value` in `pages[*].regions.*.nodes[]` | `parameters` | `{{ parameters.period }}` |
+| `metadata.title` | `parameters` | `{{ parameters.companyName }}` |
+| `table` column cell values | `row` | `{{ row.region }}` |
+| `repeat` `itemTemplate` | `row` | `{{ row.title }}` |
+
+> `row` is only available inside a data-bound region (table column or repeat template). Using `row` outside those contexts produces an empty string.
+
+### Pipe functions
+
+Apply a transformation by appending `| pipeName` or `| pipeName(arg)` after the expression.
+
+| Pipe | Input type | Example | Output |
+|------|-----------|---------|--------|
+| `upper` | string | `{{ row.region \| upper }}` | `"north"` → `"NORTH"` |
+| `lower` | string | `{{ row.region \| lower }}` | `"NORTH"` → `"north"` |
+| `trim` | string | `{{ row.label \| trim }}` | `"  hi  "` → `"hi"` |
+| `currency` | numeric | `{{ row.amount \| currency }}` | `1200` → `"$1,200.00"` |
+| `number(fmt)` | numeric | `{{ row.rate \| number(P1) }}` | `0.145` → `"14.5%"` |
+| `date(fmt)` | DateTime or parseable string | `{{ row.date \| date(yyyy-MM) }}` | → `"2026-01"` |
+
+- `fmt` for `number` follows standard .NET numeric format strings (`C`, `N2`, `P1`, `0.00`, etc.).
+- `fmt` for `date` follows standard .NET date format strings (`yyyy-MM-dd`, `MMMM yyyy`, etc.).
+- Pipes are not chainable (only one pipe per expression).
+
+### Null and missing field behavior
+
+If a referenced field does not exist on the row object or its value is `null`, the expression resolves to an empty string. No exception is thrown.
+
+---
+
+## Style inheritance and precedence
+
+### Named styles (`styles` + `styleRef`)
+
+Named styles are defined at document level under `styles` and referenced by nodes via `styleRef`:
+
+```yaml
+styles:
+  heading:
+    fontSize: 18
+    bold: true
+    color: "#1A237E"
+    align: center
+
+pages:
+  - id: p1
+    regions:
+      content:
+        nodes:
+          - id: t1
+            type: text
+            value: "Section Title"
+            styleRef: heading
+```
+
+### Inline style properties
+
+Text nodes also accept style properties directly as node properties (`fontSize`, `bold`, `color`, `align`, etc.). These are **inline** styles.
+
+### Precedence rules
+
+When both `styleRef` and inline properties are present on the same node, **inline properties win over the referenced style on a per-property basis**:
+
+```yaml
+styles:
+  base:
+    fontSize: 12
+    bold: false
+    color: "#000000"
+    align: left
+
+pages:
+  - id: p1
+    regions:
+      content:
+        nodes:
+          - id: t1
+            type: text
+            value: "Override example"
+            styleRef: base      # pulls fontSize=12, bold=false, color=#000000, align=left
+            bold: true          # overrides bold → true
+            color: "#FF0000"    # overrides color → red
+            # fontSize and align remain from the styleRef: 12pt, left
+```
+
+Properties not specified anywhere use renderer defaults (typically: `fontSize: 10`, `bold: false`, `italic: false`, `color: "#000000"`, `align: left`).
+
+---
+
+## Growth, overflow, and pagination
+
+### Properties
+
+`growthMode`, `overflowMode`, and `keepTogether` apply to `table` and `repeat` nodes (both inline and in `definitions.repeatables`).
+
+| Property | Values | Description |
+|----------|--------|-------------|
+| `growthMode` | `grow` \| `fixed` | Whether the element expands beyond its designed `frame.height` |
+| `overflowMode` | `nextPage` \| `truncate` | What happens when content exceeds available vertical space |
+| `keepTogether` | `true` \| `false` | Attempt to avoid splitting the block across pages |
+
+### Behavior matrix
+
+| `growthMode` | `overflowMode` | `keepTogether` | Behavior |
+|-------------|---------------|---------------|----------|
+| `grow` | `nextPage` | `false` | Element expands; rows that don't fit continue on the next page. Default for data tables. |
+| `grow` | `nextPage` | `true` | If the entire element does not fit on the current page, it is moved to the next page. If it still doesn't fit on a single page it will paginate normally. |
+| `grow` | `truncate` | `false` | Element expands but rows beyond the page boundary are silently clipped. |
+| `fixed` | `nextPage` | `false` | Frame height is respected; content that overflows continues on the next page. |
+| `fixed` | `truncate` | `false` | Frame height is respected; content that overflows is silently clipped. |
+
+> `keepTogether: true` combined with `overflowMode: truncate` behaves identically to `keepTogether: false` with `overflowMode: truncate` — there is no "move and then truncate" semantics.
+
+### Defaults
+
+If not specified, the runtime uses:
+- `growthMode: grow`
+- `overflowMode: nextPage`
+- `keepTogether: false`
+
+---
+
+## Renderer feature compatibility
+
+The following table shows which schema features produce output in each renderer. "✓" = full support. "~" = partial/degraded. "—" = not supported (silently ignored).
+
+| Feature | PDF | HTML (full doc) | HTML (fragment) | Excel |
+|---------|:---:|:---------------:|:---------------:|:-----:|
+| `text` with styles | ✓ | ✓ | ✓ | ✓ |
+| `line` | ✓ | ✓ | ✓ | ✓ |
+| `spacer` | ✓ | ✓ | ✓ | ✓ |
+| `pageBreak` | ✓ | ✓ | ✓ | ✓ → new sheet |
+| `image` (path / base64) | ✓ | ✓ (data URI) | ✓ (data URI) | — |
+| `table` with data rows | ✓ | ✓ | ✓ | ✓ |
+| `table` header row | ✓ | ✓ | ✓ | ✓ (first row) |
+| `repeat` / `itemTemplate` | ✓ | ✓ | ✓ | ✓ |
+| `groupInstance` expansion | ✓ | ✓ | ✓ | ✓ |
+| Multi-page (`pages[]`) | ✓ | ✓ (sections) | ✓ (sections) | ✓ (one sheet each) |
+| `page.Header` / `.Footer` | ✓ (every page) | ✓ (once per page section) | ✓ | ~ (first/last row) |
+| `page.Size` / margins | ✓ | ✓ | — | — |
+| Custom `fontFamily` | ✓ | ✓ | ✓ | — |
+| `rendererOptions.html.*` | — | ✓ | ✓ | — |
+| `growthMode` / `overflowMode` | ✓ | ✓ | ✓ | ~ |
+| `keepTogether` | ✓ | ~ | ~ | — |
+
+### Notable degradations
+
+- **Excel — images**: `image` nodes are silently skipped in Excel output.
+- **Excel — page size/margins**: Physical page dimensions and margin settings are not applied. Excel renders to its own grid width.
+- **Excel — `page.Header` / `.Footer`**: Renders as the first and last rows of the sheet respectively, not as repeated print header/footer rows.
+- **Excel — `keepTogether`**: The Excel renderer does not support content grouping for pagination purposes.
+- **HTML — `page.Size` in fragments**: Page size is ignored in `GenerateHtmlFragment()` output; use `rendererOptions.html.maxWidth` instead.
+
+---
+
+## Validation rule traceability
+
+Each runtime validation rule is backed by a test in `tests/FluentReport.Schema.Tests/SchemaTests.cs`.
+
+| Rule | Test method | Exception |
+|------|-------------|-----------|
+| `schemaVersion` must be `1` | `FromSchemaYaml_UnsupportedSchemaVersion_Throws` | `NotSupportedException` |
+| `type` must be a supported node type | `FromSchemaYaml_UnknownNodeType_Throws` | `InvalidOperationException` |
+| `styleRef` must exist in `styles` | `FromSchemaYaml_UnknownStyleRef_Throws` | `InvalidOperationException` |
+| `groupRef` must exist in `definitions.groups` | `FromSchemaYaml_MissingGroupDefinition_Throws` | `InvalidOperationException` |
+| `definitionRef` must exist in `definitions.repeatables` | `FromSchemaYaml_MissingRepeatDefinition_Throws` | `InvalidOperationException` |
+| Referenced `dataSource` must be provided at import | `FromSchemaYaml_MissingDataSource_Throws` | `InvalidOperationException` |
+| Colors must be valid hex | `FromSchemaYaml_InvalidColor_Throws` | `InvalidOperationException` |
+| `image.source.mode` must be `path`/`base64`/`bytes` | `FromSchemaYaml_UnsupportedImageSourceMode_Throws` | `InvalidOperationException` |
+| `base64`/`bytes` image content must be valid base64 | `FromSchemaYaml_InvalidImageBase64_Throws` | `InvalidOperationException` |
+| At least one page required | `FromSchemaYaml_WithoutPages_Throws` | `ArgumentException` |
+
+### Known coverage gaps
+
+The following features are implemented but do not yet have dedicated schema-level tests:
+
+| Gap | Notes |
+|-----|-------|
+| `image.source.mode: path` file resolution | Relative path from schema file directory not covered by a test |
+| `growthMode` / `overflowMode` pagination behavior | Covered indirectly by PDF generation; no assertion on page count or row splitting |
+| `keepTogether` semantics | No test verifies block movement to next page |
+| `rendererOptions.html.*` round-trip | No test verifies HTML output respects `maxWidth` / `outlookCompatible` |
+| `definitions.groups` with multiple nested nodes | Only single-node group tested |
+| `repeat` with multi-line `itemTemplate` | Newline handling in template string not explicitly tested |
+| Schema equivalence for `image` | `SchemaAndFluentApi_*_AreEquivalent` tests cover text and table; image not included |
+
+
