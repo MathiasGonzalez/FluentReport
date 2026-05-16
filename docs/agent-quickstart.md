@@ -39,7 +39,7 @@ byte[] pdf = Document.Create(container =>
 {
     container.Page(page =>
     {
-        page.Size(PageSizes.A4);   // 595 × 842 pt
+        page.Size(PageSizes.A4);   // 595.28 × 841.89 pt
         page.MarginAll(40);
 
         // Optional header — repeats on every page
@@ -309,9 +309,9 @@ string fragment = doc.GenerateHtmlFragment(new HtmlRendererOptions
 
 | Constant | Width × Height (pt) |
 |----------|---------------------|
-| `PageSizes.A4` | 595 × 842 |
-| `PageSizes.A3` | 842 × 1191 |
-| `PageSizes.A5` | 420 × 595 |
+| `PageSizes.A4` | 595.28 × 841.89 |
+| `PageSizes.A3` | 841.89 × 1190.55 |
+| `PageSizes.A5` | 419.53 × 595.28 |
 | `PageSizes.Letter` | 612 × 792 |
 | `PageSizes.Legal` | 612 × 1008 |
 

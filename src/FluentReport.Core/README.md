@@ -14,7 +14,7 @@ dotnet add package FluentReport.Core
 
 - `Document` / `DocumentSettings` — central document model
 - `PageBuilder`, `ColumnBuilder`, `RowBuilder`, `TableBuilder`, `TextBuilder`, `ChartBuilder` — fluent API
-- Elements: `TextElement`, `TableElement`, `ImageElement`, `ChartElement`, `SubreportElement`, `ColumnElement`, `RowElement`, `BorderElement`, `LineElement`, `PaddingElement`, `AlignElement`, `ListElement`, `SpacerElement`, `PageBreakElement`
+- Elements: `TextElement`, `TableElement`, `ImageElement`, `ChartElement`, `SubreportElement`, `ColumnElement`, `RowElement`, `BorderElement`, `LineElement`, `PaddingElement`, `AlignElement`, `ListElement`, `SpacerElement`, `PageBreakElement`, `CanvasElement`
 - `TextStyle`, `ReportColor`, `BorderStyle` — style types
 - `MeasureContext` / `RenderContext` — layout contexts
 - `ITextMeasurer` / `IDrawingCanvas` — renderer abstraction interfaces

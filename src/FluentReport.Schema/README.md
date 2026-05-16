@@ -128,6 +128,6 @@ The importer is fail-fast. Common exceptions:
 
 For the full schema specification and all node properties see:
 
-- [editor-yaml-schema.md](../../docs/schema/editor-yaml-schema.md) — normative contract
-- [editor-yaml-schema.schema.json](../../docs/schema/editor-yaml-schema.schema.json) — JSON Schema validator
-- [agent-quickstart.md](../../docs/agent-quickstart.md) — minimal end-to-end example for AI coding agents
+- [report-schema.md](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/schema/report-schema.md) — normative contract
+- [report-schema.schema.json](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/schema/report-schema.schema.json) — JSON Schema validator
+- [agent-quickstart.md](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/agent-quickstart.md) — minimal end-to-end example for AI coding agents

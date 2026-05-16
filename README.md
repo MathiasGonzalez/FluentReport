@@ -116,9 +116,9 @@ For Excel, HTML, RDLC, and schema usage see the individual package READMEs:
 
 | Constant | Size (pt) |
 |----------|-----------|
-| `PageSizes.A4` | 595 × 842 |
-| `PageSizes.A3` | 842 × 1191 |
-| `PageSizes.A5` | 420 × 595 |
+| `PageSizes.A4` | 595.28 × 841.89 |
+| `PageSizes.A3` | 841.89 × 1190.55 |
+| `PageSizes.A5` | 419.53 × 595.28 |
 | `PageSizes.Letter` | 612 × 792 |
 | `PageSizes.Legal` | 612 × 1008 |
 
