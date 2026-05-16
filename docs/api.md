@@ -126,6 +126,7 @@ Returned by `ContainerBuilder.Text(string)`.
 | `.Color(string hex)` / `.Color(ReportColor)` | Text color |
 | `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` / `.AlignJustify()` | Alignment |
 | `.LineSpacing(float)` | Line height multiplier (default `1.2f`) |
+| `.Rotate(float degrees)` | Visual rotation in degrees, counter-clockwise. Layout does not account for rotation — use only for decorative text |
 | `.Padding(float)` / `.PaddingVertical(float)` / `.PaddingHorizontal(float)` | Delegates to parent `ContainerBuilder` |
 
 ```csharp
@@ -327,6 +328,7 @@ All three forms below are equivalent:
 | `Color` | `ReportColor` | `Black` | Color (static) |
 | `Alignment` | `TextAlignment` | `Left` | `Left`, `Center`, `Right`, `Justify` |
 | `LineSpacing` | `float` | `1.2f` | Line height multiplier |
+| `Rotation` | `float` | `0` | Visual rotation in degrees, counter-clockwise (render-only; layout is not affected) |
 | `BoldResolver` | `Func<bool>?` | `null` | Overrides `Bold` at render time |
 | `ItalicResolver` | `Func<bool>?` | `null` | Overrides `Italic` at render time |
 | `ColorResolver` | `Func<ReportColor>?` | `null` | Overrides `Color` at render time |
@@ -467,6 +469,14 @@ dotnet add package FluentReport.Schema
 All four overloads share:
 - `dataSources` — `IDictionary<string, IEnumerable<object>>` — rows per data source name.
 - `parameters` — `IDictionary<string, object>` — values used in templates like `{{ parameters.period }}`.
+
+### Validation and code-generation helpers
+
+| Method | Description |
+|--------|-------------|
+| `DocumentSchemaExtensions.ValidateSchema(yaml)` | Validates a YAML schema string; returns `ValidationResult` with `IsValid`, `Errors`, and `Warnings` — no exceptions thrown |
+| `DocumentSchemaExtensions.ValidateSchemaJson(json)` | Same as above for a JSON schema string |
+| `DocumentSchemaExtensions.ToFluentCSharp(schema, format?)` | Converts a YAML or JSON schema to equivalent C# `Document.Create(...)` code; `format` is auto-detected when omitted |
 
 ### Mapping YAML => fluent API
 
