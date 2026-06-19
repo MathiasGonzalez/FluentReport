@@ -1145,4 +1145,483 @@ public class RdlcTests
         var bytes = doc.GeneratePdf();
         Assert.NotEmpty(bytes);
     }
+
+    // ── Comparison operators in conditions ─────────────────────────────────────
+
+    [Theory]
+    [InlineData("=IIF(Fields!Amount.Value > 5, \"high\", \"low\")", "10", "high")]
+    [InlineData("=IIF(Fields!Amount.Value > 5, \"high\", \"low\")", "3",  "low")]
+    [InlineData("=IIF(Fields!Amount.Value < 5, \"low\", \"high\")",  "3",  "low")]
+    [InlineData("=IIF(Fields!Amount.Value < 5, \"low\", \"high\")",  "10", "high")]
+    [InlineData("=IIF(Fields!Amount.Value >= 10, \"yes\", \"no\")", "10", "yes")]
+    [InlineData("=IIF(Fields!Amount.Value >= 10, \"yes\", \"no\")", "9",  "no")]
+    [InlineData("=IIF(Fields!Amount.Value <= 10, \"yes\", \"no\")", "10", "yes")]
+    [InlineData("=IIF(Fields!Amount.Value <= 10, \"yes\", \"no\")", "11", "no")]
+    public void Evaluate_IIF_NumericComparisons_WorkCorrectly(string expr, string amount, string expected)
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        var row = new Dictionary<string, object> { ["Amount"] = amount };
+        Assert.Equal(expected, evaluator.Evaluate(expr, row));
+    }
+
+    [Theory]
+    [InlineData("=IIF(Fields!State.Value <> \"Error\", \"ok\", \"fail\")", "Success", "ok")]
+    [InlineData("=IIF(Fields!State.Value <> \"Error\", \"ok\", \"fail\")", "Error",   "fail")]
+    public void Evaluate_IIF_NotEquals_WorksCorrectly(string expr, string state, string expected)
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        var row = new Dictionary<string, object> { ["State"] = state };
+        Assert.Equal(expected, evaluator.Evaluate(expr, row));
+    }
+
+    [Fact]
+    public void Evaluate_Switch_WithGreaterThanCondition_PicksCorrectBranch()
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        var row = new Dictionary<string, object> { ["Score"] = "85" };
+
+        var result = evaluator.Evaluate(
+            "=Switch(Fields!Score.Value >= 90, \"A\", Fields!Score.Value >= 80, \"B\", Fields!Score.Value >= 70, \"C\")",
+            row);
+
+        Assert.Equal("B", result);
+    }
+
+    // ── String concatenation ──────────────────────────────────────────────────
+
+    [Fact]
+    public void Evaluate_Concatenation_TwoLiterals_JoinsStrings()
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        Assert.Equal("Hello World", evaluator.Evaluate("=\"Hello\" & \" \" & \"World\""));
+    }
+
+    [Fact]
+    public void Evaluate_Concatenation_FieldAndLiteral_JoinsStrings()
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        var row = new { FirstName = "John", LastName = "Doe" };
+
+        var result = evaluator.Evaluate("=Fields!FirstName.Value & \" \" & Fields!LastName.Value", row);
+        Assert.Equal("John Doe", result);
+    }
+
+    [Fact]
+    public void Evaluate_Concatenation_WithParameter_JoinsStrings()
+    {
+        var parameters = new Dictionary<string, object> { ["Greeting"] = "Hello" };
+        var evaluator  = new RdlcExpressionEvaluator(parameters);
+        var row        = new { Name = "Alice" };
+
+        var result = evaluator.Evaluate("=Parameters!Greeting.Value & \", \" & Fields!Name.Value", row);
+        Assert.Equal("Hello, Alice", result);
+    }
+
+    // ── Format() function ─────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("=Format(Fields!Amount.Value, \"#,##0.00\")", "1234.5",   "1,234.50")]
+    [InlineData("=Format(Fields!Amount.Value, \"N2\")",       "9876.543", "9,876.54")]
+    [InlineData("=Format(Fields!Amount.Value, \"F0\")",       "42.7",     "43")]
+    public void Evaluate_Format_NumericValue_AppliesFormat(string expr, string amount, string expected)
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        var row = new Dictionary<string, object> { ["Amount"] = amount };
+        Assert.Equal(expected, evaluator.Evaluate(expr, row));
+    }
+
+    [Fact]
+    public void Evaluate_Format_DateValue_AppliesDateFormat()
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        var row = new Dictionary<string, object> { ["Date"] = "2024-06-15" };
+
+        var result = evaluator.Evaluate("=Format(Fields!Date.Value, \"yyyy-MM-dd\")", row);
+        Assert.Equal("2024-06-15", result);
+    }
+
+    [Theory]
+    [InlineData("=Format(Fields!Date.Value, \"Short Date\")", "2024-06-15")]
+    [InlineData("=Format(Fields!Date.Value, \"Long Date\")",  "2024-06-15")]
+    public void Evaluate_Format_NamedVbFormat_DoesNotThrow(string expr, string dateValue)
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        var row = new Dictionary<string, object> { ["Date"] = dateValue };
+        // Should not throw; just verifies mapping resolves without exception.
+        var result = evaluator.Evaluate(expr, row);
+        Assert.NotNull(result);
+    }
+
+    [Fact]
+    public void Evaluate_Format_NonNumericNonDate_ReturnsOriginalValue()
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        var row = new Dictionary<string, object> { ["Name"] = "SomeText" };
+        var result = evaluator.Evaluate("=Format(Fields!Name.Value, \"#,##0.00\")", row);
+        Assert.Equal("SomeText", result);
+    }
+
+    [Fact]
+    public void Evaluate_Format_NestedAggregate_FormatsSum()
+    {
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["ds"] = new object[] { new { Amount = "100.5" }, new { Amount = "200.25" }, new { Amount = "50" } }
+        };
+        var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
+
+        var result = evaluator.Evaluate("=Format(Sum(Fields!Amount.Value, \"ds\"), \"#,##0.00\")");
+        Assert.Equal("350.75", result);
+    }
+
+    // ── Aggregate functions ───────────────────────────────────────────────────
+
+    [Fact]
+    public void Evaluate_Sum_WithNamedDataset_ReturnsSumOfField()
+    {
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["Sales"] = new object[] { new { Amount = "100" }, new { Amount = "200" }, new { Amount = "50" } }
+        };
+        var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
+
+        var result = evaluator.Evaluate("=Sum(Fields!Amount.Value, \"Sales\")");
+        Assert.Equal("350", result);
+    }
+
+    [Fact]
+    public void Evaluate_Sum_SingleDataset_OmitDatasetName_ReturnsSumOfField()
+    {
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["ds"] = new object[] { new { Val = "10" }, new { Val = "20" }, new { Val = "5" } }
+        };
+        var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
+
+        var result = evaluator.Evaluate("=Sum(Fields!Val.Value)");
+        Assert.Equal("35", result);
+    }
+
+    [Fact]
+    public void Evaluate_Count_WithDataset_ReturnsNonEmptyCount()
+    {
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["ds"] = new object[] { new { Id = "1" }, new { Id = "2" }, new { Id = "" }, new { Id = "4" } }
+        };
+        var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
+
+        // Empty string is not counted.
+        var result = evaluator.Evaluate("=Count(Fields!Id.Value, \"ds\")");
+        Assert.Equal("3", result);
+    }
+
+    [Fact]
+    public void Evaluate_CountRows_WithDataset_ReturnsTotalRows()
+    {
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["ds"] = new object[] { new { X = "a" }, new { X = "b" }, new { X = "c" } }
+        };
+        var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
+
+        var result = evaluator.Evaluate("=CountRows(\"ds\")");
+        Assert.Equal("3", result);
+    }
+
+    [Fact]
+    public void Evaluate_Avg_WithDataset_ReturnsAverage()
+    {
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["ds"] = new object[] { new { Score = "80" }, new { Score = "90" }, new { Score = "100" } }
+        };
+        var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
+
+        var result = evaluator.Evaluate("=Avg(Fields!Score.Value, \"ds\")");
+        Assert.Equal("90", result);
+    }
+
+    [Fact]
+    public void Evaluate_Min_WithDataset_ReturnsMinimum()
+    {
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["ds"] = new object[] { new { Price = "15.5" }, new { Price = "3.2" }, new { Price = "9.0" } }
+        };
+        var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
+
+        var result = evaluator.Evaluate("=Min(Fields!Price.Value, \"ds\")");
+        Assert.Equal("3.2", result);
+    }
+
+    [Fact]
+    public void Evaluate_Max_WithDataset_ReturnsMaximum()
+    {
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["ds"] = new object[] { new { Price = "15.5" }, new { Price = "3.2" }, new { Price = "9.0" } }
+        };
+        var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
+
+        var result = evaluator.Evaluate("=Max(Fields!Price.Value, \"ds\")");
+        Assert.Equal("15.5", result);
+    }
+
+    [Fact]
+    public void Evaluate_Sum_NoDataset_ReturnsEmpty()
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        var result = evaluator.Evaluate("=Sum(Fields!Amount.Value, \"missing\")");
+        Assert.Equal(string.Empty, result);
+    }
+
+    [Fact]
+    public void Evaluate_Sum_MultipleDatasets_WithNamedDataset_UsesCorrectDataset()
+    {
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["A"] = new object[] { new { Val = "1" }, new { Val = "2" } },
+            ["B"] = new object[] { new { Val = "10" }, new { Val = "20" } }
+        };
+        var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
+
+        Assert.Equal("3",  evaluator.Evaluate("=Sum(Fields!Val.Value, \"A\")"));
+        Assert.Equal("30", evaluator.Evaluate("=Sum(Fields!Val.Value, \"B\")"));
+    }
+
+    // ── Globals ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Evaluate_Globals_ResolvesFromGlobalsDict()
+    {
+        var globals   = new Dictionary<string, object> { ["ReportName"] = "Sales Report" };
+        var evaluator = new RdlcExpressionEvaluator(globals: globals);
+
+        Assert.Equal("Sales Report", evaluator.Evaluate("=Globals!ReportName.Value"));
+    }
+
+    [Fact]
+    public void Evaluate_Globals_MissingKey_ReturnsEmpty()
+    {
+        var evaluator = new RdlcExpressionEvaluator();
+        Assert.Equal(string.Empty, evaluator.Evaluate("=Globals!PageNumber.Value"));
+    }
+
+    [Fact]
+    public void Evaluate_Globals_InConcatenation_ResolvesCorrectly()
+    {
+        var globals   = new Dictionary<string, object> { ["ReportName"] = "Annual Report" };
+        var evaluator = new RdlcExpressionEvaluator(globals: globals);
+
+        var result = evaluator.Evaluate("=Globals!ReportName.Value & \" - 2024\"");
+        Assert.Equal("Annual Report - 2024", result);
+    }
+
+    // ── Integration: RDLC with aggregates and concatenation ──────────────────
+
+    [Fact]
+    public void FromRdlcXml_WithSumInFooter_RendersCorrectly()
+    {
+        const string rdlc = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition">
+              <ReportSections>
+                <ReportSection>
+                  <Page>
+                    <PageWidth>8.5in</PageWidth><PageHeight>11in</PageHeight>
+                    <PageFooter>
+                      <ReportItems>
+                        <Textbox Name="Total">
+                          <Value>=Sum(Fields!Amount.Value, "Sales")</Value>
+                        </Textbox>
+                      </ReportItems>
+                    </PageFooter>
+                  </Page>
+                  <Body>
+                    <ReportItems>
+                      <Tablix Name="T1">
+                        <DataSetName>Sales</DataSetName>
+                        <TablixBody>
+                          <TablixColumns>
+                            <TablixColumn><Width>3in</Width></TablixColumn>
+                            <TablixColumn><Width>2in</Width></TablixColumn>
+                          </TablixColumns>
+                          <TablixRows>
+                            <TablixRow>
+                              <TablixCells>
+                                <TablixCell><CellContents><Textbox Name="N"><Value>=Fields!Name.Value</Value></Textbox></CellContents></TablixCell>
+                                <TablixCell><CellContents><Textbox Name="A"><Value>=Fields!Amount.Value</Value></Textbox></CellContents></TablixCell>
+                              </TablixCells>
+                            </TablixRow>
+                          </TablixRows>
+                        </TablixBody>
+                        <TablixRowHierarchy>
+                          <TablixMembers><TablixMember><Group Name="d"/></TablixMember></TablixMembers>
+                        </TablixRowHierarchy>
+                      </Tablix>
+                    </ReportItems>
+                  </Body>
+                </ReportSection>
+              </ReportSections>
+            </Report>
+            """;
+
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["Sales"] = new object[]
+            {
+                new { Name = "Alpha", Amount = "100" },
+                new { Name = "Beta",  Amount = "250" },
+                new { Name = "Gamma", Amount = "50"  }
+            }
+        };
+
+        var doc   = DocumentRdlcExtensions.FromRdlcXml(rdlc, datasets);
+        var bytes = doc.GeneratePdf();
+        Assert.NotEmpty(bytes);
+        Assert.Equal((byte)'%', bytes[0]);
+    }
+
+    [Fact]
+    public void FromRdlcXml_WithConcatenationExpression_RendersCorrectly()
+    {
+        const string rdlc = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition">
+              <ReportSections>
+                <ReportSection>
+                  <Page><PageWidth>8.5in</PageWidth><PageHeight>11in</PageHeight></Page>
+                  <Body>
+                    <ReportItems>
+                      <Tablix Name="T1">
+                        <DataSetName>People</DataSetName>
+                        <TablixBody>
+                          <TablixColumns>
+                            <TablixColumn><Width>5in</Width></TablixColumn>
+                          </TablixColumns>
+                          <TablixRows>
+                            <TablixRow>
+                              <TablixCells>
+                                <TablixCell>
+                                  <CellContents>
+                                    <Textbox Name="FullName">
+                                      <Value>=Fields!First.Value &amp; " " &amp; Fields!Last.Value</Value>
+                                    </Textbox>
+                                  </CellContents>
+                                </TablixCell>
+                              </TablixCells>
+                            </TablixRow>
+                          </TablixRows>
+                        </TablixBody>
+                        <TablixRowHierarchy>
+                          <TablixMembers><TablixMember><Group Name="d"/></TablixMember></TablixMembers>
+                        </TablixRowHierarchy>
+                      </Tablix>
+                    </ReportItems>
+                  </Body>
+                </ReportSection>
+              </ReportSections>
+            </Report>
+            """;
+
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["People"] = new object[]
+            {
+                new { First = "John",  Last = "Doe"  },
+                new { First = "Jane",  Last = "Smith" }
+            }
+        };
+
+        var doc   = DocumentRdlcExtensions.FromRdlcXml(rdlc, datasets);
+        var bytes = doc.GeneratePdf();
+        Assert.NotEmpty(bytes);
+    }
+
+    [Fact]
+    public void FromRdlcXml_WithGlobalsInHeader_RendersCorrectly()
+    {
+        const string rdlc = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition">
+              <ReportSections>
+                <ReportSection>
+                  <Page>
+                    <PageWidth>8.5in</PageWidth><PageHeight>11in</PageHeight>
+                    <PageHeader>
+                      <ReportItems>
+                        <Textbox Name="Hdr">
+                          <Value>=Globals!ReportName.Value</Value>
+                        </Textbox>
+                      </ReportItems>
+                    </PageHeader>
+                  </Page>
+                  <Body>
+                    <ReportItems>
+                      <Textbox Name="Body"><Value>Content</Value></Textbox>
+                    </ReportItems>
+                  </Body>
+                </ReportSection>
+              </ReportSections>
+            </Report>
+            """;
+
+        var globals = new Dictionary<string, object> { ["ReportName"] = "My Report" };
+        var doc     = DocumentRdlcExtensions.FromRdlcXml(rdlc, globals: globals);
+        var bytes   = doc.GeneratePdf();
+        Assert.NotEmpty(bytes);
+    }
+
+    [Fact]
+    public void FromRdlcXml_WithFormatExpression_RendersCorrectly()
+    {
+        const string rdlc = """
+            <?xml version="1.0" encoding="utf-8"?>
+            <Report xmlns="http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition">
+              <ReportSections>
+                <ReportSection>
+                  <Page><PageWidth>8.5in</PageWidth><PageHeight>11in</PageHeight></Page>
+                  <Body>
+                    <ReportItems>
+                      <Tablix Name="T1">
+                        <DataSetName>Orders</DataSetName>
+                        <TablixBody>
+                          <TablixColumns>
+                            <TablixColumn><Width>3in</Width></TablixColumn>
+                            <TablixColumn><Width>2in</Width></TablixColumn>
+                          </TablixColumns>
+                          <TablixRows>
+                            <TablixRow>
+                              <TablixCells>
+                                <TablixCell><CellContents><Textbox Name="D"><Value>=Format(Fields!Date.Value, "yyyy-MM-dd")</Value></Textbox></CellContents></TablixCell>
+                                <TablixCell><CellContents><Textbox Name="A"><Value>=Format(Fields!Amount.Value, "#,##0.00")</Value></Textbox></CellContents></TablixCell>
+                              </TablixCells>
+                            </TablixRow>
+                          </TablixRows>
+                        </TablixBody>
+                        <TablixRowHierarchy>
+                          <TablixMembers><TablixMember><Group Name="d"/></TablixMember></TablixMembers>
+                        </TablixRowHierarchy>
+                      </Tablix>
+                    </ReportItems>
+                  </Body>
+                </ReportSection>
+              </ReportSections>
+            </Report>
+            """;
+
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["Orders"] = new object[]
+            {
+                new { Date = "2024-03-15", Amount = "1234.5" },
+                new { Date = "2024-06-01", Amount = "9876.0" }
+            }
+        };
+
+        var doc   = DocumentRdlcExtensions.FromRdlcXml(rdlc, datasets);
+        var bytes = doc.GeneratePdf();
+        Assert.NotEmpty(bytes);
+    }
 }
