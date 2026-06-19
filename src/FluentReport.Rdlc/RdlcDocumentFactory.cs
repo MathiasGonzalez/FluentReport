@@ -40,10 +40,11 @@ public sealed class RdlcDocumentFactory
 
     public RdlcDocumentFactory(
         IDictionary<string, IEnumerable<object>>? datasets = null,
-        IDictionary<string, object>? parameters = null)
+        IDictionary<string, object>? parameters = null,
+        IDictionary<string, object>? globals = null)
     {
         _datasets = datasets;
-        _evaluator = new RdlcExpressionEvaluator(parameters, datasets);
+        _evaluator = new RdlcExpressionEvaluator(parameters, datasets, globals);
     }
 
     // ── Public entry points ──────────────────────────────────────────────────

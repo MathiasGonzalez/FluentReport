@@ -1,18 +1,43 @@
 # FluentReport.Rdlc — Known Limitations
 
-## Limitations
+## Supported expressions (as of current version)
 
-1. **Expressions** — Supported: `=Fields!X.Value`, `=First(Fields!X.Value, "DataSet")`, `=Parameters!X.Value`, `=IIF(...)`, `=Switch(...)`, and literals. Other expressions (aggregates, `Format`, `Globals!`, concatenations, arithmetic) are replaced with an empty string.
+| Expression | Status |
+|---|---|
+| `=Fields!X.Value` | ✅ Supported |
+| `=First(Fields!X.Value, "DataSet")` | ✅ Supported |
+| `=Parameters!X.Value` | ✅ Supported |
+| `=Globals!X.Value` | ✅ Supported (supply via `globals` parameter) |
+| `=IIF(condition, trueVal, falseVal)` | ✅ Supported |
+| `=Switch(cond1, val1, ...)` | ✅ Supported |
+| `=Format(expr, "format")` | ✅ Supported (numeric and date formats) |
+| `=Sum/Count/Avg/Min/Max(Fields!X.Value, "DS")` | ✅ Supported |
+| `=CountRows("DataSet")` | ✅ Supported |
+| `=expr1 & expr2` | ✅ Supported (string concatenation) |
+| Condition operators `=`, `<>`, `>`, `<`, `>=`, `<=` | ✅ Supported |
+| Bare numeric literals in comparisons (e.g. `> 100`) | ✅ Supported |
+| `=SomeFunction()` (other VB.NET built-ins) | ❌ Returns empty string |
+| `=expr1 + expr2` (arithmetic) | ❌ Returns empty string |
+
+---
+
+## Remaining Limitations
+
+1. **Unsupported expressions** — Expressions not listed above (e.g. `CStr()`, `CInt()`, `DateAdd()`,
+   arithmetic `+`, `Globals!PageNumber`) are replaced with an empty string.
+   `Globals!PageNumber` and `Globals!TotalPages` are not automatically populated because
+   FluentReport evaluates RDLC statically (before pagination). You can supply custom values via
+   the `globals` dictionary parameter.
 
 2. **Advanced Tablix** — `<RowGroups>` / `<ColumnGroups>` with multiple hierarchy levels are not processed. The parser detects detail rows via `<Group>` presence and falls back to expression heuristics; complex structures may not render as expected.
 
 3. **RowSpan** — The model supports `TableCell.RowSpan` but the renderer does not apply vertical spanning. A cell with `RowSpan > 1` renders normally in its own position; cells in subsequent rows that should be merged render as independent empty cells.
 
-4. **Embedded images** (`Source = "Embedded"`) — Bytes from the `<EmbeddedImages>` section are not extracted; the image is omitted from output.
+4. **Embedded images** (`Source = "Embedded"`) — Image bytes are extracted from the `<EmbeddedImages>` section and passed as a byte array to `ImageElement`. Rendering depends on whether the underlying renderer supports raw byte images.
 
 5. **External image URLs** — Only local file paths are supported. HTTP/HTTPS URLs are not fetched.
 
-6. **Conditional styles in RDLC** — Style expressions such as `=IIF(Fields!Active.Value, "Bold", "Normal")` are not evaluated; the literal string is used as the value, which typically results in the default style.
+6. **Conditional styles in RDLC** — Style expressions such as `=IIF(Fields!Active.Value, "Bold", "Normal")` on style properties (e.g. `FontWeight`, `Color`) are not evaluated; the literal string is used as the value, which typically results in the default style.
 
 7. **Body height** — The `<Height>` field of `<Body>` is ignored; FluentReport calculates content height dynamically.
 

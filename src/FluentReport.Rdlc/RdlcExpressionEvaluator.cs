@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 
 namespace FluentReport.Rdlc;
@@ -9,11 +10,16 @@ namespace FluentReport.Rdlc;
 ///   <item><c>=Fields!FieldName.Value</c> – resolved from the current data row.</item>
 ///   <item><c>=First(Fields!FieldName.Value, "DataSetName")</c> – resolved from the first row of the named dataset.</item>
 ///   <item><c>=Parameters!ParamName.Value</c> – resolved from the parameter dictionary.</item>
+///   <item><c>=Globals!Name.Value</c> – resolved from the globals dictionary (e.g. ReportName).</item>
 ///   <item><c>=IIF(condition, trueValue, falseValue)</c> – conditional expression.</item>
 ///   <item><c>=Switch(cond1, val1, cond2, val2, ...)</c> – multi-branch conditional.</item>
+///   <item><c>=Format(expr, "formatString")</c> – formats a value using .NET/VB.NET format strings.</item>
+///   <item><c>=Sum/Count/Avg/Min/Max(Fields!X.Value, "DataSetName")</c> – aggregate over a dataset.</item>
+///   <item><c>=CountRows("DataSetName")</c> – total row count of a dataset.</item>
+///   <item><c>=expr1 &amp; expr2</c> – string concatenation.</item>
+///   <item>Conditions: <c>=</c>, <c>&lt;&gt;</c>, <c>&gt;</c>, <c>&lt;</c>, <c>&gt;=</c>, <c>&lt;=</c>.</item>
 ///   <item>Literal strings (no leading <c>=</c>) – returned as-is.</item>
 /// </list>
-/// Expressions supported: simple field equality comparisons, e.g. <c>Fields!X.Value = "literal"</c>.
 /// </summary>
 public sealed class RdlcExpressionEvaluator
 {
@@ -23,20 +29,29 @@ public sealed class RdlcExpressionEvaluator
     private static readonly Regex ParamsRegex =
         new(@"^Parameters!(?<name>\w+)\.Value$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex GlobalsRegex =
+        new(@"^Globals!(?<name>\w+)(\.Value)?$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // Matches: First(Fields!Name.Value, "DataSetName")  or  First(Fields!Name.Value, DataSetName)
     private static readonly Regex FirstFieldsRegex =
         new(@"^First\s*\(\s*Fields!(?<name>\w+)\.Value\s*,\s*""?(?<ds>[^""\)]+)""?\s*\)$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex AggregateRegex =
+        new(@"^(?<fn>Sum|Count|CountRows|Avg|Average|Min|Max)\s*\(", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private readonly IDictionary<string, object>? _parameters;
     private readonly IDictionary<string, IEnumerable<object>>? _datasets;
+    private readonly IDictionary<string, object>? _globals;
 
     public RdlcExpressionEvaluator(
         IDictionary<string, object>? parameters = null,
-        IDictionary<string, IEnumerable<object>>? datasets = null)
+        IDictionary<string, IEnumerable<object>>? datasets = null,
+        IDictionary<string, object>? globals = null)
     {
         _parameters = parameters;
         _datasets = datasets;
+        _globals = globals;
     }
 
     /// <summary>
@@ -94,6 +109,16 @@ public sealed class RdlcExpressionEvaluator
             return _parameters.TryGetValue(paramName, out var pv) ? pv?.ToString() ?? string.Empty : string.Empty;
         }
 
+        // Globals!X.Value  (e.g. Globals!ReportName.Value)
+        var globalsMatch = GlobalsRegex.Match(expr);
+        if (globalsMatch.Success)
+        {
+            var gName = globalsMatch.Groups["name"].Value;
+            if (_globals != null && _globals.TryGetValue(gName, out var gv))
+                return gv?.ToString() ?? string.Empty;
+            return string.Empty;
+        }
+
         // IIF(condition, trueVal, falseVal)
         if (expr.StartsWith("IIF", StringComparison.OrdinalIgnoreCase) && expr.Length > 3 && expr[3] == '(')
             return EvaluateIIF(expr, row);
@@ -102,9 +127,28 @@ public sealed class RdlcExpressionEvaluator
         if (expr.StartsWith("Switch", StringComparison.OrdinalIgnoreCase) && expr.Length > 6 && expr[6] == '(')
             return EvaluateSwitch(expr, row);
 
+        // Format(expression, "format-string")
+        if (expr.StartsWith("Format", StringComparison.OrdinalIgnoreCase) && expr.Length > 6 && expr[6] == '(')
+            return EvaluateFormat(expr, row);
+
+        // Aggregate functions: Sum, Count, Avg, Min, Max, CountRows
+        var aggMatch = AggregateRegex.Match(expr);
+        if (aggMatch.Success)
+            return EvaluateAggregate(expr, row, aggMatch.Groups["fn"].Value);
+
+        // String concatenation with & operator (VB.NET string concat) — must be checked before
+        // the quoted-literal shortcut, because expressions like "A" & "B" start and end with '"'.
+        var concatParts = SplitByTopLevelConcatOperator(expr);
+        if (concatParts != null)
+            return string.Concat(concatParts.Select(p => EvaluateExpr(p.Trim(), row)));
+
         // Quoted string literal inside an expression: "text"
         if (expr.StartsWith('"') && expr.EndsWith('"') && expr.Length >= 2)
             return expr[1..^1];
+
+        // Bare numeric literal — used as a constant in comparisons (e.g. Fields!X.Value > 100).
+        if (double.TryParse(expr, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+            return expr;
 
         // Unknown / unsupported expression — return empty string.
         return string.Empty;
@@ -140,26 +184,150 @@ public sealed class RdlcExpressionEvaluator
         return string.Empty;
     }
 
+    // ── Format ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Evaluates <c>Format(expression, "formatString")</c>.
+    /// Supports standard .NET format strings and named VB.NET format strings
+    /// (<c>"Short Date"</c>, <c>"Long Date"</c>, <c>"Currency"</c>, etc.).
+    /// </summary>
+    private string EvaluateFormat(string expr, object? row)
+    {
+        var args = SplitTopLevelArgs(expr, expr.IndexOf('('));
+        if (args.Count < 1) return string.Empty;
+
+        var value = EvaluateExpr(args[0].Trim(), row);
+        var fmt   = args.Count >= 2 ? NormalizeVbFormatString(args[1].Trim().Trim('"')) : string.Empty;
+
+        if (string.IsNullOrEmpty(fmt))
+            return value;
+
+        // Try numeric format first.
+        if (double.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var dblVal))
+        {
+            try { return dblVal.ToString(fmt, CultureInfo.InvariantCulture); }
+            catch { return value; }
+        }
+
+        // Try DateTime format.
+        if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dtVal))
+        {
+            try { return dtVal.ToString(fmt, CultureInfo.InvariantCulture); }
+            catch { return value; }
+        }
+
+        return value;
+    }
+
+    /// <summary>Maps VB.NET named format strings to their .NET equivalents.</summary>
+    private static string NormalizeVbFormatString(string fmt)
+        => fmt.ToLowerInvariant() switch
+        {
+            "short date" or "general date" => "d",
+            "long date"                    => "D",
+            "short time"                   => "t",
+            "long time"                    => "T",
+            "currency"                     => "C",
+            "fixed"                        => "F",
+            "standard"                     => "N",
+            "percent"                      => "P",
+            "scientific"                   => "E",
+            _                              => fmt
+        };
+
+    // ── Aggregate functions ────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Evaluates aggregate functions: <c>Sum</c>, <c>Count</c>, <c>Avg</c>, <c>Average</c>,
+    /// <c>Min</c>, <c>Max</c>, <c>CountRows</c>.
+    /// When no dataset name is provided and exactly one dataset is registered, that dataset is used.
+    /// </summary>
+    private string EvaluateAggregate(string expr, object? row, string funcName)
+    {
+        var args = SplitTopLevelArgs(expr, expr.IndexOf('('));
+
+        // CountRows([optional dataset name])
+        if (string.Equals(funcName, "CountRows", StringComparison.OrdinalIgnoreCase))
+        {
+            var dsNameForCount = args.Count >= 1 ? args[0].Trim().Trim('"') : string.Empty;
+            var sourceForCount = GetDataset(dsNameForCount);
+            return (sourceForCount?.Count() ?? 0).ToString(CultureInfo.InvariantCulture);
+        }
+
+        if (args.Count == 0) return string.Empty;
+
+        var fieldExpr = args[0].Trim();
+        var dsName    = args.Count >= 2 ? args[1].Trim().Trim('"') : string.Empty;
+        var source    = GetDataset(dsName);
+
+        if (source == null) return string.Empty;
+
+        if (string.Equals(funcName, "Count", StringComparison.OrdinalIgnoreCase))
+        {
+            var cnt = source.Select(r => EvaluateExpr(fieldExpr, r)).Count(v => !string.IsNullOrEmpty(v));
+            return cnt.ToString(CultureInfo.InvariantCulture);
+        }
+
+        var numericValues = source
+            .Select(r => EvaluateExpr(fieldExpr, r))
+            .Where(v => double.TryParse(v, NumberStyles.Any, CultureInfo.InvariantCulture, out _))
+            .Select(v => double.Parse(v, CultureInfo.InvariantCulture))
+            .ToList();
+
+        if (numericValues.Count == 0) return string.Empty;
+
+        return funcName.ToUpperInvariant() switch
+        {
+            "SUM"              => numericValues.Sum().ToString(CultureInfo.InvariantCulture),
+            "AVG" or "AVERAGE" => numericValues.Average().ToString(CultureInfo.InvariantCulture),
+            "MIN"              => numericValues.Min().ToString(CultureInfo.InvariantCulture),
+            "MAX"              => numericValues.Max().ToString(CultureInfo.InvariantCulture),
+            _                  => string.Empty
+        };
+    }
+
+    /// <summary>
+    /// Returns the dataset with the given name, or — when <paramref name="dsName"/> is empty —
+    /// the only registered dataset if exactly one is available.
+    /// </summary>
+    private IEnumerable<object>? GetDataset(string dsName)
+    {
+        if (_datasets == null) return null;
+        if (!string.IsNullOrEmpty(dsName))
+            return _datasets.TryGetValue(dsName, out var ds) ? ds : null;
+        // If no dataset name specified, use the sole dataset.
+        return _datasets.Count == 1 ? _datasets.Values.First() : null;
+    }
+
     // ── Condition evaluator ───────────────────────────────────────────────────
 
     /// <summary>
-    /// Evaluates a simple boolean condition expression.
-    /// Supports: <c>Fields!X.Value = "literal"</c>, <c>Fields!X.Value = True/False</c>.
+    /// Evaluates a boolean condition expression.
+    /// Supports: <c>Fields!X.Value = "literal"</c>, <c>Fields!X.Value &lt;&gt; "literal"</c>,
+    /// <c>Fields!X.Value &gt; 0</c>, <c>Fields!X.Value &lt;= 100</c>, <c>True/False</c> literals.
     /// Unknown conditions return <c>true</c> (permissive fallback).
     /// </summary>
     private bool EvaluateCondition(string condition, object? row)
     {
         condition = condition.Trim();
 
-        // Fields!X.Value = "literal"   or   Fields!X.Value = True/False
-        var eqIdx = FindTopLevelEquals(condition);
-        if (eqIdx > 0)
+        var (opPos, op) = FindTopLevelComparisonOperator(condition);
+        if (opPos > 0 && op != null)
         {
-            var lhs = condition[..eqIdx].Trim();
-            var rhs = condition[(eqIdx + 1)..].Trim();
+            var lhs    = condition[..opPos].Trim();
+            var rhs    = condition[(opPos + op.Length)..].Trim();
             var lhsVal = EvaluateExpr(lhs, row);
             var rhsVal = UnquoteOrEval(rhs, row);
-            return string.Equals(lhsVal, rhsVal, StringComparison.OrdinalIgnoreCase);
+            return op switch
+            {
+                "="  => string.Equals(lhsVal, rhsVal, StringComparison.OrdinalIgnoreCase),
+                "<>" => !string.Equals(lhsVal, rhsVal, StringComparison.OrdinalIgnoreCase),
+                ">=" => CompareValues(lhsVal, rhsVal) >= 0,
+                "<=" => CompareValues(lhsVal, rhsVal) <= 0,
+                ">"  => CompareValues(lhsVal, rhsVal) > 0,
+                "<"  => CompareValues(lhsVal, rhsVal) < 0,
+                _    => false
+            };
         }
 
         // True / False literal
@@ -216,8 +384,13 @@ public sealed class RdlcExpressionEvaluator
         return result;
     }
 
-    /// <summary>Finds the index of the top-level <c>=</c> operator (not inside parentheses or quotes).</summary>
-    private static int FindTopLevelEquals(string s)
+    /// <summary>
+    /// Finds the position and operator string of the first top-level comparison operator
+    /// (<c>=</c>, <c>&lt;&gt;</c>, <c>&gt;=</c>, <c>&lt;=</c>, <c>&gt;</c>, <c>&lt;</c>)
+    /// not inside parentheses or quoted strings.
+    /// Multi-character operators are checked before single-character ones.
+    /// </summary>
+    private static (int pos, string? op) FindTopLevelComparisonOperator(string s)
     {
         int depth = 0;
         bool inStr = false;
@@ -228,9 +401,69 @@ public sealed class RdlcExpressionEvaluator
             if (inStr) continue;
             if (c == '(') { depth++; continue; }
             if (c == ')') { depth--; continue; }
-            if (c == '=' && depth == 0) return i;
+            if (depth != 0) continue;
+
+            // Multi-char operators first (order matters: check 2-char before 1-char).
+            if (i + 1 < s.Length)
+            {
+                var two = s.Substring(i, 2);
+                if (two is "<>" or ">=" or "<=") return (i, two);
+            }
+            if (c is '=' or '>' or '<') return (i, c.ToString());
         }
-        return -1;
+        return (-1, null);
+    }
+
+    /// <summary>
+    /// Compares two string values: first attempts numeric comparison, then
+    /// <see cref="DateTime"/> comparison, and falls back to ordinal string comparison.
+    /// </summary>
+    private static int CompareValues(string a, string b)
+    {
+        if (double.TryParse(a, NumberStyles.Any, CultureInfo.InvariantCulture, out var da) &&
+            double.TryParse(b, NumberStyles.Any, CultureInfo.InvariantCulture, out var db))
+            return da.CompareTo(db);
+
+        if (DateTime.TryParse(a, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dta) &&
+            DateTime.TryParse(b, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dtb))
+            return dta.CompareTo(dtb);
+
+        return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Splits <paramref name="expr"/> by top-level <c>&amp;</c> (VB.NET string concatenation)
+    /// operators that are not inside parentheses or quoted strings.
+    /// Returns <c>null</c> when no top-level <c>&amp;</c> is found.
+    /// </summary>
+    private static List<string>? SplitByTopLevelConcatOperator(string expr)
+    {
+        var parts = new List<string>();
+        int depth = 0;
+        bool inStr = false;
+        int start = 0;
+        bool found = false;
+
+        for (int i = 0; i < expr.Length; i++)
+        {
+            char c = expr[i];
+            if (c == '"') { inStr = !inStr; continue; }
+            if (inStr) continue;
+            if (c == '(') { depth++; continue; }
+            if (c == ')') { depth--; continue; }
+            if (depth != 0) continue;
+
+            if (c == '&')
+            {
+                parts.Add(expr[start..i]);
+                start = i + 1;
+                found = true;
+            }
+        }
+
+        if (!found) return null;
+        parts.Add(expr[start..]);
+        return parts;
     }
 
     /// <summary>

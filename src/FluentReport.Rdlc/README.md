@@ -43,9 +43,9 @@ var doc3 = DocumentRdlcExtensions.FromRdlcXml(xmlString, datasets, parameters);
 
 | Method | Description |
 |--------|-------------|
-| `FromRdlc(path, datasets, parameters)` | Imports from file |
-| `FromRdlcStream(stream, datasets, parameters)` | Imports from `Stream` |
-| `FromRdlcXml(xml, datasets, parameters)` | Imports from XML `string` |
+| `FromRdlc(path, datasets, parameters, globals)` | Imports from file |
+| `FromRdlcStream(stream, datasets, parameters, globals)` | Imports from `Stream` |
+| `FromRdlcXml(xml, datasets, parameters, globals)` | Imports from XML `string` |
 
 ## Supported RDLC elements
 
@@ -65,8 +65,18 @@ var doc3 = DocumentRdlcExtensions.FromRdlcXml(xmlString, datasets, parameters);
 | `=Fields!FieldName.Value` | Field value from the dataset |
 | `=First(Fields!FieldName.Value, "DataSetName")` | Field value from the first row of the named dataset |
 | `=Parameters!ParamName.Value` | Parameter value |
-| `=IIF(condition, trueValue, falseValue)` | Conditional expression (supports simple equality checks) |
+| `=Globals!Name.Value` | Global variable (supply via `globals` parameter) |
+| `=IIF(condition, trueValue, falseValue)` | Conditional expression |
 | `=Switch(cond1, val1, cond2, val2, ...)` | Multi-branch conditional expression |
+| `=Format(expr, "format")` | Value formatted with a .NET / VB.NET format string |
+| `=Sum(Fields!X.Value, "DataSet")` | Sum of a numeric field over a dataset |
+| `=Count(Fields!X.Value, "DataSet")` | Count of non-empty values |
+| `=Avg(Fields!X.Value, "DataSet")` | Average of a numeric field |
+| `=Min(Fields!X.Value, "DataSet")` | Minimum value |
+| `=Max(Fields!X.Value, "DataSet")` | Maximum value |
+| `=CountRows("DataSet")` | Total row count of a dataset |
+| `=expr1 & expr2` | String concatenation |
+| Condition operators `=`, `<>`, `>`, `<`, `>=`, `<=` | Comparisons in `IIF` / `Switch` conditions |
 | Literal (without `=`) | Static text |
 
 Unsupported/unknown expressions still resolve to an empty string.
