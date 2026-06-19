@@ -28,6 +28,16 @@ public static class DocumentRdlcExtensions
     /// <returns>A fully configured <see cref="Document"/> instance.</returns>
     public static Document FromRdlc(
         string path,
+        IDictionary<string, IEnumerable<object>>? datasets,
+        IDictionary<string, object>? parameters)
+        => FromRdlc(path, datasets, parameters, globals: null);
+
+    /// <summary>
+    /// Parses an RDLC report definition file and returns a <see cref="Document"/> ready for
+    /// rendering (PDF, PNG, Excel, …).
+    /// </summary>
+    public static Document FromRdlc(
+        string path,
         IDictionary<string, IEnumerable<object>>? datasets = null,
         IDictionary<string, object>? parameters = null,
         IDictionary<string, object>? globals = null)
@@ -43,6 +53,15 @@ public static class DocumentRdlcExtensions
     /// <param name="datasets">Optional dataset rows (see overload with <paramref name="datasets"/>).</param>
     /// <param name="parameters">Optional report parameters.</param>
     /// <param name="globals">Optional globals dictionary for <c>=Globals!X.Value</c> expressions.</param>
+    public static Document FromRdlcStream(
+        Stream stream,
+        IDictionary<string, IEnumerable<object>>? datasets,
+        IDictionary<string, object>? parameters)
+        => FromRdlcStream(stream, datasets, parameters, globals: null);
+
+    /// <summary>
+    /// Parses an RDLC report definition from a <see cref="Stream"/>.
+    /// </summary>
     public static Document FromRdlcStream(
         Stream stream,
         IDictionary<string, IEnumerable<object>>? datasets = null,
@@ -61,6 +80,16 @@ public static class DocumentRdlcExtensions
     /// <param name="datasets">Optional dataset rows.</param>
     /// <param name="parameters">Optional report parameters.</param>
     /// <param name="globals">Optional globals dictionary for <c>=Globals!X.Value</c> expressions.</param>
+    public static Document FromRdlcXml(
+        string xml,
+        IDictionary<string, IEnumerable<object>>? datasets,
+        IDictionary<string, object>? parameters)
+        => FromRdlcXml(xml, datasets, parameters, globals: null);
+
+    /// <summary>
+    /// Parses an RDLC report definition from an XML string.
+    /// Useful for testing or when the RDLC content is embedded in code.
+    /// </summary>
     public static Document FromRdlcXml(
         string xml,
         IDictionary<string, IEnumerable<object>>? datasets = null,

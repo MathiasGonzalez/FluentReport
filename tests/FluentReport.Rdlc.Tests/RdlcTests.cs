@@ -1217,6 +1217,19 @@ public class RdlcTests
         Assert.Equal("Hello, Alice", result);
     }
 
+    [Fact]
+    public void Evaluate_Concatenation_WithFormattedAggregate_JoinsStrings()
+    {
+        var datasets = new Dictionary<string, IEnumerable<object>>
+        {
+            ["ds"] = new object[] { new { Amount = "100.5" }, new { Amount = "200.25" }, new { Amount = "50" } }
+        };
+        var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
+
+        var result = evaluator.Evaluate("=Format(Sum(Fields!Amount.Value, \"ds\"), \"#,##0.00\") & \" USD\"");
+        Assert.Equal("350.75 USD", result);
+    }
+
     // ── Format() function ─────────────────────────────────────────────────────
 
     [Theory]
@@ -1243,13 +1256,12 @@ public class RdlcTests
     [Theory]
     [InlineData("=Format(Fields!Date.Value, \"Short Date\")", "2024-06-15")]
     [InlineData("=Format(Fields!Date.Value, \"Long Date\")",  "2024-06-15")]
-    public void Evaluate_Format_NamedVbFormat_DoesNotThrow(string expr, string dateValue)
+    public void Evaluate_Format_NamedVbFormat_ProducesFormattedOutput(string expr, string dateValue)
     {
         var evaluator = new RdlcExpressionEvaluator();
         var row = new Dictionary<string, object> { ["Date"] = dateValue };
-        // Should not throw; just verifies mapping resolves without exception.
         var result = evaluator.Evaluate(expr, row);
-        Assert.NotNull(result);
+        Assert.NotEqual(dateValue, result);
     }
 
     [Fact]
@@ -1623,5 +1635,32 @@ public class RdlcTests
         var doc   = DocumentRdlcExtensions.FromRdlcXml(rdlc, datasets);
         var bytes = doc.GeneratePdf();
         Assert.NotEmpty(bytes);
+    }
+
+    [Fact]
+    public void PublicApi_ContainsLegacyBinaryCompatibleOverloads()
+    {
+        var fromRdlc = typeof(DocumentRdlcExtensions).GetMethod(
+            nameof(DocumentRdlcExtensions.FromRdlc),
+            [typeof(string), typeof(IDictionary<string, IEnumerable<object>>), typeof(IDictionary<string, object>)]);
+        Assert.NotNull(fromRdlc);
+
+        var fromRdlcStream = typeof(DocumentRdlcExtensions).GetMethod(
+            nameof(DocumentRdlcExtensions.FromRdlcStream),
+            [typeof(Stream), typeof(IDictionary<string, IEnumerable<object>>), typeof(IDictionary<string, object>)]);
+        Assert.NotNull(fromRdlcStream);
+
+        var fromRdlcXml = typeof(DocumentRdlcExtensions).GetMethod(
+            nameof(DocumentRdlcExtensions.FromRdlcXml),
+            [typeof(string), typeof(IDictionary<string, IEnumerable<object>>), typeof(IDictionary<string, object>)]);
+        Assert.NotNull(fromRdlcXml);
+
+        var factoryCtor = typeof(RdlcDocumentFactory).GetConstructor(
+            [typeof(IDictionary<string, IEnumerable<object>>), typeof(IDictionary<string, object>)]);
+        Assert.NotNull(factoryCtor);
+
+        var evaluatorCtor = typeof(RdlcExpressionEvaluator).GetConstructor(
+            [typeof(IDictionary<string, object>), typeof(IDictionary<string, IEnumerable<object>>)]);
+        Assert.NotNull(evaluatorCtor);
     }
 }

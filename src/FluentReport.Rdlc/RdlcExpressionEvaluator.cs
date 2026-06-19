@@ -54,6 +54,13 @@ public sealed class RdlcExpressionEvaluator
         _globals = globals;
     }
 
+    public RdlcExpressionEvaluator(
+        IDictionary<string, object>? parameters,
+        IDictionary<string, IEnumerable<object>>? datasets)
+        : this(parameters, datasets, globals: null)
+    {
+    }
+
     /// <summary>
     /// Evaluates the expression using an optional data row.
     /// </summary>
@@ -127,6 +134,13 @@ public sealed class RdlcExpressionEvaluator
         if (expr.StartsWith("Switch", StringComparison.OrdinalIgnoreCase) && expr.Length > 6 && expr[6] == '(')
             return EvaluateSwitch(expr, row);
 
+        // String concatenation with & operator (VB.NET string concat) — evaluate before
+        // Format()/aggregate dispatch so composite expressions like
+        // Sum(...) & " USD" and Format(...) & ... are handled correctly.
+        var concatParts = SplitByTopLevelConcatOperator(expr);
+        if (concatParts != null)
+            return string.Concat(concatParts.Select(p => EvaluateExpr(p.Trim(), row)));
+
         // Format(expression, "format-string")
         if (expr.StartsWith("Format", StringComparison.OrdinalIgnoreCase) && expr.Length > 6 && expr[6] == '(')
             return EvaluateFormat(expr, row);
@@ -135,12 +149,6 @@ public sealed class RdlcExpressionEvaluator
         var aggMatch = AggregateRegex.Match(expr);
         if (aggMatch.Success)
             return EvaluateAggregate(expr, row, aggMatch.Groups["fn"].Value);
-
-        // String concatenation with & operator (VB.NET string concat) — must be checked before
-        // the quoted-literal shortcut, because expressions like "A" & "B" start and end with '"'.
-        var concatParts = SplitByTopLevelConcatOperator(expr);
-        if (concatParts != null)
-            return string.Concat(concatParts.Select(p => EvaluateExpr(p.Trim(), row)));
 
         // Quoted string literal inside an expression: "text"
         if (expr.StartsWith('"') && expr.EndsWith('"') && expr.Length >= 2)
@@ -428,7 +436,7 @@ public sealed class RdlcExpressionEvaluator
             DateTime.TryParse(b, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dtb))
             return dta.CompareTo(dtb);
 
-        return string.Compare(a, b, StringComparison.OrdinalIgnoreCase);
+        return string.Compare(a, b, StringComparison.Ordinal);
     }
 
     /// <summary>

@@ -47,6 +47,13 @@ public sealed class RdlcDocumentFactory
         _evaluator = new RdlcExpressionEvaluator(parameters, datasets, globals);
     }
 
+    public RdlcDocumentFactory(
+        IDictionary<string, IEnumerable<object>>? datasets,
+        IDictionary<string, object>? parameters)
+        : this(datasets, parameters, globals: null)
+    {
+    }
+
     // ── Public entry points ──────────────────────────────────────────────────
 
     /// <summary>Parses the <c>.rdlc</c> file at <paramref name="path"/> into a <see cref="Document"/>.</summary>
@@ -757,4 +764,3 @@ public sealed class RdlcDocumentFactory
     private static int TryParseInt(string? value, int defaultValue)
         => int.TryParse(value, out var result) ? result : defaultValue;
 }
-
