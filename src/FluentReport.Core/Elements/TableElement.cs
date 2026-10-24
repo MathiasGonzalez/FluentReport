@@ -27,6 +27,9 @@ public class TableElement : IElement
     public List<TableColumnDefinition> Columns { get; } = new();
     public List<TableCell> HeaderCells { get; } = new();
     public List<TableCell> DataCells { get; } = new();
+
+    /// <summary>Rows rendered after the data rows (totals, notes).</summary>
+    public List<TableCell> FooterCells { get; } = new();
     public float BorderWidth { get; set; }
     public ReportColor BorderColor { get; set; } = ReportColor.Black;
 

@@ -31,7 +31,7 @@ internal static class ElementTree
                     if (item.Element != null) item.Element = Resolve(item.Element);
                 break;
             case TableElement table:
-                foreach (var cell in table.HeaderCells.Concat(table.DataCells))
+                foreach (var cell in table.HeaderCells.Concat(table.DataCells).Concat(table.FooterCells))
                     if (cell.Content != null) cell.Content = Resolve(cell.Content);
                 break;
             case PaddingElement padding when padding.Child != null:

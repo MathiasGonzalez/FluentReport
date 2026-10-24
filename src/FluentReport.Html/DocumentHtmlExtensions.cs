@@ -5,13 +5,15 @@ namespace FluentReport.Html;
 /// </summary>
 public static class DocumentHtmlExtensions
 {
+    private static readonly System.Text.UTF8Encoding Utf8NoBom = new(encoderShouldEmitUTF8Identifier: false);
+
     /// <summary>
     /// Generates a full HTML document (<c>&lt;!DOCTYPE html&gt;…&lt;/html&gt;</c>) and
     /// saves it to the given file path.
     /// </summary>
     public static void GenerateHtml(this Document document, string filePath, HtmlRendererOptions? options = null)
     {
-        File.WriteAllText(filePath, document.GenerateHtml(options), System.Text.Encoding.UTF8);
+        File.WriteAllText(filePath, document.GenerateHtml(options), Utf8NoBom);
     }
 
     /// <summary>
@@ -20,7 +22,7 @@ public static class DocumentHtmlExtensions
     /// </summary>
     public static void GenerateHtml(this Document document, Stream stream, HtmlRendererOptions? options = null)
     {
-        using var writer = new StreamWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+        using var writer = new StreamWriter(stream, Utf8NoBom, leaveOpen: true);
         writer.Write(document.GenerateHtml(options));
     }
 
