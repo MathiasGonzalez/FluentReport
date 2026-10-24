@@ -1,5 +1,6 @@
 using FluentReport;
 using FluentReport.Core;
+using FluentReport.Html;
 
 namespace FluentReport.Samples;
 
@@ -53,7 +54,7 @@ internal static class Sample12ReciboPago
     {
         var d = Data;
 
-        File.WriteAllBytes(Path.Combine(outputDir, "12-recibo-pago.pdf"),
+        File.WriteAllText(Path.Combine(outputDir, "12-recibo-pago.html"),
             Document.Create(c =>
             {
                 c.Page(page =>
@@ -179,8 +180,8 @@ internal static class Sample12ReciboPago
                         x.TotalPages(footerStyle);
                     });
                 });
-            }).GeneratePdf());
+            }).GenerateHtml());
 
-        Console.WriteLine("Generated 12-recibo-pago.pdf");
+        Console.WriteLine("Generated 12-recibo-pago.html");
     }
 }

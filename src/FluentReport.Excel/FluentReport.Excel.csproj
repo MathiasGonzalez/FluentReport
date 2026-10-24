@@ -23,6 +23,6 @@
     <PackageReference Include="System.IO.Packaging" Version="8.0.1" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\FluentReport\FluentReport.csproj" />
+    <ProjectReference Include="..\FluentReport.Core\FluentReport.Core.csproj" />
   </ItemGroup>
 </Project>

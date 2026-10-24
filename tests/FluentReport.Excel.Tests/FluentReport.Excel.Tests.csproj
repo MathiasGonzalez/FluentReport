@@ -20,9 +20,7 @@
     <PackageReference Include="System.IO.Packaging" Version="8.0.1" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\FluentReport\FluentReport.csproj" />
     <ProjectReference Include="..\..\src\FluentReport.Excel\FluentReport.Excel.csproj" />
-    <ProjectReference Include="..\..\src\FluentReport.Schema\FluentReport.Schema.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

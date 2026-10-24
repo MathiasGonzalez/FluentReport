@@ -1,5 +1,6 @@
 using FluentReport.Styling;
-using SkiaSharp;
+using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Globalization;
 
 namespace FluentReport.Samples;
@@ -28,8 +29,7 @@ internal static class SampleHelpers
     /// Replace this with an actual QR-code generator (e.g. ZXing.Net) in production.
     /// <para>
     /// <paramref name="size"/> must be at least 10 so that the 10x10 cell grid and the
-    /// three finder-pattern corner squares fit without producing negative coordinates or
-    /// zero/negative dimensions.
+    /// three finder-pattern corner squares fit.
     /// </para>
     /// </summary>
     public static byte[] GenerarQrPlaceholder(int size)
@@ -37,35 +37,74 @@ internal static class SampleHelpers
         if (size < 10)
             throw new ArgumentOutOfRangeException(nameof(size), "Size must be at least 10.");
 
-        using var bitmap = new SKBitmap(size, size);
-        using var canvas = new SKCanvas(bitmap);
+        int cell = size / 10;
+        int finder = 3 * cell;
+        var gray = new byte[size * size];
 
-        canvas.Clear(new SKColor(240, 240, 240));
-
-        int cellSize = size / 10;   // >= 1 because size >= 10
-        using var darkPaint = new SKPaint { Color = new SKColor(30, 30, 30), IsAntialias = false };
-        for (int r = 0; r < 10; r++)
-            for (int c = 0; c < 10; c++)
-                if ((r + c) % 2 == 0)
-                    canvas.DrawRect(c * cellSize, r * cellSize, cellSize - 1, cellSize - 1, darkPaint);
-
-        // Simulate QR finder-pattern corners.
-        // p = 3 × cellSize ≤ 3 × (size/10) ≤ 0.3 × size, so size - p ≥ 0.7 × size > 0
-        // and p - 2 ≥ 3 × 1 - 2 = 1 > 0 (since cellSize ≥ 1).
-        using var borderPaint = new SKPaint
+        for (int y = 0; y < size; y++)
+        for (int x = 0; x < size; x++)
         {
-            Color = SKColors.Black,
-            Style = SKPaintStyle.Stroke,
-            StrokeWidth = 3,
-            IsAntialias = false,
-        };
-        int p = 3 * cellSize;
-        canvas.DrawRect(1,        1,        p - 2, p - 2, borderPaint);
-        canvas.DrawRect(size - p, 1,        p - 2, p - 2, borderPaint);
-        canvas.DrawRect(1,        size - p, p - 2, p - 2, borderPaint);
+            bool dark = (x / cell + y / cell) % 2 == 0 && x % cell != cell - 1 && y % cell != cell - 1;
+            bool inFinder = (x < finder && y < finder) || (x >= size - finder && y < finder) || (x < finder && y >= size - finder);
+            if (inFinder)
+            {
+                int fx = x < finder ? x : x - (size - finder);
+                int fy = y < finder ? y : y - (size - finder);
+                dark = fx < 3 || fy < 3 || fx >= finder - 3 || fy >= finder - 3;
+            }
+            gray[y * size + x] = dark ? (byte)30 : (byte)240;
+        }
 
-        using var image = SKImage.FromBitmap(bitmap);
-        using var data  = image.Encode(SKEncodedImageFormat.Png, 100);
-        return data.ToArray();
+        return EncodeGrayscalePng(size, size, gray);
+    }
+
+    /// <summary>Minimal 8-bit grayscale PNG encoder (no external imaging dependency).</summary>
+    private static byte[] EncodeGrayscalePng(int width, int height, byte[] pixels)
+    {
+        var raw = new byte[height * (width + 1)];
+        for (int y = 0; y < height; y++)
+            Buffer.BlockCopy(pixels, y * width, raw, y * (width + 1) + 1, width); // filter byte 0 = None
+
+        using var compressed = new MemoryStream();
+        using (var z = new ZLibStream(compressed, CompressionLevel.Optimal, leaveOpen: true))
+            z.Write(raw);
+
+        var ihdr = new byte[13];
+        BinaryPrimitives.WriteInt32BigEndian(ihdr, width);
+        BinaryPrimitives.WriteInt32BigEndian(ihdr.AsSpan(4), height);
+        ihdr[8] = 8; // bit depth
+        ihdr[9] = 0; // color type: grayscale
+
+        using var png = new MemoryStream();
+        png.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        WriteChunk(png, "IHDR", ihdr);
+        WriteChunk(png, "IDAT", compressed.ToArray());
+        WriteChunk(png, "IEND", []);
+        return png.ToArray();
+    }
+
+    private static void WriteChunk(Stream png, string type, byte[] data)
+    {
+        Span<byte> len = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32BigEndian(len, data.Length);
+        png.Write(len);
+        var typeBytes = System.Text.Encoding.ASCII.GetBytes(type);
+        png.Write(typeBytes);
+        png.Write(data);
+        Span<byte> crc = stackalloc byte[4];
+        BinaryPrimitives.WriteUInt32BigEndian(crc, Crc32(typeBytes, data));
+        png.Write(crc);
+    }
+
+    private static uint Crc32(byte[] type, byte[] data)
+    {
+        uint c = 0xFFFFFFFF;
+        foreach (var b in type.Concat(data))
+        {
+            c ^= b;
+            for (int k = 0; k < 8; k++)
+                c = (c & 1) != 0 ? 0xEDB88320 ^ (c >> 1) : c >> 1;
+        }
+        return c ^ 0xFFFFFFFF;
     }
 }

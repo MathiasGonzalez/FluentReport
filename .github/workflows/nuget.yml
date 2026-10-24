@@ -33,8 +33,6 @@ jobs:
       - name: Pack FluentReport.Core
         run: dotnet pack src/FluentReport.Core/FluentReport.Core.csproj --no-build --configuration Release --output ./nupkgs
 
-      - name: Pack FluentReport
-        run: dotnet pack src/FluentReport/FluentReport.csproj --no-build --configuration Release --output ./nupkgs
 
       - name: Pack FluentReport.Excel
         run: dotnet pack src/FluentReport.Excel/FluentReport.Excel.csproj --no-build --configuration Release --output ./nupkgs
@@ -45,8 +43,6 @@ jobs:
       - name: Pack FluentReport.Rdlc
         run: dotnet pack src/FluentReport.Rdlc/FluentReport.Rdlc.csproj --no-build --configuration Release --output ./nupkgs
 
-      - name: Pack FluentReport.Schema
-        run: dotnet pack src/FluentReport.Schema/FluentReport.Schema.csproj --no-build --configuration Release --output ./nupkgs
 
       - name: Push to NuGet
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_FLUENT_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate

@@ -18,8 +18,8 @@
     </PackageReference>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\src\FluentReport\FluentReport.csproj" />
     <ProjectReference Include="..\..\src\FluentReport.Rdlc\FluentReport.Rdlc.csproj" />
+    <ProjectReference Include="..\..\src\FluentReport.Html\FluentReport.Html.csproj" />
   </ItemGroup>
   <ItemGroup>
     <Using Include="Xunit" />

@@ -32,7 +32,7 @@ jobs:
       - name: Test
         run: dotnet test --no-build --configuration Release --verbosity normal
 
-      - name: Generate sample files (PDF + Excel)
+      - name: Generate sample files (HTML + Excel)
         run: dotnet run --project samples/FluentReport.Samples --configuration Release -- sample-files
 
       - name: Upload sample files

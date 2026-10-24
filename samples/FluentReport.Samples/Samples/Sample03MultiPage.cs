@@ -1,5 +1,6 @@
 using FluentReport;
 using FluentReport.Core;
+using FluentReport.Html;
 
 namespace FluentReport.Samples;
 
@@ -11,7 +12,7 @@ internal static class Sample03MultiPage
 
     public static void Generate(string outputDir)
     {
-        File.WriteAllBytes(Path.Combine(outputDir, "03-multi-page.pdf"),
+        File.WriteAllText(Path.Combine(outputDir, "03-multi-page.html"),
             Document.Create(c =>
             {
                 c.Page(page =>
@@ -47,8 +48,8 @@ internal static class Sample03MultiPage
                         x.TotalPages();
                     });
                 });
-            }).GeneratePdf());
+            }).GenerateHtml());
 
-        Console.WriteLine("Generated 03-multi-page.pdf");
+        Console.WriteLine("Generated 03-multi-page.html");
     }
 }

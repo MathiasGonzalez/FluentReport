@@ -3,7 +3,7 @@ using FluentReport.Samples;
 string outputDir = args.Length > 0 ? args[0] : "output";
 Directory.CreateDirectory(outputDir);
 
-// ── PDF samples ──────────────────────────────────────────────────────────────
+// ── HTML samples ─────────────────────────────────────────────────────────────
 Sample01HelloWorld.Generate(outputDir);
 Sample02ReportWithTable.Generate(outputDir);
 Sample03MultiPage.Generate(outputDir);

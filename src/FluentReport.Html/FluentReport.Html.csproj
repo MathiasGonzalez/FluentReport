@@ -19,6 +19,6 @@
     <None Include="README.md" Pack="true" PackagePath="\" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\FluentReport\FluentReport.csproj" />
+    <ProjectReference Include="..\FluentReport.Core\FluentReport.Core.csproj" />
   </ItemGroup>
 </Project>

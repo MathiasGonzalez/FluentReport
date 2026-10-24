@@ -1,5 +1,6 @@
 using FluentReport;
 using FluentReport.Core;
+using FluentReport.Html;
 
 namespace FluentReport.Samples;
 
@@ -10,7 +11,7 @@ internal static class Sample04LayoutShowcase
 
     public static void Generate(string outputDir)
     {
-        File.WriteAllBytes(Path.Combine(outputDir, "04-layout-showcase.pdf"),
+        File.WriteAllText(Path.Combine(outputDir, "04-layout-showcase.html"),
             Document.Create(c =>
             {
                 c.Page(page =>
@@ -59,8 +60,8 @@ internal static class Sample04LayoutShowcase
                         x.TotalPages();
                     });
                 });
-            }).GeneratePdf());
+            }).GenerateHtml());
 
-        Console.WriteLine("Generated 04-layout-showcase.pdf");
+        Console.WriteLine("Generated 04-layout-showcase.html");
     }
 }
