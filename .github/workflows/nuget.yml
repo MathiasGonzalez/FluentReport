@@ -1,25 +1,22 @@
 name: Publish to NuGet
 
-# Publishes when a release tag is pushed (e.g. v2.0.0). The package version comes from the tag,
-# so every release produces new package versions instead of being skipped as a duplicate.
+# The package version is <Version> in Directory.Build.props. Every push to main checks it against
+# nuget.org: a new version is built, tested, published and tagged; an already published one is skipped.
+# nuget.org never lets a version be overwritten, so bump <Version> to publish a change.
 on:
   push:
-    tags: [ "v*.*.*" ]
+    branches: [ "main" ]
   workflow_dispatch:
-    inputs:
-      version:
-        description: "Package version to publish (e.g. 2.0.1)"
-        required: true
+
+env:
+  PACKAGES: FluentReport.Core FluentReport FluentReport.Html FluentReport.Excel FluentReport.Rdlc
 
 jobs:
   publish:
     name: Pack & Publish
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-
-    env:
-      VERSION: ${{ inputs.version || github.ref_name }}
+      contents: write   # push the release tag
 
     steps:
       - name: Checkout
@@ -30,23 +27,59 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
-      - name: Resolve version
-        run: echo "PACKAGE_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+      - name: Read version
+        run: |
+          VERSION=$(dotnet msbuild src/FluentReport/FluentReport.csproj -getProperty:Version)
+          echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Version from Directory.Build.props: $VERSION"
+
+      - name: Check nuget.org
+        id: check
+        run: |
+          MISSING=""
+          for id in $PACKAGES; do
+            lower=$(echo "$id" | tr '[:upper:]' '[:lower:]')
+            if curl -sf "https://api.nuget.org/v3-flatcontainer/$lower/index.json" | grep -q "\"$PACKAGE_VERSION\""; then
+              echo "$id $PACKAGE_VERSION is already published"
+            else
+              MISSING="$MISSING $id"
+            fi
+          done
+          echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+          if [ -z "$MISSING" ]; then
+            echo "::notice::$PACKAGE_VERSION is already on nuget.org; bump <Version> in Directory.Build.props to publish."
+          fi
 
       - name: Restore dependencies
+        if: steps.check.outputs.missing != ''
         run: dotnet restore
 
       - name: Build (Release)
-        run: dotnet build --no-restore --configuration Release -p:Version=$PACKAGE_VERSION
+        if: steps.check.outputs.missing != ''
+        run: dotnet build --no-restore --configuration Release
 
       - name: Test
+        if: steps.check.outputs.missing != ''
         run: dotnet test --no-build --configuration Release
 
       - name: Pack
+        if: steps.check.outputs.missing != ''
         run: |
-          for project in FluentReport.Core FluentReport FluentReport.Html FluentReport.Excel FluentReport.Rdlc; do
-            dotnet pack src/$project/$project.csproj --no-build --configuration Release -p:Version=$PACKAGE_VERSION --output ./nupkgs
+          for project in ${{ steps.check.outputs.missing }}; do
+            dotnet pack src/$project/$project.csproj --no-build --configuration Release --output ./nupkgs
           done
 
       - name: Push to NuGet
+        if: steps.check.outputs.missing != ''
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_FLUENT_API_KEY }} --source https://api.nuget.org/v3/index.json
+
+      - name: Tag release
+        if: steps.check.outputs.missing != ''
+        run: |
+          TAG="v$PACKAGE_VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "$TAG already exists"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi

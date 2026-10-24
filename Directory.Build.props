@@ -8,7 +8,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
-  <!-- Shared NuGet metadata for the packages under src/. CI overrides Version from the release tag. -->
+  <!-- Shared NuGet metadata for the packages under src/. Bump Version to publish: the NuGet workflow reads it. -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('$([System.IO.Path]::DirectorySeparatorChar)src$([System.IO.Path]::DirectorySeparatorChar)'))">
     <Version>2.0.0</Version>
     <Authors>Mathías González Benítez</Authors>
