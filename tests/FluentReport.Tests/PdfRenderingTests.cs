@@ -109,6 +109,15 @@ public class PdfRenderingTests
         if (italic) Assert.True(font.Typeface.FontSlant != SKFontStyleSlant.Upright || font.SkewX != 0);
     }
 
+    [Fact]
+    public void SystemFont_HasGlyphs()
+    {
+        using var fonts = new FontCache(null);
+        var glyphs = fonts.Font(new TextStyle()).GetGlyphs("Hola");
+
+        Assert.DoesNotContain((ushort)0, glyphs);
+    }
+
     // ── Images ───────────────────────────────────────────────────────────────
 
     [Fact]
