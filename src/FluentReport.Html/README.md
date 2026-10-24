@@ -2,7 +2,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/FluentReport.Html.svg?label=FluentReport.Html)](https://www.nuget.org/packages/FluentReport.Html)
 
-**HTML / email** renderer for FluentReport. Generates static HTML or fragments ready to embed in transactional emails, using the same fluent API as PDF and Excel. It does not require SkiaSharp.
+**HTML / email** renderer for FluentReport. Generates static HTML or fragments ready to embed in transactional emails: table-based layout, inline styles, images as data URIs. No native dependencies.
 
 ## Installation
 
@@ -94,10 +94,9 @@ Common options:
 
 | Package | Purpose |
 |---------|---------|
-| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Model and fluent API |
-| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer |
-| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel renderer |
-| `FluentReport.Html` | HTML / email renderer - this package |
+| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API |
+| [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer |
+| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel (.xlsx) renderer |
 | [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
 
 > Full documentation is available in the [repository](https://github.com/MathiasGonzalez/FluentReport).
