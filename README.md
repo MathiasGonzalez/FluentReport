@@ -122,7 +122,7 @@ Output does not depend on the machine's regional settings: CSS numbers always us
 
 ### Example output — e-Factura (Uruguay)
 
-See `samples/FluentReport.Samples` (`05-invoice.pdf`, `10-recibo-sueldo.pdf`, …) and [the UY samples guide](docs/uy-fiscal-samples.md).
+See the generated files in [`samples/FluentReport.Samples/output`](samples/FluentReport.Samples/output) ([invoice](samples/FluentReport.Samples/output/05-invoice.pdf), [salary slip](samples/FluentReport.Samples/output/10-recibo-sueldo.pdf), …) and [the UY samples guide](docs/uy-fiscal-samples.md).
 
 ## Documentation
 
