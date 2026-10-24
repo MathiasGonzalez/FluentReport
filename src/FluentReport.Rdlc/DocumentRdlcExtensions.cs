@@ -1,73 +1,47 @@
 namespace FluentReport.Rdlc;
 
 /// <summary>
-/// Extension methods that add RDLC import capabilities to <see cref="Document"/>.
+/// RDLC import entry points, available as <c>Document.FromRdlc(...)</c>, <c>Document.FromRdlcStream(...)</c>
+/// and <c>Document.FromRdlcXml(...)</c>. Use <see cref="RdlcDocumentFactory"/> directly to read
+/// <see cref="RdlcDocumentFactory.Warnings"/>.
 /// </summary>
 public static class DocumentRdlcExtensions
 {
-    /// <summary>
-    /// Parses an RDLC report definition file and returns a <see cref="Document"/> ready for
-    /// rendering (PDF, PNG, Excel, …).
-    /// </summary>
-    /// <param name="path">
-    /// Absolute or relative path to the <c>.rdlc</c> file.
-    /// </param>
-    /// <param name="datasets">
-    /// Optional dictionary mapping dataset names (as declared in the RDLC) to sequences of data
-    /// rows. Each row may be a POCO (property values resolved via reflection) or an
-    /// <see cref="IDictionary{TKey,TValue}"/> of string → object.
-    /// </param>
-    /// <param name="parameters">
-    /// Optional dictionary of report parameter values, keyed by parameter name.
-    /// These are used to resolve <c>=Parameters!X.Value</c> expressions.
-    /// </param>
-    /// <param name="globals">
-    /// Optional dictionary of global variable overrides (e.g. <c>ReportName</c>).
-    /// These are used to resolve <c>=Globals!X.Value</c> expressions.
-    /// </param>
-    /// <returns>A fully configured <see cref="Document"/> instance.</returns>
-    public static Document FromRdlc(
-        string path,
-        IDictionary<string, IEnumerable<object>>? datasets = null,
-        IDictionary<string, object>? parameters = null,
-        IDictionary<string, object>? globals = null)
+    extension(Document)
     {
-        var factory = new RdlcDocumentFactory(datasets, parameters, globals);
-        return factory.ParseFromFile(path);
-    }
+        /// <summary>Parses an RDLC report definition file into a <see cref="Document"/>.</summary>
+        /// <param name="path">Path to the <c>.rdlc</c> file. External images are resolved from its directory.</param>
+        /// <param name="datasets">
+        /// Dataset name (as declared in the RDLC) → rows. A row may be a POCO, an
+        /// <see cref="IDictionary{TKey,TValue}"/> of string → object, or a non-generic dictionary.
+        /// </param>
+        /// <param name="parameters">Values for <c>=Parameters!X.Value</c>.</param>
+        /// <param name="globals">Values for <c>=Globals!X.Value</c> (e.g. <c>ReportName</c>).</param>
+        /// <param name="options">Culture, external image and strictness options.</param>
+        public static Document FromRdlc(
+            string path,
+            IDictionary<string, IEnumerable<object>>? datasets = null,
+            IDictionary<string, object>? parameters = null,
+            IDictionary<string, object>? globals = null,
+            RdlcImportOptions? options = null)
+            => new RdlcDocumentFactory(datasets, parameters, globals, options).ParseFromFile(path);
 
-    /// <summary>
-    /// Parses an RDLC report definition from a <see cref="Stream"/>.
-    /// </summary>
-    /// <param name="stream">Stream containing the RDLC XML.</param>
-    /// <param name="datasets">Optional dataset rows (see overload with <paramref name="datasets"/>).</param>
-    /// <param name="parameters">Optional report parameters.</param>
-    /// <param name="globals">Optional globals dictionary for <c>=Globals!X.Value</c> expressions.</param>
-    public static Document FromRdlcStream(
-        Stream stream,
-        IDictionary<string, IEnumerable<object>>? datasets = null,
-        IDictionary<string, object>? parameters = null,
-        IDictionary<string, object>? globals = null)
-    {
-        var factory = new RdlcDocumentFactory(datasets, parameters, globals);
-        return factory.ParseFromStream(stream);
-    }
+        /// <summary>Parses an RDLC report definition from a stream. See <see cref="FromRdlc"/> for the parameters.</summary>
+        public static Document FromRdlcStream(
+            Stream stream,
+            IDictionary<string, IEnumerable<object>>? datasets = null,
+            IDictionary<string, object>? parameters = null,
+            IDictionary<string, object>? globals = null,
+            RdlcImportOptions? options = null)
+            => new RdlcDocumentFactory(datasets, parameters, globals, options).ParseFromStream(stream);
 
-    /// <summary>
-    /// Parses an RDLC report definition from an XML string.
-    /// Useful for testing or when the RDLC content is embedded in code.
-    /// </summary>
-    /// <param name="xml">RDLC XML string.</param>
-    /// <param name="datasets">Optional dataset rows.</param>
-    /// <param name="parameters">Optional report parameters.</param>
-    /// <param name="globals">Optional globals dictionary for <c>=Globals!X.Value</c> expressions.</param>
-    public static Document FromRdlcXml(
-        string xml,
-        IDictionary<string, IEnumerable<object>>? datasets = null,
-        IDictionary<string, object>? parameters = null,
-        IDictionary<string, object>? globals = null)
-    {
-        var factory = new RdlcDocumentFactory(datasets, parameters, globals);
-        return factory.ParseFromXml(xml);
+        /// <summary>Parses an RDLC report definition from an XML string. See <see cref="FromRdlc"/> for the parameters.</summary>
+        public static Document FromRdlcXml(
+            string xml,
+            IDictionary<string, IEnumerable<object>>? datasets = null,
+            IDictionary<string, object>? parameters = null,
+            IDictionary<string, object>? globals = null,
+            RdlcImportOptions? options = null)
+            => new RdlcDocumentFactory(datasets, parameters, globals, options).ParseFromXml(xml);
     }
 }

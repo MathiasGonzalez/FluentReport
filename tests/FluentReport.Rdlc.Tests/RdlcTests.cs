@@ -1,6 +1,7 @@
 using FluentReport;
 using FluentReport.Core;
 using FluentReport.Elements;
+using FluentReport.Html;
 using FluentReport.Rdlc;
 using FluentReport.Styling;
 
@@ -177,17 +178,13 @@ public class RdlcTests
     // ── Phase 1: RDLC parser tests ────────────────────────────────────────────
 
     [Fact]
-    public void FromRdlcXml_SimpleTextbox_ProducesValidPdf()
+    public void FromRdlcXml_SimpleTextbox_ProducesValidHtml()
     {
         var doc = DocumentRdlcExtensions.FromRdlcXml(SimpleTextboxRdlc);
-        var bytes = doc.GeneratePdf();
+        var html = doc.GenerateHtml();
 
-        Assert.NotEmpty(bytes);
-        // Verify PDF header magic bytes
-        Assert.Equal((byte)'%', bytes[0]);
-        Assert.Equal((byte)'P', bytes[1]);
-        Assert.Equal((byte)'D', bytes[2]);
-        Assert.Equal((byte)'F', bytes[3]);
+        Assert.NotEmpty(html);
+        Assert.StartsWith("<!DOCTYPE html>", html);
     }
 
     [Fact]
@@ -211,7 +208,7 @@ public class RdlcTests
     }
 
     [Fact]
-    public void FromRdlcXml_Tablix_WithDataset_ProducesValidPdf()
+    public void FromRdlcXml_Tablix_WithDataset_ProducesValidHtml()
     {
         var datasets = new Dictionary<string, IEnumerable<object>>
         {
@@ -223,10 +220,10 @@ public class RdlcTests
         };
 
         var doc = DocumentRdlcExtensions.FromRdlcXml(TablixRdlc, datasets);
-        var bytes = doc.GeneratePdf();
+        var html = doc.GenerateHtml();
 
-        Assert.NotEmpty(bytes);
-        Assert.Equal((byte)'%', bytes[0]);
+        Assert.NotEmpty(html);
+        Assert.StartsWith("<!DOCTYPE html>", html);
     }
 
     [Fact]
@@ -241,8 +238,8 @@ public class RdlcTests
         var doc = DocumentRdlcExtensions.FromRdlcXml(ParametersRdlc, parameters: parameters);
         Assert.NotNull(doc);
 
-        var bytes = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
+        var html = doc.GenerateHtml();
+        Assert.NotEmpty(html);
     }
 
     [Fact]
@@ -261,9 +258,9 @@ public class RdlcTests
     {
         // No datasets provided — tablix should still render without throwing
         var doc = DocumentRdlcExtensions.FromRdlcXml(TablixRdlc);
-        var bytes = doc.GeneratePdf();
+        var html = doc.GenerateHtml();
 
-        Assert.NotEmpty(bytes);
+        Assert.NotEmpty(html);
     }
 
     [Fact]
@@ -278,8 +275,8 @@ public class RdlcTests
         };
 
         var doc = DocumentRdlcExtensions.FromRdlcXml(TablixRdlc, datasets);
-        var bytes = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
+        var html = doc.GenerateHtml();
+        Assert.NotEmpty(html);
     }
 
     [Fact]
@@ -307,8 +304,8 @@ public class RdlcTests
             """;
 
         var doc = DocumentRdlcExtensions.FromRdlcXml(lineRdlc);
-        var bytes = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
+        var html = doc.GenerateHtml();
+        Assert.NotEmpty(html);
     }
 
     // ── RdlcExpressionEvaluator unit tests ────────────────────────────────────
@@ -388,14 +385,23 @@ public class RdlcTests
     [InlineData("Red", 255, 0, 0)]
     [InlineData("#FF0000", 255, 0, 0)]
     [InlineData("#0000FF", 0, 0, 255)]
-    [InlineData("unknown-color", 0, 0, 0)] // falls back to black
+    [InlineData("SteelBlue", 70, 130, 180)]
+    [InlineData("LightGrey", 211, 211, 211)]
+    [InlineData("#FF336699", 0x33, 0x66, 0x99)] // RDL: #AARRGGBB
     public void ParseColor_ConvertsNamedAndHexColors(string input, byte r, byte g, byte b)
     {
-        var color = RdlcDocumentFactory.ParseColor(input);
+        var color = RdlcDocumentFactory.ParseColor(input)!.Value;
         Assert.Equal(r, color.R);
         Assert.Equal(g, color.G);
         Assert.Equal(b, color.B);
     }
+
+    [Theory]
+    [InlineData("unknown-color")]
+    [InlineData("Transparent")]
+    [InlineData("#00FFFFFF")]
+    public void ParseColor_UnknownOrTransparent_ReturnsNull(string input)
+        => Assert.Null(RdlcDocumentFactory.ParseColor(input));
 
     // ── Phase 2: ListElement tests ────────────────────────────────────────────
 
@@ -404,7 +410,7 @@ public class RdlcTests
     {
         var items = new[] { "Alpha", "Beta", "Gamma" };
 
-        var bytes = Document.Create(c =>
+        var html = Document.Create(c =>
         {
             c.Page(page =>
             {
@@ -415,10 +421,10 @@ public class RdlcTests
                     container.Text(item);
                 });
             });
-        }).GeneratePdf();
+        }).GenerateHtml();
 
-        Assert.NotEmpty(bytes);
-        Assert.Equal((byte)'%', bytes[0]);
+        Assert.NotEmpty(html);
+        Assert.StartsWith("<!DOCTYPE html>", html);
     }
 
     [Fact]
@@ -426,7 +432,7 @@ public class RdlcTests
     {
         var items = Enumerable.Range(1, 5).ToList();
 
-        var bytes = Document.Create(c =>
+        var html = Document.Create(c =>
         {
             c.Page(page =>
             {
@@ -437,15 +443,15 @@ public class RdlcTests
                     container.Text($"Item {n}");
                 }, spacing: 8f);
             });
-        }).GeneratePdf();
+        }).GenerateHtml();
 
-        Assert.NotEmpty(bytes);
+        Assert.NotEmpty(html);
     }
 
     [Fact]
     public void ListElement_Empty_DoesNotThrow()
     {
-        var bytes = Document.Create(c =>
+        var html = Document.Create(c =>
         {
             c.Page(page =>
             {
@@ -453,9 +459,9 @@ public class RdlcTests
                 page.MarginAll(40);
                 page.Content().List(Array.Empty<string>(), (cb, _) => cb.Text("x"));
             });
-        }).GeneratePdf();
+        }).GenerateHtml();
 
-        Assert.NotEmpty(bytes);
+        Assert.NotEmpty(html);
     }
 
     // ── Phase 2: TableElement ColSpan tests ───────────────────────────────────
@@ -463,7 +469,7 @@ public class RdlcTests
     [Fact]
     public void TableElement_WithColSpan_RendersWithoutThrowing()
     {
-        var bytes = Document.Create(c =>
+        var html = Document.Create(c =>
         {
             c.Page(page =>
             {
@@ -494,9 +500,9 @@ public class RdlcTests
                     });
                 });
             });
-        }).GeneratePdf();
+        }).GenerateHtml();
 
-        Assert.NotEmpty(bytes);
+        Assert.NotEmpty(html);
     }
 
     // ── Phase 3: TextStyle delegate tests ────────────────────────────────────
@@ -506,7 +512,7 @@ public class RdlcTests
     {
         bool isSpecial = true;
 
-        var bytes = Document.Create(c =>
+        var html = Document.Create(c =>
         {
             c.Page(page =>
             {
@@ -524,9 +530,9 @@ public class RdlcTests
                     });
                 });
             });
-        }).GeneratePdf();
+        }).GenerateHtml();
 
-        Assert.NotEmpty(bytes);
+        Assert.NotEmpty(html);
     }
 
     [Fact]
@@ -534,7 +540,7 @@ public class RdlcTests
     {
         double value = 150.0;
 
-        var bytes = Document.Create(c =>
+        var html = Document.Create(c =>
         {
             c.Page(page =>
             {
@@ -553,110 +559,9 @@ public class RdlcTests
                     });
                 });
             });
-        }).GeneratePdf();
+        }).GenerateHtml();
 
-        Assert.NotEmpty(bytes);
-    }
-
-    // ── Phase 3: ChartElement tests ───────────────────────────────────────────
-
-    [Fact]
-    public void ChartElement_Bar_RendersWithoutThrowing()
-    {
-        var bytes = Document.Create(c =>
-        {
-            c.Page(page =>
-            {
-                page.Size(PageSizes.A4);
-                page.MarginAll(40);
-                page.Content().Column(col =>
-                {
-                    col.Item().Chart()
-                        .Type(ChartType.Bar)
-                        .Title("Sales by Quarter")
-                        .Categories(new[] { "Q1", "Q2", "Q3", "Q4" })
-                        .AddSeries("Revenue", new double[] { 100, 150, 130, 200 })
-                        .AddSeries("Costs",   new double[] { 80, 90, 85, 110 }, "#FF6666");
-                });
-            });
-        }).GeneratePdf();
-
-        Assert.NotEmpty(bytes);
-    }
-
-    [Fact]
-    public void ChartElement_Line_RendersWithoutThrowing()
-    {
-        var bytes = Document.Create(c =>
-        {
-            c.Page(page =>
-            {
-                page.Size(PageSizes.A4);
-                page.MarginAll(40);
-                page.Content().Column(col =>
-                {
-                    col.Item().Chart()
-                        .Type(ChartType.Line)
-                        .Height(150)
-                        .Categories(new[] { "Jan", "Feb", "Mar" })
-                        .AddSeries("Units", new double[] { 10, 25, 18 });
-                });
-            });
-        }).GeneratePdf();
-
-        Assert.NotEmpty(bytes);
-    }
-
-    [Fact]
-    public void ChartElement_NoSeries_DoesNotThrow()
-    {
-        var bytes = Document.Create(c =>
-        {
-            c.Page(page =>
-            {
-                page.Size(PageSizes.A4);
-                page.MarginAll(40);
-                page.Content().Column(col =>
-                {
-                    col.Item().Chart().Title("Empty Chart");
-                });
-            });
-        }).GeneratePdf();
-
-        Assert.NotEmpty(bytes);
-    }
-
-    // ── Phase 3: SubreportElement tests ──────────────────────────────────────
-
-    [Fact]
-    public void SubreportElement_RendersNestedDocumentInline()
-    {
-        var nested = Document.Create(c =>
-        {
-            c.Page(page =>
-            {
-                page.Size(PageSizes.A5);
-                page.MarginAll(20);
-                page.Content().Column(col => col.Item().Text("Nested content"));
-            });
-        });
-
-        var bytes = Document.Create(c =>
-        {
-            c.Page(page =>
-            {
-                page.Size(PageSizes.A4);
-                page.MarginAll(40);
-                page.Content().Column(col =>
-                {
-                    col.Item().Text("Parent document").Bold();
-                    col.Item().Subreport(nested);
-                    col.Item().Text("After nested");
-                });
-            });
-        }).GeneratePdf();
-
-        Assert.NotEmpty(bytes);
+        Assert.NotEmpty(html);
     }
 
     // ── Document.FromSettings API test ────────────────────────────────────────
@@ -674,9 +579,9 @@ public class RdlcTests
         settings.Pages.Add(page);
 
         var doc = Document.FromSettings(settings);
-        var bytes = doc.GeneratePdf();
+        var html = doc.GenerateHtml();
 
-        Assert.NotEmpty(bytes);
+        Assert.NotEmpty(html);
     }
 
     // ── Paragraphs / TextRuns parsing ─────────────────────────────────────────
@@ -715,13 +620,13 @@ public class RdlcTests
         """;
 
     [Fact]
-    public void FromRdlcXml_ParagraphsTextbox_ProducesValidPdf()
+    public void FromRdlcXml_ParagraphsTextbox_ProducesValidHtml()
     {
         var doc = DocumentRdlcExtensions.FromRdlcXml(ParagraphsTextboxRdlc);
-        var bytes = doc.GeneratePdf();
+        var html = doc.GenerateHtml();
 
-        Assert.NotEmpty(bytes);
-        Assert.Equal((byte)'%', bytes[0]);
+        Assert.NotEmpty(html);
+        Assert.StartsWith("<!DOCTYPE html>", html);
     }
 
     [Fact]
@@ -770,8 +675,8 @@ public class RdlcTests
         };
 
         var doc = DocumentRdlcExtensions.FromRdlcXml(rdlc, datasets);
-        var bytes = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
+        var html = doc.GenerateHtml();
+        Assert.NotEmpty(html);
     }
 
     // ── Expression evaluator: First(), IIF(), Switch() ────────────────────────
@@ -947,9 +852,9 @@ public class RdlcTests
         };
 
         var doc = DocumentRdlcExtensions.FromRdlcXml(NestedHierarchyTablixRdlc, datasets);
-        var bytes = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
-        Assert.Equal((byte)'%', bytes[0]);
+        var html = doc.GenerateHtml();
+        Assert.NotEmpty(html);
+        Assert.StartsWith("<!DOCTYPE html>", html);
     }
 
     [Fact]
@@ -1056,8 +961,8 @@ public class RdlcTests
         };
 
         var doc = DocumentRdlcExtensions.FromRdlcXml(WideTableRdlc, datasets);
-        var bytes = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
+        var html = doc.GenerateHtml();
+        Assert.NotEmpty(html);
     }
 
     // ── Band layout: side-by-side elements ────────────────────────────────────
@@ -1142,8 +1047,8 @@ public class RdlcTests
         };
 
         var doc = DocumentRdlcExtensions.FromRdlcXml(SideBySideTablesRdlc, datasets);
-        var bytes = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
+        var html = doc.GenerateHtml();
+        Assert.NotEmpty(html);
     }
 
     // ── Comparison operators in conditions ─────────────────────────────────────
@@ -1478,9 +1383,9 @@ public class RdlcTests
         };
 
         var doc   = DocumentRdlcExtensions.FromRdlcXml(rdlc, datasets);
-        var bytes = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
-        Assert.Equal((byte)'%', bytes[0]);
+        var html = doc.GenerateHtml();
+        Assert.NotEmpty(html);
+        Assert.StartsWith("<!DOCTYPE html>", html);
     }
 
     [Fact]
@@ -1535,8 +1440,8 @@ public class RdlcTests
         };
 
         var doc   = DocumentRdlcExtensions.FromRdlcXml(rdlc, datasets);
-        var bytes = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
+        var html = doc.GenerateHtml();
+        Assert.NotEmpty(html);
     }
 
     [Fact]
@@ -1569,8 +1474,8 @@ public class RdlcTests
 
         var globals = new Dictionary<string, object> { ["ReportName"] = "My Report" };
         var doc     = DocumentRdlcExtensions.FromRdlcXml(rdlc, globals: globals);
-        var bytes   = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
+        var html   = doc.GenerateHtml();
+        Assert.NotEmpty(html);
     }
 
     [Fact]
@@ -1621,7 +1526,7 @@ public class RdlcTests
         };
 
         var doc   = DocumentRdlcExtensions.FromRdlcXml(rdlc, datasets);
-        var bytes = doc.GeneratePdf();
-        Assert.NotEmpty(bytes);
+        var html = doc.GenerateHtml();
+        Assert.NotEmpty(html);
     }
 }

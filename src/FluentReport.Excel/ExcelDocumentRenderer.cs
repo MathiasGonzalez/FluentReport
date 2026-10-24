@@ -1,5 +1,4 @@
 using ClosedXML.Excel;
-using FluentReport.Builders;
 using FluentReport.Core;
 using FluentReport.Elements;
 using FluentReport.Styling;
@@ -23,6 +22,9 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     /// </summary>
     public double RelativeUnitWidthPt { get; set; } = 150.0;
 
+    /// <summary>1-based number of the document page being written.</summary>
+    private int _currentPage = 1;
+
     public void RenderToStream(Stream stream)
     {
         using var workbook = new XLWorkbook();
@@ -31,6 +33,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
         foreach (var pageSettings in settings.Pages)
         {
             pageIndex++;
+            _currentPage = pageIndex;
             WritePageToWorkbook(workbook, pageSettings, pageIndex);
         }
 
@@ -52,7 +55,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
 
         foreach (var element in topElements)
         {
-            if (Resolve(element) is PageBreakElement)
+            if (element is PageBreakElement)
             {
                 currentGroup = [];
                 sheetGroups.Add(currentGroup);
@@ -95,9 +98,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
         int endCol,
         StyleInfo? style)
     {
-        var resolved = Resolve(element);
-
-        switch (resolved)
+        switch (element)
         {
             case ColumnElement col:
                 WriteColumn(sheet, col, ref row, startCol, endCol, style);
@@ -138,9 +139,19 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
                 row++; // blank row
                 break;
 
-            // PageBreakElement handled upstream; ImageElement not supported in Excel
-            default:
+            // Top-level page breaks become new sheets (see WritePageToWorkbook); nested ones and
+            // images have no cell-based equivalent and are skipped.
+            case PageBreakElement:
+            case ImageElement:
                 break;
+
+            case IRendererSpecificElement specific:
+                if (specific.Fallback != null)
+                    WriteElement(sheet, specific.Fallback, ref row, startCol, endCol, style);
+                break;
+
+            default:
+                throw new NotSupportedException($"The Excel renderer does not support {element.GetType().Name}.");
         }
     }
 
@@ -217,39 +228,33 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
             table.Columns.Select(c => (c.IsRelative, c.IsRelative ? c.RelativeWidth : c.FixedWidth ?? 1f)).ToList(),
             availableCols);
 
-        WriteCellRow(sheet, table, table.HeaderCells, colWidths, ref row, startCol, isHeader: true);
-        WriteCellRow(sheet, table, table.DataCells, colWidths, ref row, startCol, isHeader: false);
+        WriteCellRows(sheet, table, table.HeaderCells, colWidths, ref row, startCol, isHeader: true);
+        WriteCellRows(sheet, table, table.DataCells, colWidths, ref row, startCol, isHeader: false);
+        WriteCellRows(sheet, table, table.FooterCells, colWidths, ref row, startCol, isHeader: false);
     }
 
-    private static void WriteCellRow(
+    private void WriteCellRows(
         IXLWorksheet sheet,
         TableElement table,
-        IList<TableCell> cells,
+        List<TableCell> cells,
         int[] colWidths,
         ref int row,
         int startCol,
         bool isHeader)
     {
-        int cols = table.Columns.Count;
-        if (cols == 0 || cells.Count == 0) return;
-
-        int rowCount = (int)Math.Ceiling((double)cells.Count / cols);
-
-        for (int r = 0; r < rowCount; r++)
+        foreach (var tableRow in table.PartitionIntoRows(cells))
         {
-            int colOffset = startCol;
-            for (int c = 0; c < cols; c++)
+            foreach (var (cell, startColumn, span) in tableRow)
             {
-                int idx = r * cols + c;
-                if (idx >= cells.Count || c >= colWidths.Length) break;
+                // Virtual Excel columns covered by the table columns this cell spans.
+                int firstCol = startCol + colWidths.Take(startColumn).Sum();
+                int width = colWidths.Skip(startColumn).Take(span).Sum();
+                int lastCol = firstCol + width - 1; // inclusive
 
-                var cell = cells[idx];
-                int cellEndCol = colOffset + colWidths[c] - 1; // inclusive
+                if (width > 1)
+                    sheet.Range(row, firstCol, row, lastCol).Merge();
 
-                if (colWidths[c] > 1)
-                    sheet.Range(row, colOffset, row, cellEndCol).Merge();
-
-                var xlCell = sheet.Cell(row, colOffset);
+                var xlCell = sheet.Cell(row, firstCol);
                 xlCell.Value = ExtractText(cell.Content);
 
                 var textStyle = ExtractTextStyle(cell.Content);
@@ -270,17 +275,16 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
 
                 if (table.BorderWidth > 0)
                 {
-                    xlCell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-                    xlCell.Style.Border.OutsideBorderColor = ToXLColor(table.BorderColor);
+                    var range = sheet.Range(row, firstCol, row, lastCol);
+                    range.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+                    range.Style.Border.OutsideBorderColor = ToXLColor(table.BorderColor);
                 }
-
-                colOffset += colWidths[c];
             }
             row++;
         }
     }
 
-    private static void WriteText(
+    private void WriteText(
         IXLWorksheet sheet,
         TextElement text,
         ref int row,
@@ -297,41 +301,29 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
         {
             // Multi-span: use ClosedXML rich text to preserve per-span formatting
             var richText = cell.CreateRichText();
-            bool hasContent = false;
             foreach (var span in text.Spans)
             {
-                string spanText = span.IsCurrentPage ? "1"
-                    : span.IsTotalPages ? "?"
-                    : span.StaticText ?? "";
+                string spanText = SpanText(span);
                 if (spanText.Length == 0) continue;
-                hasContent = true;
 
                 var rich = richText.AddText(spanText)
-                    .SetBold(span.Style.Bold)
-                    .SetItalic(span.Style.Italic)
+                    .SetBold(span.Style.EffectiveBold)
+                    .SetItalic(span.Style.EffectiveItalic)
                     .SetUnderline(span.Style.Underline
                         ? XLFontUnderlineValues.Single
                         : XLFontUnderlineValues.None)
                     .SetFontSize(span.Style.FontSize)
-                    .SetFontColor(ToXLColor(span.Style.Color));
+                    .SetFontColor(ToXLColor(span.Style.EffectiveColor));
                 if (!string.IsNullOrEmpty(span.Style.FontFamily))
                     rich.SetFontName(span.Style.FontFamily);
             }
-            _ = hasContent; // used to track whether any span added text
             cell.Style.Alignment.Horizontal = MapTextAlignment(text.Style.Alignment);
             cell.Style.Alignment.WrapText = true;
         }
         else
         {
             // Single span: apply cell-level styling
-            var sb = new System.Text.StringBuilder();
-            foreach (var span in text.Spans)
-            {
-                sb.Append(span.IsCurrentPage ? "1"
-                    : span.IsTotalPages ? "?"
-                    : span.StaticText ?? "");
-            }
-            cell.Value = sb.ToString();
+            cell.Value = string.Concat(text.Spans.Select(SpanText));
 
             var textStyle = text.Spans.Count > 0 ? text.Spans[0].Style : text.Style;
             ApplyTextStyle(cell, textStyle);
@@ -385,13 +377,17 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
 
     // ── Content extraction helpers ───────────────────────────────────────────
 
-    private static string ExtractText(IElement? element)
+    private string SpanText(TextSpan span) =>
+        span.IsCurrentPage ? _currentPage.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        : span.IsTotalPages ? settings.Pages.Count.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        : span.StaticText ?? "";
+
+    private string ExtractText(IElement? element)
     {
         if (element == null) return "";
-        return Resolve(element) switch
+        return element switch
         {
-            TextElement text => string.Concat(text.Spans.Select(s =>
-                s.IsCurrentPage ? "1" : s.IsTotalPages ? "?" : s.StaticText ?? "")),
+            TextElement text => string.Concat(text.Spans.Select(SpanText)),
             ColumnElement col => string.Join("\n", col.Items.Select(ExtractText)),
             RowElement rowEl => string.Join(" ", rowEl.Items.Select(i => ExtractText(i.Element))),
             PaddingElement p => ExtractText(p.Child),
@@ -404,7 +400,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     private static TextStyle? ExtractTextStyle(IElement? element)
     {
         if (element == null) return null;
-        return Resolve(element) switch
+        return element switch
         {
             TextElement text => text.Spans.Count > 0 ? text.Spans[0].Style : text.Style,
             PaddingElement p => ExtractTextStyle(p.Child),
@@ -417,7 +413,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     private static ReportColor? ExtractBackgroundColor(IElement? element)
     {
         if (element == null) return null;
-        return Resolve(element) switch
+        return element switch
         {
             BorderElement b => b.BackgroundColor,
             PaddingElement p => ExtractBackgroundColor(p.Child),
@@ -433,7 +429,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     private static HorizontalAlignment? ExtractHorizontalAlignment(IElement? element)
     {
         if (element == null) return null;
-        return Resolve(element) switch
+        return element switch
         {
             AlignElement a => a.Alignment,
             PaddingElement p => ExtractHorizontalAlignment(p.Child),
@@ -446,13 +442,13 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
 
     private static void ApplyTextStyle(IXLCell cell, TextStyle style)
     {
-        cell.Style.Font.Bold = style.Bold;
-        cell.Style.Font.Italic = style.Italic;
+        cell.Style.Font.Bold = style.EffectiveBold;
+        cell.Style.Font.Italic = style.EffectiveItalic;
         cell.Style.Font.Underline = style.Underline
             ? XLFontUnderlineValues.Single
             : XLFontUnderlineValues.None;
         cell.Style.Font.FontSize = style.FontSize;
-        cell.Style.Font.FontColor = ToXLColor(style.Color);
+        cell.Style.Font.FontColor = ToXLColor(style.EffectiveColor);
         cell.Style.Alignment.Horizontal = MapTextAlignment(style.Alignment);
         cell.Style.Alignment.WrapText = true;
     }
@@ -566,9 +562,6 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
 
     // ── Utilities ────────────────────────────────────────────────────────────
 
-    private static IElement Resolve(IElement element) =>
-        element is LazyElement lazy ? lazy.Built : element;
-
     /// <summary>
     /// Returns the top-level items of the content element, inserting
     /// <see cref="SpacerElement"/> instances between items when the column has
@@ -577,8 +570,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     private static List<IElement> GetTopLevelElements(IElement? content)
     {
         if (content == null) return [];
-        var resolved = Resolve(content);
-        if (resolved is ColumnElement column)
+        if (content is ColumnElement column)
         {
             if (column.Spacing <= 0) return column.Items.ToList();
             var items = new List<IElement>();

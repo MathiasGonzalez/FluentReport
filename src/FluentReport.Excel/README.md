@@ -2,15 +2,13 @@
 
 [![NuGet](https://img.shields.io/nuget/v/FluentReport.Excel.svg?label=FluentReport.Excel)](https://www.nuget.org/packages/FluentReport.Excel)
 
-**Excel (.xlsx)** renderer for FluentReport. Generates Excel spreadsheets directly from the same fluent API used for PDF, using **ClosedXML** as the writing engine.
+**Excel (.xlsx)** renderer for FluentReport. Generates Excel workbooks from the same document used for HTML, using **ClosedXML** as the writing engine.
 
 ## Installation
 
 ```shell
 dotnet add package FluentReport.Excel
 ```
-
-> Also requires `FluentReport` (installed automatically as a transitive dependency).
 
 ## Quick start
 
@@ -70,7 +68,9 @@ Document.Create(c =>
 | `Text(...)` | Formatted cell (bold, color, size, alignment) |
 | `Column(...)` | Stacks elements in consecutive rows |
 | `Row(...)` | Places elements in columns within the same row range |
-| `Table(...)` | Rows and columns proportional to definition |
+| `Table(...)` | Rows and columns proportional to the definition; `colSpan` merges cells; footer rows after the data |
+| `List(...)` | One row per item |
+| `Image(...)` | Skipped (no cell equivalent) |
 | `Header` / `Footer` | At the start and end of the worksheet |
 | `Line(...)` | Bottom border on the current row |
 | `PageBreak()` | Creates a new worksheet in the workbook |
@@ -79,16 +79,15 @@ Document.Create(c =>
 | `AlignCenter()` / `AlignRight()` | Horizontal alignment |
 | `Padding(...)` | Ignored (Excel has no per-cell padding) |
 | `Spacer(...)` | Empty row |
-| `Image(...)` | Not supported |
 
 ## Ecosystem packages
 
 | Package | Purpose |
 |---------|---------|
-| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Model and fluent API |
 | [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer |
-| `FluentReport.Excel` | Excel renderer - this package |
 | [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer |
+| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel (.xlsx) renderer |
 | [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
+| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API |
 
 > Full documentation is available in the [repository](https://github.com/MathiasGonzalez/FluentReport).

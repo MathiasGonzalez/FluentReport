@@ -1,312 +1,133 @@
-using FluentReport.Builders;
 using FluentReport.Core;
 using FluentReport.Elements;
 using SkiaSharp;
 
 namespace FluentReport.Rendering;
 
-public class DocumentRenderer(DocumentSettings settings) : IPageImagesProvider
+/// <summary>One output page: the page settings it uses and the content fragment that fits on it.</summary>
+internal sealed record PageLayout(PageSettings Settings, IElement? Content, float HeaderHeight, float FooterHeight);
+
+/// <summary>Paginates a document once and draws the pages to PDF or PNG.</summary>
+internal sealed class DocumentRenderer : IDisposable
 {
-    private readonly SkiaTextMeasurer _measurer = new();
+    private readonly DocumentSettings _settings;
+    private readonly PdfOptions? _options;
+    private readonly LayoutEngine _engine;
+    private List<PageLayout>? _pages;
 
-    /// <summary>
-    /// Renders a single logical page (0-based index) to an <see cref="SKImage"/>.
-    /// The caller is responsible for disposing the returned image.
-    /// </summary>
-    public SKImage RenderPageToImage(int pageIndex, float scale = 1f)
+    public DocumentRenderer(DocumentSettings settings, PdfOptions? options = null)
     {
-        if (scale <= 0)
-            throw new ArgumentOutOfRangeException(nameof(scale), scale, "Scale must be greater than zero.");
+        _settings = settings;
+        _options = options;
+        _engine = new LayoutEngine(options);
+    }
 
-        int total = CountTotalPages();
+    public IReadOnlyList<PageLayout> Pages => _pages ??= Paginate();
 
-        if (pageIndex < 0 || pageIndex >= total)
-            throw new ArgumentOutOfRangeException(nameof(pageIndex), $"Page index {pageIndex} is out of range (0-{total - 1}).");
-
-        int visitedPageCount = 0;
-        int currentPageNumber = 0;
-
-        foreach (var pageSettings in settings.Pages)
+    private List<PageLayout> Paginate()
+    {
+        var pages = new List<PageLayout>();
+        foreach (var page in _settings.Pages)
         {
-            var contentWidth = pageSettings.ContentWidth;
-            var contentHeight = pageSettings.ContentHeight;
+            float width = page.ContentWidth;
+            float header = page.HeaderElement is { } h ? _engine.Measure(h, width) : 0;
+            float footer = page.FooterElement is { } f ? _engine.Measure(f, width) : 0;
+            float area = Math.Max(0, page.ContentHeight - header - footer);
 
-            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight, _measurer);
-            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight, _measurer);
-            var contentAreaHeight = contentHeight - headerHeight - footerHeight;
-
-            var contentElements = GetContentElements(pageSettings.ContentElement);
-            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
-
-            if (pages.Count == 0) pages.Add([]);
-
-            foreach (var pageContent in pages)
+            var remaining = page.ContentElement;
+            if (remaining == null)
             {
-                currentPageNumber++;
-                if (visitedPageCount == pageIndex)
-                    return RenderPageToImageCore(pageSettings, pageContent, currentPageNumber, total, scale, this);
-                visitedPageCount++;
-            }
-        }
-
-        throw new InvalidOperationException($"Page index {pageIndex} could not be located.");
-    }
-
-    /// <summary>Returns the total number of logical pages that would be rendered.</summary>
-    public int GetPageCount() => CountTotalPages();
-
-    /// <summary>
-    /// Renders all logical pages to PNG byte arrays in a single pagination pass.
-    /// </summary>
-    internal IReadOnlyList<byte[]> RenderAllPages(float scale)
-    {
-        int total = CountTotalPages();
-        var result = new List<byte[]>();
-        int currentPage = 0;
-
-        foreach (var pageSettings in settings.Pages)
-        {
-            var contentWidth = pageSettings.ContentWidth;
-            var contentHeight = pageSettings.ContentHeight;
-
-            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight, _measurer);
-            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight, _measurer);
-            var contentAreaHeight = contentHeight - headerHeight - footerHeight;
-
-            var contentElements = GetContentElements(pageSettings.ContentElement);
-            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
-
-            if (pages.Count == 0) pages.Add([]);
-
-            foreach (var pageContent in pages)
-            {
-                currentPage++;
-                using var image = RenderPageToImageCore(pageSettings, pageContent, currentPage, total, scale, this);
-                using var data = image.Encode(SKEncodedImageFormat.Png, 100);
-                result.Add(data.ToArray());
-            }
-        }
-
-        return result;
-    }
-
-    private static SKImage RenderPageToImageCore(
-        PageSettings pageSettings,
-        List<(IElement, Size)> pageContent,
-        int logicalPageNumber,
-        int totalPages,
-        float scale,
-        IPageImagesProvider pageImagesProvider)
-    {
-        int width = (int)Math.Ceiling(pageSettings.Size.Width * scale);
-        int height = (int)Math.Ceiling(pageSettings.Size.Height * scale);
-
-        var imageInfo = new SKImageInfo(width, height, SKColorType.Rgba8888, SKAlphaType.Premul);
-        // Use Unknown pixel geometry to disable LCD sub-pixel antialiasing.
-        // Without this, Skia infers the geometry from the physical display (e.g. RgbH on Windows,
-        // Unknown on Linux/macOS), causing text to rasterise differently on each platform.
-        // Unknown forces grayscale AA, which is OS-independent and produces reproducible pixels.
-        var surfaceProps = new SKSurfaceProperties(SKSurfacePropsFlags.None, SKPixelGeometry.Unknown);
-        using var surface = SKSurface.Create(imageInfo, surfaceProps)
-            ?? throw new InvalidOperationException(
-                $"Failed to create SKSurface ({width}x{height}). The requested dimensions may be too large or insufficient memory is available.");
-        var skCanvas = surface.Canvas;
-        skCanvas.Clear(SKColors.White);
-
-        if (scale != 1f)
-            skCanvas.Scale(scale, scale);
-
-        var contentHeight = pageSettings.ContentHeight;
-        var canvas = new SkiaDrawingCanvas(skCanvas);
-        var renderCtx = new RenderContext
-        {
-            Canvas = canvas,
-            AvailableWidth = pageSettings.ContentWidth,
-            AvailableHeight = contentHeight,
-            CurrentPage = logicalPageNumber,
-            TotalPages = totalPages,
-            PageImagesProvider = pageImagesProvider
-        };
-
-        float headerHeight = MeasureElement(pageSettings.HeaderElement, pageSettings.ContentWidth, contentHeight, canvas);
-        float footerHeight = MeasureElement(pageSettings.FooterElement, pageSettings.ContentWidth, contentHeight, canvas);
-        float y = pageSettings.MarginTop;
-
-        if (pageSettings.HeaderElement != null)
-        {
-            var hs = pageSettings.HeaderElement.Measure(renderCtx.MeasureContextFor(pageSettings.ContentWidth, contentHeight));
-            pageSettings.HeaderElement.Render(renderCtx, new Position(pageSettings.MarginLeft, y), new Size(pageSettings.ContentWidth, hs.Height));
-            y += hs.Height;
-        }
-
-        foreach (var (element, size) in pageContent)
-        {
-            element.Render(renderCtx, new Position(pageSettings.MarginLeft, y), size);
-            y += size.Height;
-        }
-
-        if (pageSettings.FooterElement != null)
-        {
-            var footerY = pageSettings.Size.Height - pageSettings.MarginBottom - footerHeight;
-            pageSettings.FooterElement.Render(renderCtx, new Position(pageSettings.MarginLeft, footerY), new Size(pageSettings.ContentWidth, footerHeight));
-        }
-
-        return surface.Snapshot();
-    }
-
-    public void RenderToStream(Stream stream)
-    {
-        int totalPages = CountTotalPages();
-
-        using var document = SKDocument.CreatePdf(stream);
-        int currentPage = 0;
-
-        foreach (var pageSettings in settings.Pages)
-        {
-            var contentWidth = pageSettings.ContentWidth;
-            var contentHeight = pageSettings.ContentHeight;
-
-            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight, _measurer);
-            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight, _measurer);
-
-            var contentAreaHeight = contentHeight - headerHeight - footerHeight;
-            var contentElements = GetContentElements(pageSettings.ContentElement);
-            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
-
-            if (pages.Count == 0) pages.Add([]);
-
-            foreach (var pageContent in pages)
-            {
-                currentPage++;
-
-                using var skCanvas = document.BeginPage(pageSettings.Size.Width, pageSettings.Size.Height);
-                var canvas = new SkiaDrawingCanvas(skCanvas);
-
-                var renderCtx = new RenderContext
-                {
-                    Canvas = canvas,
-                    AvailableWidth = contentWidth,
-                    AvailableHeight = contentHeight,
-                    CurrentPage = currentPage,
-                    TotalPages = totalPages,
-                    PageImagesProvider = this
-                };
-
-                float y = pageSettings.MarginTop;
-
-                if (pageSettings.HeaderElement != null)
-                {
-                    var hs = pageSettings.HeaderElement.Measure(renderCtx.MeasureContextFor(contentWidth, contentHeight));
-                    pageSettings.HeaderElement.Render(renderCtx, new Position(pageSettings.MarginLeft, y), new Size(contentWidth, hs.Height));
-                    y += hs.Height;
-                }
-
-                foreach (var (element, size) in pageContent)
-                {
-                    element.Render(renderCtx, new Position(pageSettings.MarginLeft, y), size);
-                    y += size.Height;
-                }
-
-                if (pageSettings.FooterElement != null)
-                {
-                    var footerY = pageSettings.Size.Height - pageSettings.MarginBottom - footerHeight;
-                    pageSettings.FooterElement.Render(renderCtx, new Position(pageSettings.MarginLeft, footerY), new Size(contentWidth, footerHeight));
-                }
-
-                document.EndPage();
-            }
-        }
-
-        document.Close();
-    }
-
-    // ── IPageImagesProvider ──────────────────────────────────────────────────
-
-    IReadOnlyList<byte[]> IPageImagesProvider.GetPageImages(DocumentSettings settings, float scale)
-        => new DocumentRenderer(settings).RenderAllPages(scale);
-
-    // ── Private helpers ──────────────────────────────────────────────────────
-
-    private static float MeasureElement(IElement? element, float width, float height, ITextMeasurer measurer)
-    {
-        if (element == null) return 0;
-        return element.Measure(new() { AvailableWidth = width, AvailableHeight = height, Measurer = measurer }).Height;
-    }
-
-    private int CountTotalPages()
-    {
-        int total = 0;
-        foreach (var pageSettings in settings.Pages)
-        {
-            var contentWidth = pageSettings.ContentWidth;
-            var contentHeight = pageSettings.ContentHeight;
-
-            float headerHeight = MeasureElement(pageSettings.HeaderElement, contentWidth, contentHeight, _measurer);
-            float footerHeight = MeasureElement(pageSettings.FooterElement, contentWidth, contentHeight, _measurer);
-            var contentAreaHeight = contentHeight - headerHeight - footerHeight;
-
-            var contentElements = GetContentElements(pageSettings.ContentElement);
-            var pages = SplitIntoPages(contentElements, contentWidth, contentAreaHeight, _measurer);
-            total += Math.Max(1, pages.Count);
-        }
-        return Math.Max(1, total);
-    }
-
-    private static List<IElement> GetContentElements(IElement? content)
-    {
-        if (content == null) return new();
-        var resolved = content is LazyElement lazy ? lazy.Built : content;
-        if (resolved is ColumnElement column)
-        {
-            if (column.Spacing <= 0) return column.Items.ToList();
-            var items = new List<IElement>();
-            bool first = true;
-            foreach (var item in column.Items)
-            {
-                if (!first) items.Add(new SpacerElement(column.Spacing));
-                first = false;
-                items.Add(item);
-            }
-            return items;
-        }
-        return [content];
-    }
-
-    private static List<List<(IElement, Size)>> SplitIntoPages(List<IElement> elements, float width, float pageHeight, ITextMeasurer measurer)
-    {
-        var pages = new List<List<(IElement, Size)>>();
-        var currentPage = new List<(IElement, Size)>();
-        float usedHeight = 0;
-
-        foreach (var element in elements)
-        {
-            var resolved = element is LazyElement lazy ? lazy.Built : element;
-            if (resolved is PageBreakElement)
-            {
-                if (currentPage.Count > 0)
-                {
-                    pages.Add(currentPage);
-                    currentPage = new();
-                    usedHeight = 0;
-                }
+                pages.Add(new PageLayout(page, null, header, footer));
                 continue;
             }
 
-            var size = element.Measure(new() { AvailableWidth = width, AvailableHeight = pageHeight, Measurer = measurer });
-
-            if (usedHeight + size.Height > pageHeight && currentPage.Count > 0)
+            while (remaining != null)
             {
-                pages.Add(currentPage);
-                currentPage = new();
-                usedHeight = 0;
+                var (head, tail) = _engine.Split(remaining, width, area, pageIsEmpty: true);
+                pages.Add(new PageLayout(page, head, header, footer));
+                remaining = IsEmpty(tail) ? null : tail;
             }
-
-            currentPage.Add((element, size));
-            usedHeight += size.Height;
         }
-
-        if (currentPage.Count > 0 || pages.Count == 0) pages.Add(currentPage);
-
+        _engine.TotalPages = pages.Count;
         return pages;
     }
+
+    /// <summary>A column left over by a trailing page break carries nothing to draw.</summary>
+    private static bool IsEmpty(IElement? element) => element switch
+    {
+        null => true,
+        ColumnElement column => column.Items.All(i => i is PageBreakElement || IsEmpty(i) && i is ColumnElement),
+        _ => false
+    };
+
+    private void DrawPage(SKCanvas canvas, int index)
+    {
+        var page = Pages[index];
+        var s = page.Settings;
+        _engine.CurrentPage = index + 1;
+        _engine.TotalPages = Pages.Count;
+
+        float width = s.ContentWidth;
+        float top = s.MarginTop;
+
+        if (s.HeaderElement is { } header)
+            _engine.Draw(header, canvas, s.MarginLeft, top, width, page.HeaderHeight);
+
+        if (page.Content is { } content)
+        {
+            float contentTop = top + page.HeaderHeight;
+            float area = Math.Max(0, s.ContentHeight - page.HeaderHeight - page.FooterHeight);
+            canvas.Save();
+            // Content taller than an empty page (an oversized row or image) is cut at the footer.
+            canvas.ClipRect(SKRect.Create(s.MarginLeft, contentTop, width, area));
+            _engine.Draw(content, canvas, s.MarginLeft, contentTop, width, _engine.Measure(content, width));
+            canvas.Restore();
+        }
+
+        if (s.FooterElement is { } footer)
+            _engine.Draw(footer, canvas, s.MarginLeft, s.Size.Height - s.MarginBottom - page.FooterHeight, width, page.FooterHeight);
+    }
+
+    public void RenderPdf(Stream stream)
+    {
+        var metadata = SKDocumentPdfMetadata.Default;
+        metadata.Title = _options?.Title;
+        metadata.Author = _options?.Author;
+        metadata.Producer = "FluentReport";
+
+        using var document = SKDocument.CreatePdf(stream, metadata)
+            ?? throw new InvalidOperationException("SkiaSharp could not create a PDF document.");
+        for (int i = 0; i < Pages.Count; i++)
+        {
+            var size = Pages[i].Settings.Size;
+            var canvas = document.BeginPage(size.Width, size.Height);
+            DrawPage(canvas, i);
+            document.EndPage();
+        }
+        document.Close();
+    }
+
+    public IReadOnlyList<byte[]> RenderPng(float scale)
+    {
+        var result = new List<byte[]>(Pages.Count);
+        for (int i = 0; i < Pages.Count; i++)
+        {
+            var size = Pages[i].Settings.Size;
+            var info = new SKImageInfo((int)Math.Ceiling(size.Width * scale), (int)Math.Ceiling(size.Height * scale),
+                SKColorType.Rgba8888, SKAlphaType.Premul);
+            // Unknown pixel geometry disables LCD anti-aliasing, which depends on the display and the OS.
+            var props = new SKSurfaceProperties(SKSurfacePropsFlags.None, SKPixelGeometry.Unknown);
+            using var surface = SKSurface.Create(info, props)
+                ?? throw new InvalidOperationException($"Could not create a {info.Width}x{info.Height} surface.");
+            surface.Canvas.Clear(SKColors.White);
+            surface.Canvas.Scale(scale);
+            DrawPage(surface.Canvas, i);
+            using var image = surface.Snapshot();
+            using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+            result.Add(data.ToArray());
+        }
+        return result;
+    }
+
+    public void Dispose() => _engine.Dispose();
 }

@@ -38,6 +38,9 @@ public class ChartBuilder(ChartElement chart, ContainerBuilder parent)
         return this;
     }
 
+    /// <summary>Text shown instead of the chart by renderers that cannot draw charts (HTML, Excel).</summary>
+    public ChartBuilder Fallback(string text) { chart.Fallback = new TextElement(text); return this; }
+
     // ── Proxy methods to allow chaining back to ContainerBuilder ─────────────
 
     /// <inheritdoc cref="ContainerBuilder.Padding(float)"/>

@@ -24,7 +24,17 @@ public class TableHeaderBuilder(TableElement table)
     {
         var cb = new ContainerBuilder();
         var lazy = new LazyElement(cb);
-        table.HeaderCells.Add(new TableCell { Content = lazy, IsHeader = true, ColumnSpan = Math.Max(1, colSpan) });
+        table.HeaderCells.Add(new TableCell { Content = lazy, ColumnSpan = Math.Max(1, colSpan) });
+        return cb;
+    }
+}
+
+public class TableFooterBuilder(TableElement table)
+{
+    public ContainerBuilder Cell(int colSpan = 1)
+    {
+        var cb = new ContainerBuilder();
+        table.FooterCells.Add(new TableCell { Content = new LazyElement(cb), ColumnSpan = Math.Max(1, colSpan) });
         return cb;
     }
 }
@@ -40,6 +50,13 @@ public class TableBuilder(TableElement table)
     public TableBuilder Header(Action<TableHeaderBuilder> configure)
     {
         configure(new TableHeaderBuilder(table));
+        return this;
+    }
+
+    /// <summary>Adds rows rendered after the data rows (totals, notes).</summary>
+    public TableBuilder Footer(Action<TableFooterBuilder> configure)
+    {
+        configure(new TableFooterBuilder(table));
         return this;
     }
 

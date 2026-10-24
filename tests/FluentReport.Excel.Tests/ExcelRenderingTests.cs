@@ -2,7 +2,6 @@ using ClosedXML.Excel;
 using FluentReport;
 using FluentReport.Core;
 using FluentReport.Excel;
-using FluentReport.Schema;
 
 namespace FluentReport.Excel.Tests;
 
@@ -265,76 +264,69 @@ public class ExcelRenderingTests
         Assert.NotEmpty(bytes);
     }
 
-        // ── Schema integration ───────────────────────────────────────────────────
+    // ── Lists ──────────────────────────────────────────────────────────────────
 
-        [Fact]
-        public void GenerateExcel_FromSchemaJson_WritesExpectedCellValue()
+    [Fact]
+    public void GenerateExcel_List_WritesEveryItem()
+    {
+        var bytes = Document.Create(c => c.Page(p =>
+            p.Content().List(new[] { "ALPHA", "BETA" }, (cb, s) => cb.Text(s)))).GenerateExcel();
+
+        using var wb = new XLWorkbook(new MemoryStream(bytes));
+        var values = wb.Worksheet(1).CellsUsed().Select(x => x.GetString()).ToList();
+        Assert.Contains("ALPHA", values);
+        Assert.Contains("BETA", values);
+    }
+
+    // ── Column spans, footers, page numbers ───────────────────────────────────
+
+    private static List<string> RowTexts(byte[] bytes)
+    {
+        using var wb = new XLWorkbook(new MemoryStream(bytes));
+        return wb.Worksheet(1).RowsUsed()
+            .Select(r => string.Join("|", r.CellsUsed().Select(c => c.GetString()).Where(v => v.Length > 0)))
+            .ToList();
+    }
+
+    [Fact]
+    public void GenerateExcel_ColumnSpan_KeepsFollowingRowsAligned()
+    {
+        var bytes = Document.Create(c => c.Page(p => p.Content().Table(t =>
         {
-                                const string json = """
-                                                {
-                                                    "kind": "FluentReport",
-                                                    "schemaVersion": 1,
-                                                    "pages": [
-                                                        {
-                                                            "id": "p1",
-                                                            "regions": {
-                                                                "content": {
-                                                                    "nodes": [
-                                                                        {
-                                                                            "id": "t1",
-                                                                            "type": "text",
-                                                                            "value": "Hello from schema"
-                                                                        }
-                                                                    ]
-                                                                }
-                                                            }
-                                                        }
-                                                    ]
-                                                }
-                                                """;
+            t.ColumnsDefinition(d => { d.RelativeColumn(); d.RelativeColumn(); d.RelativeColumn(); });
+            t.Cell(colSpan: 2).Text("AB"); t.Cell().Text("C");
+            t.Cell().Text("1"); t.Cell().Text("2"); t.Cell().Text("3");
+        }))).GenerateExcel();
 
-                                var bytes = DocumentSchemaExtensions.FromSchemaJson(json).GenerateExcel();
+        Assert.Equal(new[] { "AB|C", "1|2|3" }, RowTexts(bytes));
+    }
 
-                using var ms = new MemoryStream(bytes);
-                using var workbook = new XLWorkbook(ms);
-                var sheet = workbook.Worksheet(1);
-                Assert.Equal("Hello from schema", sheet.Cell(1, 1).GetString());
-        }
-
-        [Fact]
-        public void GenerateExcel_FromSchemaJson_WithMissingDataSource_Throws()
+    [Fact]
+    public void GenerateExcel_FooterRows_FollowTheData()
+    {
+        var bytes = Document.Create(c => c.Page(p => p.Content().Table(t =>
         {
-                                const string json = """
-                                                {
-                                                    "kind": "FluentReport",
-                                                    "schemaVersion": 1,
-                                                    "pages": [
-                                                        {
-                                                            "id": "p1",
-                                                            "regions": {
-                                                                "content": {
-                                                                    "nodes": [
-                                                                        {
-                                                                            "id": "table-1",
-                                                                            "type": "table",
-                                                                            "dataSource": "sales",
-                                                                            "columns": [
-                                                                                {
-                                                                                    "field": "region",
-                                                                                    "header": "Region"
-                                                                                }
-                                                                            ]
-                                                                        }
-                                                                    ]
-                                                                }
-                                                            }
-                                                        }
-                                                    ]
-                                                }
-                                                """;
+            t.ColumnsDefinition(d => { d.RelativeColumn(); d.RelativeColumn(); });
+            t.Header(h => { h.Cell().Text("Item"); h.Cell().Text("Qty"); });
+            t.Cell().Text("A"); t.Cell().Text("1");
+            t.Footer(f => { f.Cell().Text("Total"); f.Cell().Text("1"); });
+        }))).GenerateExcel();
 
-                                Assert.Throws<InvalidOperationException>(() => DocumentSchemaExtensions.FromSchemaJson(json).GenerateExcel());
-        }
+        Assert.Equal(new[] { "Item|Qty", "A|1", "Total|1" }, RowTexts(bytes));
+    }
+
+    [Fact]
+    public void GenerateExcel_PageNumbers_ShowPageIndexAndCount()
+    {
+        var bytes = Document.Create(c =>
+        {
+            for (int i = 0; i < 2; i++)
+                c.Page(p => p.Content().Text(x => { x.Span("Page "); x.CurrentPageNumber(); x.Span(" of "); x.TotalPages(); }));
+        }).GenerateExcel();
+
+        using var wb = new XLWorkbook(new MemoryStream(bytes));
+        Assert.Equal("Page 2 of 2", wb.Worksheet(2).Cell(1, 1).GetString());
+    }
 
     [Fact]
     public void GenerateExcel_WritesToStream()

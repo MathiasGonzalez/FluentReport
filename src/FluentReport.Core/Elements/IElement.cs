@@ -1,9 +1,7 @@
-using FluentReport.Core;
-
 namespace FluentReport.Elements;
 
-public interface IElement
-{
-    Size Measure(MeasureContext context);
-    void Render(RenderContext context, Position position, Size size);
-}
+/// <summary>
+/// Marker interface for every node of the document model. Elements carry data only;
+/// each renderer (HTML, Excel, …) decides how to lay them out.
+/// </summary>
+public interface IElement;

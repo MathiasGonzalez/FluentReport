@@ -1,24 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
-    <!-- NuGet package metadata -->
     <PackageId>FluentReport.Rdlc</PackageId>
-    <Version>1.0.0</Version>
-    <Authors>Mathías González Benítez</Authors>
-    <Description>RDLC (.rdlc) translation layer for FluentReport — import RDLC report definitions and render them via the FluentReport pipeline (PDF, PNG, Excel).</Description>
-    <PackageTags>rdlc;ssrs;report;fluent;pdf</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/MathiasGonzalez/FluentReport</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Description>RDLC / SSRS importer for FluentReport: turns .rdlc report definitions into documents for the HTML and Excel renderers.</Description>
+    <PackageTags>rdlc;ssrs;report;fluent</PackageTags>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="README.md" Pack="true" PackagePath="\" />
+    <InternalsVisibleTo Include="FluentReport.Rdlc.Tests" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\FluentReport\FluentReport.csproj" />
+    <ProjectReference Include="..\FluentReport.Core\FluentReport.Core.csproj" />
   </ItemGroup>
 </Project>

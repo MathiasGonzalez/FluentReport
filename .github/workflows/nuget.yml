@@ -1,52 +1,85 @@
 name: Publish to NuGet
 
+# The package version is <Version> in Directory.Build.props. Every push to main checks it against
+# nuget.org: a new version is built, tested, published and tagged; an already published one is skipped.
+# nuget.org never lets a version be overwritten, so bump <Version> to publish a change.
 on:
   push:
     branches: [ "main" ]
-    paths:
-      - 'src/**'
-      - 'README.md'
-      - 'LICENSE'
+  workflow_dispatch:
+
+env:
+  PACKAGES: FluentReport.Core FluentReport FluentReport.Html FluentReport.Excel FluentReport.Rdlc
 
 jobs:
   publish:
     name: Pack & Publish
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write   # push the release tag
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '10.0.x'
 
+      - name: Read version
+        run: |
+          VERSION=$(dotnet msbuild src/FluentReport/FluentReport.csproj -getProperty:Version)
+          echo "PACKAGE_VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "Version from Directory.Build.props: $VERSION"
+
+      - name: Check nuget.org
+        id: check
+        run: |
+          MISSING=""
+          for id in $PACKAGES; do
+            lower=$(echo "$id" | tr '[:upper:]' '[:lower:]')
+            if curl -sf "https://api.nuget.org/v3-flatcontainer/$lower/index.json" | grep -q "\"$PACKAGE_VERSION\""; then
+              echo "$id $PACKAGE_VERSION is already published"
+            else
+              MISSING="$MISSING $id"
+            fi
+          done
+          echo "missing=$MISSING" >> "$GITHUB_OUTPUT"
+          if [ -z "$MISSING" ]; then
+            echo "::notice::$PACKAGE_VERSION is already on nuget.org; bump <Version> in Directory.Build.props to publish."
+          fi
+
       - name: Restore dependencies
+        if: steps.check.outputs.missing != ''
         run: dotnet restore
 
       - name: Build (Release)
+        if: steps.check.outputs.missing != ''
         run: dotnet build --no-restore --configuration Release
 
-      - name: Pack FluentReport.Core
-        run: dotnet pack src/FluentReport.Core/FluentReport.Core.csproj --no-build --configuration Release --output ./nupkgs
+      - name: Test
+        if: steps.check.outputs.missing != ''
+        run: dotnet test --no-build --configuration Release
 
-      - name: Pack FluentReport
-        run: dotnet pack src/FluentReport/FluentReport.csproj --no-build --configuration Release --output ./nupkgs
-
-      - name: Pack FluentReport.Excel
-        run: dotnet pack src/FluentReport.Excel/FluentReport.Excel.csproj --no-build --configuration Release --output ./nupkgs
-
-      - name: Pack FluentReport.Html
-        run: dotnet pack src/FluentReport.Html/FluentReport.Html.csproj --no-build --configuration Release --output ./nupkgs
-
-      - name: Pack FluentReport.Rdlc
-        run: dotnet pack src/FluentReport.Rdlc/FluentReport.Rdlc.csproj --no-build --configuration Release --output ./nupkgs
-
-      - name: Pack FluentReport.Schema
-        run: dotnet pack src/FluentReport.Schema/FluentReport.Schema.csproj --no-build --configuration Release --output ./nupkgs
+      - name: Pack
+        if: steps.check.outputs.missing != ''
+        run: |
+          for project in ${{ steps.check.outputs.missing }}; do
+            dotnet pack src/$project/$project.csproj --no-build --configuration Release --output ./nupkgs
+          done
 
       - name: Push to NuGet
-        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_FLUENT_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        if: steps.check.outputs.missing != ''
+        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_FLUENT_API_KEY }} --source https://api.nuget.org/v3/index.json
+
+      - name: Tag release
+        if: steps.check.outputs.missing != ''
+        run: |
+          TAG="v$PACKAGE_VERSION"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null; then
+            echo "$TAG already exists"
+          else
+            git tag "$TAG"
+            git push origin "$TAG"
+          fi

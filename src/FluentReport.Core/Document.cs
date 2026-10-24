@@ -5,23 +5,22 @@ namespace FluentReport;
 
 public class Document
 {
-    private readonly DocumentSettings _settings;
+    private Document(DocumentSettings settings) => Settings = settings;
 
-    private Document(DocumentSettings settings) => _settings = settings;
+    public DocumentSettings Settings { get; }
 
-    public DocumentSettings Settings => _settings;
-
+    /// <summary>Builds a document with the fluent API. At least one page is required.</summary>
     public static Document Create(Action<DocumentBuilder> configure)
     {
+        ArgumentNullException.ThrowIfNull(configure);
         var builder = new DocumentBuilder();
         configure(builder);
-        return new Document(builder.Build());
+        return FromSettings(builder.Build());
     }
 
     /// <summary>
     /// Creates a <see cref="Document"/> directly from pre-built <see cref="DocumentSettings"/>.
-    /// Intended for use by format translation layers (e.g. RDLC, HTML) that construct settings
-    /// programmatically rather than through the fluent builder API.
+    /// Intended for translation layers (e.g. RDLC) that construct settings programmatically.
     /// </summary>
     public static Document FromSettings(DocumentSettings settings)
     {
@@ -31,4 +30,3 @@ public class Document
         return new(settings);
     }
 }
-

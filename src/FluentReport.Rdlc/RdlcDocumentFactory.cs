@@ -26,50 +26,70 @@ namespace FluentReport.Rdlc;
 /// </remarks>
 public sealed class RdlcDocumentFactory
 {
-    // RDLC XML namespace variants
-    private static readonly XNamespace Ns2008 =
-        "http://schemas.microsoft.com/sqlserver/reporting/2008/01/reportdefinition";
-
-    private static readonly XNamespace Ns2005 =
-        "http://schemas.microsoft.com/sqlserver/reporting/2005/01/reportdefinition";
-
     private readonly IDictionary<string, IEnumerable<object>>? _datasets;
-    private readonly RdlcExpressionEvaluator _evaluator;
+    private readonly IDictionary<string, object>? _parameters;
+    private readonly IDictionary<string, object>? _globals;
+    private readonly RdlcImportOptions _options;
+    private readonly List<string> _warnings = new();
+
+    private RdlcExpressionEvaluator _evaluator = new();
     private XNamespace _ns = XNamespace.None;
     private Dictionary<string, byte[]> _embeddedImages = new(StringComparer.OrdinalIgnoreCase);
+    private string? _externalImageRoot;
 
     public RdlcDocumentFactory(
         IDictionary<string, IEnumerable<object>>? datasets = null,
         IDictionary<string, object>? parameters = null,
-        IDictionary<string, object>? globals = null)
+        IDictionary<string, object>? globals = null,
+        RdlcImportOptions? options = null)
     {
         _datasets = datasets;
-        _evaluator = new RdlcExpressionEvaluator(parameters, datasets, globals);
+        _parameters = parameters;
+        _globals = globals;
+        _options = options ?? new RdlcImportOptions();
     }
+
+    /// <summary>
+    /// Constructs the importer skipped or could not evaluate during the last parse
+    /// (unsupported report items, expressions, colors, images…). Empty when everything was imported.
+    /// </summary>
+    public IReadOnlyList<string> Warnings => _warnings;
 
     // ── Public entry points ──────────────────────────────────────────────────
 
     /// <summary>Parses the <c>.rdlc</c> file at <paramref name="path"/> into a <see cref="Document"/>.</summary>
     public Document ParseFromFile(string path)
     {
-        using var stream = File.OpenRead(path);
-        return ParseFromStream(stream);
+        var fullPath = Path.GetFullPath(path);
+        using var stream = File.OpenRead(fullPath);
+        return Parse(XDocument.Load(stream), Path.GetDirectoryName(fullPath));
     }
 
     /// <summary>Parses RDLC XML from a stream.</summary>
     public Document ParseFromStream(Stream stream)
-        => Parse(XDocument.Load(stream));
+        => Parse(XDocument.Load(stream), reportDirectory: null);
 
     /// <summary>Parses RDLC XML from a string.</summary>
     public Document ParseFromXml(string xml)
-        => Parse(XDocument.Parse(xml));
+        => Parse(XDocument.Parse(xml), reportDirectory: null);
 
     // ── Core parse pipeline ──────────────────────────────────────────────────
 
-    private Document Parse(XDocument xdoc)
+    private Document Parse(XDocument xdoc, string? reportDirectory)
     {
+        _warnings.Clear();
         _ns = DetectNamespace(xdoc);
         var root = xdoc.Root ?? throw new InvalidOperationException("RDLC XML has no root element.");
+
+        _evaluator = new RdlcExpressionEvaluator(
+            _parameters, _datasets, _globals,
+            _options.Culture ?? ReportCulture(root),
+            _warnings.Add,
+            _options.StrictExpressions);
+
+        _externalImageRoot = !_options.LoadExternalImages ? null
+            : _options.ExternalImageDirectory != null ? Path.GetFullPath(_options.ExternalImageDirectory)
+            : reportDirectory;
 
         // Pre-load embedded images so BuildImage can reference them by name.
         _embeddedImages = ParseEmbeddedImages(root);
@@ -85,6 +105,23 @@ public sealed class RdlcDocumentFactory
             settings.Pages.Add(BuildPageSettings(section, root));
 
         return Document.FromSettings(settings);
+    }
+
+    /// <summary>The report's literal &lt;Language&gt; (e.g. "es-UY"), or invariant when absent or an expression.</summary>
+    private CultureInfo ReportCulture(XElement root)
+    {
+        var language = root.Element(_ns + "Language")?.Value.Trim();
+        if (string.IsNullOrEmpty(language) || language.StartsWith('='))
+            return CultureInfo.InvariantCulture;
+        try
+        {
+            return CultureInfo.GetCultureInfo(language);
+        }
+        catch (CultureNotFoundException)
+        {
+            _warnings.Add($"Report language '{language}' is not a known culture; using the invariant culture.");
+            return CultureInfo.InvariantCulture;
+        }
     }
 
     private static XNamespace DetectNamespace(XDocument xdoc)
@@ -196,8 +233,15 @@ public sealed class RdlcDocumentFactory
             "Line"    => BuildLine(child),
             "Image"   => BuildImage(child, dataRow),
             "Tablix"  => BuildTablix(child),
-            _         => null
+            _         => Unsupported(child)
         };
+
+    private IElement? Unsupported(XElement item)
+    {
+        var name = item.Attribute("Name")?.Value;
+        _warnings.Add($"Report item <{item.Name.LocalName}>{(name != null ? $" '{name}'" : "")} is not supported and was skipped.");
+        return null;
+    }
 
     /// <summary>
     /// Builds a flat vertical list of elements from a <c>&lt;ReportItems&gt;</c> node.
@@ -236,7 +280,8 @@ public sealed class RdlcDocumentFactory
                 el:     e,
                 top:    ParseUnit(e.Element(_ns + "Top")?.Value),
                 left:   ParseUnit(e.Element(_ns + "Left")?.Value),
-                width:  ParseUnit(e.Element(_ns + "Width")?.Value)
+                width:  ParseUnit(e.Element(_ns + "Width")?.Value),
+                height: ParseUnit(e.Element(_ns + "Height")?.Value)
             ))
             .OrderBy(i => i.top)
             .ThenBy(i => i.left)
@@ -246,7 +291,7 @@ public sealed class RdlcDocumentFactory
 
         // Group items into horizontal bands: items whose Top values are within 2 pt.
         const float topTolerance = 2f;
-        var bands = new List<List<(XElement el, float top, float left, float width)>>();
+        var bands = new List<List<(XElement el, float top, float left, float width, float height)>>();
 
         foreach (var item in positioned)
         {
@@ -257,10 +302,18 @@ public sealed class RdlcDocumentFactory
                 bands.Add([item]);
         }
 
+        // Vertical whitespace between bands smaller than this is treated as layout slack.
+        const float minGap = 6f;
         var col = new ColumnElement();
+        float previousBottom = bands[0][0].top; // the region's own top offset is not reproduced
 
         foreach (var band in bands)
         {
+            float bandTop = band[0].top;
+            if (bandTop - previousBottom >= minGap)
+                col.Items.Add(new SpacerElement(bandTop - previousBottom));
+            previousBottom = Math.Max(previousBottom, band.Max(i => i.top + i.height));
+
             if (band.Count == 1)
             {
                 // Single item — render inline, no horizontal offset needed.
@@ -325,14 +378,13 @@ public sealed class RdlcDocumentFactory
             };
         }
 
-        var bgColor = styleEl?.Element(_ns + "BackgroundColor")?.Value;
-        if (!string.IsNullOrWhiteSpace(bgColor))
+        if (StyleColor(styleEl, "BackgroundColor", row) is { } background)
         {
             result = new BorderElement
             {
                 Child = result,
                 Border = new BorderStyle { Width = 0 },
-                BackgroundColor = ParseColor(bgColor)
+                BackgroundColor = background
             };
         }
 
@@ -346,7 +398,7 @@ public sealed class RdlcDocumentFactory
     {
         var value = _evaluator.Evaluate(el.Element(_ns + "Value")?.Value, row);
         var text = new TextElement(value);
-        ApplyTextStyle(text.Style, styleEl);
+        ApplyTextStyle(text.Style, styleEl, row);
         return text;
     }
 
@@ -361,14 +413,6 @@ public sealed class RdlcDocumentFactory
         foreach (var paraEl in paragraphsEl.Elements(_ns + "Paragraph"))
         {
             var paraStyleEl = paraEl.Element(_ns + "Style");
-            var textAlignStr = paraStyleEl?.Element(_ns + "TextAlign")?.Value;
-            TextAlignment paraAlign = textAlignStr?.ToLowerInvariant() switch
-            {
-                "center"            => TextAlignment.Center,
-                "right"             => TextAlignment.Right,
-                "justify" or "full" => TextAlignment.Justify,
-                _                   => TextAlignment.Left
-            };
 
             foreach (var runEl in paraEl
                 .Elements(_ns + "TextRuns")
@@ -377,10 +421,11 @@ public sealed class RdlcDocumentFactory
                 var value      = _evaluator.Evaluate(runEl.Element(_ns + "Value")?.Value, row);
                 var runStyleEl = runEl.Element(_ns + "Style");
 
-                var spanStyle = new TextStyle { Alignment = paraAlign };
-                // Apply box-level defaults first, then run-level overrides.
-                ApplyTextStyle(spanStyle, boxStyleEl);
-                ApplyTextStyle(spanStyle, runStyleEl);
+                var spanStyle = new TextStyle();
+                // Textbox defaults first, then the paragraph (where RDLC keeps TextAlign), then the run.
+                ApplyTextStyle(spanStyle, boxStyleEl, row);
+                ApplyTextStyle(spanStyle, paraStyleEl, row);
+                ApplyTextStyle(spanStyle, runStyleEl, row);
 
                 text.AddSpan(value, spanStyle);
             }
@@ -397,9 +442,8 @@ public sealed class RdlcDocumentFactory
         var styleEl = el.Element(_ns + "Style");
         var line = new LineElement();
 
-        var colorStr = styleEl?.Element(_ns + "Color")?.Value;
-        if (!string.IsNullOrWhiteSpace(colorStr))
-            line.Color = ParseColor(colorStr);
+        if (StyleColor(styleEl, "Color", row: null) is { } color)
+            line.Color = color;
 
         var thicknessStr = styleEl?.Element(_ns + "BorderWidth")?.Value;
         if (!string.IsNullOrWhiteSpace(thicknessStr))
@@ -423,25 +467,26 @@ public sealed class RdlcDocumentFactory
             // valueStr is the name of an entry in <EmbeddedImages>.
             img = _embeddedImages.TryGetValue(valueStr, out var embBytes)
                 ? new ImageElement(embBytes)
-                : new ImageElement([]);
+                : MissingImage($"embedded image '{valueStr}' was not found");
         }
-        else if (string.Equals(sourceType, "Database", StringComparison.OrdinalIgnoreCase) && row != null)
+        else if (string.Equals(sourceType, "Database", StringComparison.OrdinalIgnoreCase))
         {
-            // Field contains base64-encoded bytes.
-            try
+            // Field contains the image bytes, or their base64 text.
+            var raw = _evaluator.EvaluateValue(el.Element(_ns + "Value")?.Value, row);
+            img = raw switch
             {
-                img = new ImageElement(Convert.FromBase64String(valueStr));
-            }
-            catch
-            {
-                img = new ImageElement([]);
-            }
+                byte[] bytes => new ImageElement(bytes),
+                string b64 when TryFromBase64(b64, out var decoded) => new ImageElement(decoded),
+                _ => MissingImage("database image value is not image bytes or base64")
+            };
         }
         else
         {
-            // External: value is a file path.
-            img = new ImageElement(valueStr);
+            img = LoadExternalImage(valueStr);
         }
+
+        if (img.SourceBytes.Length > 0 && img.MimeType == null)
+            _warnings.Add($"Image '{el.Attribute("Name")?.Value}' is not a recognized image format and will not be rendered.");
 
         var fixedW = ParseUnit(el.Element(_ns + "Width")?.Value);
         var fixedH = ParseUnit(el.Element(_ns + "Height")?.Value);
@@ -449,6 +494,46 @@ public sealed class RdlcDocumentFactory
         if (fixedH > 0) img.FixedHeight = fixedH;
 
         return img;
+    }
+
+    private ImageElement MissingImage(string reason)
+    {
+        _warnings.Add($"Image skipped: {reason}.");
+        return new ImageElement([]);
+    }
+
+    private static bool TryFromBase64(string text, out byte[] bytes)
+    {
+        bytes = new byte[text.Length];
+        if (Convert.TryFromBase64String(text, bytes, out int written))
+        {
+            bytes = bytes[..written];
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Loads an External image only from inside the allowed directory, so a report definition
+    /// cannot pull arbitrary files from the machine into the output.
+    /// </summary>
+    private ImageElement LoadExternalImage(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+            return MissingImage("external image path is empty");
+        if (Uri.TryCreate(path, UriKind.Absolute, out var uri) && !uri.IsFile)
+            return MissingImage($"external image '{path}' is a URL; only local files are supported");
+        if (_externalImageRoot == null)
+            return MissingImage($"external image '{path}' ignored: set RdlcImportOptions.ExternalImageDirectory to load external images");
+
+        var root = Path.TrimEndingDirectorySeparator(_externalImageRoot) + Path.DirectorySeparatorChar;
+        var fullPath = Path.GetFullPath(Path.Combine(root, path));
+        if (!fullPath.StartsWith(root, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal))
+            return MissingImage($"external image '{path}' is outside the allowed directory");
+        if (!File.Exists(fullPath))
+            return MissingImage($"external image '{path}' was not found");
+
+        return new ImageElement(File.ReadAllBytes(fullPath));
     }
 
     private IElement BuildTablix(XElement tablixEl)
@@ -524,10 +609,12 @@ public sealed class RdlcDocumentFactory
             ? ds.ToList()
             : [];
 
+        bool seenDetail = false;
         for (int ri = 0; ri < tblRows.Count; ri++)
         {
             var tblRow  = tblRows[ri];
             bool isDetail = hasHierarchy ? IsDetailByHierarchy(ri) : IsDetailByExpression(tblRow);
+            seenDetail |= isDetail;
 
             var cells = tblRow.Element(_ns + "TablixCells")
                 ?.Elements(_ns + "TablixCell")
@@ -535,19 +622,19 @@ public sealed class RdlcDocumentFactory
 
             if (!isDetail)
             {
-                // Static row (header / footer) — rendered once.
-                AppendTableCells(table.HeaderCells, cells, dataRow: null, isHeader: true);
+                // Static row, rendered once: a header before the details, a footer (totals) after them.
+                AppendTableCells(seenDetail ? table.FooterCells : table.HeaderCells, cells, dataRow: null);
             }
             else if (dataRows.Count > 0)
             {
                 // Detail row — repeated for each data row.
                 foreach (var dataRow in dataRows)
-                    AppendTableCells(table.DataCells, cells, dataRow, isHeader: false);
+                    AppendTableCells(table.DataCells, cells, dataRow);
             }
             else
             {
                 // No data — add one empty placeholder row to preserve table structure.
-                AppendTableCells(table.DataCells, cells, dataRow: null, isHeader: false);
+                AppendTableCells(table.DataCells, cells, dataRow: null);
             }
         }
 
@@ -557,17 +644,17 @@ public sealed class RdlcDocumentFactory
     private void AppendTableCells(
         List<TableCell> target,
         List<XElement> cellXElements,
-        object? dataRow,
-        bool isHeader)
+        object? dataRow)
     {
-        foreach (var cellEl in cellXElements)
+        for (int ci = 0; ci < cellXElements.Count; ci++)
         {
+            var cellEl = cellXElements[ci];
             var contentEl = cellEl.Element(_ns + "CellContents");
             IElement content;
 
             if (contentEl != null)
             {
-                // CellContents may contain a single Textbox or other element directly.
+                // CellContents holds one report item (plus optional ColSpan/RowSpan).
                 var innerItems = BuildReportItems(WrapAsReportItems(contentEl), dataRow);
                 content = innerItems.Count == 1 ? innerItems[0] : BuildColumn(innerItems);
             }
@@ -576,15 +663,18 @@ public sealed class RdlcDocumentFactory
                 content = new SpacerElement();
             }
 
-            int colSpan = TryParseInt(
-                cellEl.Attribute("ColSpan")?.Value ?? cellEl.Element(_ns + "ColSpan")?.Value, 1);
+            // RDL keeps ColSpan inside <CellContents>; older drafts put it on the cell.
+            int colSpan = Math.Max(1, TryParseInt(
+                contentEl?.Element(_ns + "ColSpan")?.Value
+                ?? cellEl.Element(_ns + "ColSpan")?.Value
+                ?? cellEl.Attribute("ColSpan")?.Value, 1));
 
-            target.Add(new TableCell
-            {
-                Content = content,
-                ColumnSpan = Math.Max(1, colSpan),
-                IsHeader = isHeader
-            });
+            target.Add(new TableCell { Content = content, ColumnSpan = colSpan });
+
+            // A spanning cell is followed by empty <TablixCell/> placeholders for the columns it covers.
+            for (int skip = 1; skip < colSpan && ci + 1 < cellXElements.Count
+                               && cellXElements[ci + 1].Element(_ns + "CellContents") == null; skip++)
+                ci++;
         }
     }
 
@@ -597,7 +687,8 @@ public sealed class RdlcDocumentFactory
     {
         var wrapper = new XElement(_ns + "ReportItems");
         foreach (var child in cellContents.Elements())
-            wrapper.Add(new XElement(child));
+            if (child.Name.LocalName is not ("ColSpan" or "RowSpan"))
+                wrapper.Add(new XElement(child));
         return wrapper;
     }
 
@@ -635,45 +726,63 @@ public sealed class RdlcDocumentFactory
     }
 
     // ── Style helpers ─────────────────────────────────────────────────────────
-    private void ApplyTextStyle(TextStyle style, XElement? styleEl)
+    /// <summary>Applies the RDLC style properties present in <paramref name="styleEl"/>; absent ones are left untouched.</summary>
+    private void ApplyTextStyle(TextStyle style, XElement? styleEl, object? row)
     {
         if (styleEl == null) return;
 
-        var fontSizeStr = styleEl.Element(_ns + "FontSize")?.Value;
-        if (!string.IsNullOrWhiteSpace(fontSizeStr))
-        {
-            var pt = ParseUnit(fontSizeStr);
-            if (pt > 0) style.FontSize = pt;
-        }
+        var fontSize = StyleValue(styleEl, "FontSize", row);
+        if (fontSize != null && ParseUnit(fontSize) is > 0 and var pt)
+            style.FontSize = pt;
 
-        var fontFamily = styleEl.Element(_ns + "FontFamily")?.Value;
-        if (!string.IsNullOrWhiteSpace(fontFamily))
+        if (StyleValue(styleEl, "FontFamily", row) is { } fontFamily)
             style.FontFamily = fontFamily;
 
-        var fontWeight = styleEl.Element(_ns + "FontWeight")?.Value;
-        if (string.Equals(fontWeight, "Bold", StringComparison.OrdinalIgnoreCase))
-            style.Bold = true;
+        if (StyleValue(styleEl, "FontWeight", row) is { } weight)
+            style.Bold = weight.ToLowerInvariant() is "bold" or "semibold" or "extrabold" or "heavy" or "black";
 
-        var fontStyle = styleEl.Element(_ns + "FontStyle")?.Value;
-        if (string.Equals(fontStyle, "Italic", StringComparison.OrdinalIgnoreCase))
-            style.Italic = true;
+        if (StyleValue(styleEl, "FontStyle", row) is { } fontStyle)
+            style.Italic = fontStyle.Equals("Italic", StringComparison.OrdinalIgnoreCase);
 
-        var textDecoration = styleEl.Element(_ns + "TextDecoration")?.Value;
-        if (string.Equals(textDecoration, "Underline", StringComparison.OrdinalIgnoreCase))
-            style.Underline = true;
+        if (StyleValue(styleEl, "TextDecoration", row) is { } decoration)
+            style.Underline = decoration.Equals("Underline", StringComparison.OrdinalIgnoreCase);
 
-        var colorStr = styleEl.Element(_ns + "Color")?.Value;
-        if (!string.IsNullOrWhiteSpace(colorStr))
-            style.Color = ParseColor(colorStr);
+        if (StyleColor(styleEl, "Color", row) is { } color)
+            style.Color = color;
 
-        var textAlignStr = styleEl.Element(_ns + "TextAlign")?.Value;
-        style.Alignment = textAlignStr?.ToLowerInvariant() switch
+        if (StyleValue(styleEl, "TextAlign", row) is { } align)
         {
-            "center"             => TextAlignment.Center,
-            "right"              => TextAlignment.Right,
-            "justify" or "full"  => TextAlignment.Justify,
-            _                    => TextAlignment.Left
-        };
+            style.Alignment = align.ToLowerInvariant() switch
+            {
+                "center"            => TextAlignment.Center,
+                "right"             => TextAlignment.Right,
+                "justify" or "full" => TextAlignment.Justify,
+                _                   => TextAlignment.Left
+            };
+        }
+    }
+
+    /// <summary>
+    /// Reads a style property, evaluating it when it is an expression (e.g. <c>=IIF(Fields!X.Value &lt; 0, "Red", "Black")</c>).
+    /// Returns <c>null</c> when the property is absent or empty.
+    /// </summary>
+    private string? StyleValue(XElement? styleEl, string name, object? row)
+    {
+        var raw = styleEl?.Element(_ns + name)?.Value;
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        var value = _evaluator.Evaluate(raw, row).Trim();
+        return value.Length == 0 ? null : value;
+    }
+
+    private ReportColor? StyleColor(XElement? styleEl, string name, object? row)
+    {
+        var value = StyleValue(styleEl, name, row);
+        if (value == null || value.Equals("Transparent", StringComparison.OrdinalIgnoreCase)) return null;
+
+        var color = ParseColor(value);
+        if (color == null)
+            _warnings.Add($"Color '{value}' ({name}) is not recognized and was ignored.");
+        return color;
     }
 
     // ── Layout helpers ────────────────────────────────────────────────────────
@@ -689,7 +798,7 @@ public sealed class RdlcDocumentFactory
     // ── Unit parser ───────────────────────────────────────────────────────────
 
     /// <summary>Converts an RDLC length string (e.g. "2.5in", "6cm", "12pt") to points (pt).</summary>
-    public static float ParseUnit(string? value)
+    internal static float ParseUnit(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return 0f;
         value = value.Trim();
@@ -719,39 +828,33 @@ public sealed class RdlcDocumentFactory
 
     // ── Color parser ──────────────────────────────────────────────────────────
 
-    /// <summary>Parses an RDLC color string (named color or hex) to a <see cref="ReportColor"/>.</summary>
-    public static ReportColor ParseColor(string? value)
+    /// <summary>
+    /// Parses an RDLC color: <c>#RRGGBB</c>, <c>#AARRGGBB</c> (RDL puts alpha first) or any .NET named
+    /// color. Returns <c>null</c> for unknown or fully transparent colors.
+    /// </summary>
+    internal static ReportColor? ParseColor(string? value)
     {
-        if (string.IsNullOrWhiteSpace(value)) return ReportColor.Black;
+        if (string.IsNullOrWhiteSpace(value)) return null;
         value = value.Trim();
 
         if (value.StartsWith('#'))
         {
+            var hex = value[1..];
+            if (hex.Length == 8 && uint.TryParse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var argb))
+            {
+                var a = (byte)(argb >> 24);
+                return a == 0 ? null : new ReportColor((byte)(argb >> 16), (byte)(argb >> 8), (byte)argb, a);
+            }
             try { return ReportColor.FromHex(value); }
-            catch { return ReportColor.Black; }
+            catch (Exception ex) when (ex is ArgumentException or FormatException or OverflowException) { return null; }
         }
 
-        return value.ToLowerInvariant() switch
-        {
-            "black"                        => ReportColor.Black,
-            "white"                        => ReportColor.White,
-            "red"                          => new(255, 0, 0),
-            "green"                        => new(0, 128, 0),
-            "lime"                         => new(0, 255, 0),
-            "blue"                         => new(0, 0, 255),
-            "yellow"                       => new(255, 255, 0),
-            "orange"                       => new(255, 165, 0),
-            "purple"                       => new(128, 0, 128),
-            "fuchsia" or "magenta"         => new(255, 0, 255),
-            "aqua" or "cyan"               => new(0, 255, 255),
-            "gray" or "grey"               => ReportColor.Gray,
-            "silver" or "lightgray" or "lightgrey" => ReportColor.LightGray,
-            "navy"                         => new ReportColor(0, 0, 128),
-            "teal"                         => new ReportColor(0, 128, 128),
-            "maroon"                       => new ReportColor(128, 0, 0),
-            "olive"                        => new ReportColor(128, 128, 0),
-            _                              => ReportColor.Black
-        };
+        var named = System.Drawing.Color.FromName(value);
+        // SSRS designers write "LightGrey", "DimGrey"…; .NET only knows the "Gray" spelling.
+        if (!named.IsKnownColor && value.Contains("grey", StringComparison.OrdinalIgnoreCase))
+            named = System.Drawing.Color.FromName(value.Replace("grey", "gray", StringComparison.OrdinalIgnoreCase));
+        if (!named.IsKnownColor || named.A == 0) return null;
+        return new ReportColor(named.R, named.G, named.B, named.A);
     }
 
     private static int TryParseInt(string? value, int defaultValue)

@@ -2,54 +2,48 @@
 
 > **Required namespaces**
 > ```csharp
-> using FluentReport;           // Document
-> using FluentReport.Core;      // PageSizes
+> using FluentReport;           // Document, GeneratePdf (FluentReport package)
+> using FluentReport.Core;      // PageSizes, DocumentSettings
 > using FluentReport.Elements;  // ChartType
 > using FluentReport.Styling;   // ReportColor, TextStyle
-> using FluentReport.Schema;    // Schema import (optional package)
+> using FluentReport.Html;      // GenerateHtml (FluentReport.Html package)
+> using FluentReport.Excel;     // GenerateExcel (FluentReport.Excel package)
+> using FluentReport.Rdlc;      // Document.FromRdlc (FluentReport.Rdlc package)
 > ```
 
 ---
 
 ## Document
 
-| Method | Description |
+| Member | Description |
 |--------|-------------|
-| `Document.Create(Action<DocumentBuilder>)` | Creates a document from the fluent API |
-| `Document.FromSettings(DocumentSettings)` | Creates a document from a pre-built `DocumentSettings` (advanced / translation layers) |
-| `.GeneratePdf(path\|stream\|—)` | Renders to PDF; overloads: save to disk, write to stream, return `byte[]` |
-| `.GenerateImages(float scale = 1f)` | Renders each page to PNG; returns `IReadOnlyList<byte[]>` |
-| `.GenerateExcel(path\|stream\|—)` | Renders to `.xlsx` *(requires FluentReport.Excel)* |
-| `.GenerateHtml(path\|stream\|—)` | Renders to full HTML *(requires FluentReport.Html)* |
-| `.GenerateHtmlFragment()` | Renders to an inline-style HTML fragment for embedding in emails *(requires FluentReport.Html)* |
-
-For RDLC and YAML/JSON schema import overloads see the [RDLC section](#rdlc-import) and [Schema import section](#schema-import) below.
+| `Document.Create(Action<DocumentBuilder>)` | Builds a document with the fluent API. At least one page is required. |
+| `Document.FromSettings(DocumentSettings)` | Wraps a model built by hand or by an importer. At least one page is required. |
+| `.Settings` | The document model (`DocumentSettings` → pages → elements). |
+| `.GeneratePdf(path\|stream\|—, options?)` | PDF *(FluentReport)* — see [PDF output](#pdf-output). |
+| `.GenerateImages(scale = 1, options?)` | One PNG per page *(FluentReport)*. |
+| `.GetPdfPageCount(options?)` | Number of PDF pages *(FluentReport)*. |
+| `.GenerateHtml(path\|stream\|—, options?)` | Full HTML document *(FluentReport.Html)*. |
+| `.GenerateHtmlFragment(options?)` | HTML fragment for an email body *(FluentReport.Html)*. |
+| `.GenerateExcel(path\|stream\|—)` | `.xlsx` workbook *(FluentReport.Excel)*. |
+| `Document.FromRdlc(path, …)` / `FromRdlcStream` / `FromRdlcXml` | RDLC import *(FluentReport.Rdlc)* — see [RDLC import](#rdlc-import). |
 
 ---
 
 ## DocumentBuilder
 
-Received in the `Document.Create(...)` callback.
-
 | Method | Description |
 |--------|-------------|
-| `.Page(Action<PageBuilder>)` | Adds a page section (chainable for multi-section documents) |
-
----
+| `.Page(Action<PageBuilder>)` | Adds a page section. In PDF its content flows over as many pages as needed with the header and footer repeated; in HTML each section is a block separated by a divider; in Excel a worksheet. |
 
 ## PageBuilder
 
 | Method | Description |
 |--------|-------------|
-| `.Size(PageSize)` | Predefined page size (e.g. `PageSizes.A4`) |
-| `.Size(float width, float height)` | Custom size in points (1 pt = 1/72 in) |
-| `.Landscape()` | Swaps width and height |
-| `.MarginAll(float)` | Equal margins on all sides |
-| `.Margin(top, right, bottom, left)` | Individual margins |
-| `.MarginHorizontal(float)` / `.MarginVertical(float)` | Horizontal or vertical margins |
-| `.Header()` | Returns `ContainerBuilder` for the page header (repeated on every page) |
-| `.Content()` | Returns `ContainerBuilder` for the main body |
-| `.Footer()` | Returns `ContainerBuilder` for the page footer (repeated on every page) |
+| `.Size(PageSize)` / `.Size(float width, float height)` | Page size in points (1 pt = 1/72 in). |
+| `.Landscape()` | Swaps width and height. |
+| `.MarginAll(float)` / `.Margin(top, right, bottom, left)` / `.MarginHorizontal(float)` / `.MarginVertical(float)` | Margins in points; in HTML they become cell padding. |
+| `.Header()` / `.Content()` / `.Footer()` | Return the `ContainerBuilder` of each region. |
 
 ```csharp
 container.Page(page =>
@@ -66,42 +60,43 @@ container.Page(page =>
 });
 ```
 
+`CurrentPageNumber()` / `TotalPages()` resolve to the document page and the page count (in Excel: the worksheet's page).
+
 ---
 
 ## ContainerBuilder
 
-The core composition block. Every table cell, column/row item, and page zone returns a `ContainerBuilder`. It accepts **one child element** — the last content call wins.
+Every region, column/row item and table cell is a `ContainerBuilder`. It holds **one** content element; calling a second content method throws `InvalidOperationException` — use `Column()` or `Row()` to place several elements.
 
-### Content methods
+### Content
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `.Text(string)` | `TextBuilder` | Static text |
-| `.Text(Action<DynamicTextBuilder>)` | `TextBuilder` | Multi-span text (page numbers, mixed styles) |
-| `.Column(Action<ColumnBuilder>)` | `ContainerBuilder` | Vertical stack |
-| `.Row(Action<RowBuilder>)` | `ContainerBuilder` | Horizontal stack |
-| `.Table(Action<TableBuilder>)` | `ContainerBuilder` | Data table |
-| `.Image(string path)` / `.Image(byte[])` | `ContainerBuilder` | Image from file path or bytes |
-| `.Spacer(float size = 0)` | `ContainerBuilder` | Empty space |
-| `.Line(float thickness = 1, string? colorHex = null)` | `ContainerBuilder` | Horizontal rule |
-| `.PageBreak()` | `ContainerBuilder` | Explicit page break |
-| `.List<T>(items, template, spacing)` | `ContainerBuilder` | Repeats a template per collection item |
-| `.Chart()` | `ChartBuilder` | Bar or line chart |
-| `.Subreport(Document)` | `ContainerBuilder` | Embeds a nested `Document` inline |
-| `.Canvas(width, height, draw)` | `ContainerBuilder` | Renders arbitrary vector drawing commands at a fixed size |
+| `.Text(string)` | `TextBuilder` | Text. |
+| `.Text(Action<DynamicTextBuilder>)` | `TextBuilder` | Text made of spans (mixed styles, page numbers). |
+| `.Column(Action<ColumnBuilder>)` | `ContainerBuilder` | Vertical stack. |
+| `.Row(Action<RowBuilder>)` | `ContainerBuilder` | Horizontal stack. |
+| `.Table(Action<TableBuilder>)` | `ContainerBuilder` | Table. |
+| `.List<T>(items, template, spacing = 0)` | `ContainerBuilder` | One item per element of `items`, stacked vertically. |
+| `.Image(string path)` / `.Image(byte[])` | `ContainerBuilder` | PNG, JPEG, GIF, WebP or BMP. `Image(path)` throws if the file does not exist. HTML embeds it as a data URI; Excel skips images. Size: natural size (1 px = 1 pt) capped to the width; a single fixed side keeps the aspect ratio. |
+| `.Spacer(float height = 0)` | `ContainerBuilder` | Empty vertical space. |
+| `.Line(float thickness = 1, string? colorHex = null)` | `ContainerBuilder` | Horizontal rule. |
+| `.PageBreak()` | `ContainerBuilder` | New page in PDF (at any depth); a divider in HTML; a new worksheet in Excel (top level of `Content()`). |
+| `.Chart()` | `ChartBuilder` | Bar or line chart (PDF; HTML/Excel render its fallback). |
+| `.Subreport(Document)` | `ContainerBuilder` | Inserts the content of another document's pages (headers/footers not repeated). |
+| `.Canvas(width, height, (SKCanvas, SKRect) => …)` | `ContainerBuilder` | Custom vector drawing, PDF only *(FluentReport)*. |
+| `.Element(IElement)` | `ContainerBuilder` | Custom element (the renderer must know it). |
 
-### Visual decorators
+### Decorators
 
-Chainable before or after the content method:
+Order-independent; they can be called before or after the content method.
 
 | Method | Description |
 |--------|-------------|
-| `.Padding(float)` | Uniform padding |
-| `.PaddingHorizontal(float)` / `.PaddingVertical(float)` | Axis padding |
-| `.PaddingTop(float)` / `.PaddingBottom(float)` / `.PaddingLeft(float)` / `.PaddingRight(float)` | Side padding |
-| `.Background(string hex)` / `.Background(ReportColor)` | Background color |
-| `.Border(float width = 1, string? colorHex = null)` | Rectangular border |
-| `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` | Horizontal alignment |
+| `.Padding(float)`, `.PaddingHorizontal/Vertical(float)`, `.PaddingTop/Bottom/Left/Right(float)` | Padding. |
+| `.Background(string hex)` / `.Background(ReportColor)` | Background color. |
+| `.Border(float width = 1, string? colorHex = null)` | Border. |
+| `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` | Horizontal alignment of the content. |
 
 ```csharp
 col.Item()
@@ -116,75 +111,44 @@ col.Item()
 
 ## TextBuilder
 
-Returned by `ContainerBuilder.Text(string)`.
-
 | Method | Description |
 |--------|-------------|
-| `.FontSize(float)` | Font size in points |
-| `.FontFamily(string)` | Font family |
-| `.Bold()` / `.Italic()` / `.Underline()` | Weight and decoration |
-| `.Color(string hex)` / `.Color(ReportColor)` | Text color |
-| `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` / `.AlignJustify()` | Alignment |
-| `.LineSpacing(float)` | Line height multiplier (default `1.2f`) |
-| `.Rotate(float degrees)` | Visual rotation in degrees, counter-clockwise. **PDF only** — HTML and Excel renderers ignore this value. Layout does not account for rotation; use only for decorative text |
-| `.Padding(float)` / `.PaddingVertical(float)` / `.PaddingHorizontal(float)` | Delegates to parent `ContainerBuilder` |
+| `.FontSize(float)` | Size in points (HTML uses the same number in px). |
+| `.FontFamily(string)` | Font family. |
+| `.Bold()` / `.Italic()` / `.Underline()` | Weight and decoration. |
+| `.Color(string hex)` / `.Color(ReportColor)` | Text color. |
+| `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` / `.AlignJustify()` | Text alignment (inside a table cell it aligns the cell). |
+| `.LineSpacing(float)` | Line height multiplier (default `1.2`). |
+| `.Rotate(float degrees)` | Rotation, counter-clockwise. PDF only; layout uses the unrotated box. |
+
+The style applies to every span of `Text(x => …)` as well; a span's own settings win:
 
 ```csharp
-col.Item().Text("Section title")
-   .FontSize(18).Bold().Color("#1A237E").AlignCenter();
+page.Footer().Text(x =>
+{
+    x.Span("Page ");
+    x.CurrentPageNumber(s => s.Bold = true);
+}).FontSize(8).Color("#666666");   // both spans are 8 pt grey; the number is also bold
 ```
-
----
 
 ## DynamicTextBuilder
 
-Returned in the `ContainerBuilder.Text(Action<DynamicTextBuilder>)` callback.
-
 | Method | Description |
 |--------|-------------|
-| `.Span(string, Action<TextStyle>? = null)` | Static text span with optional style |
-| `.CurrentPageNumber(Action<TextStyle>? = null)` | Current page number span |
-| `.TotalPages(Action<TextStyle>? = null)` | Total pages span |
-
-```csharp
-page.Footer().AlignCenter().Text(x =>
-{
-    x.Span("Page ");
-    x.CurrentPageNumber();
-    x.Span(" of ");
-    x.TotalPages();
-});
-```
+| `.Span(string, Action<TextStyle>? = null)` | Text span. |
+| `.CurrentPageNumber(Action<TextStyle>? = null)` | Current page number. |
+| `.TotalPages(Action<TextStyle>? = null)` | Page count. |
 
 ---
 
-## ColumnBuilder
+## ColumnBuilder / RowBuilder
 
 | Method | Description |
 |--------|-------------|
-| `.Spacing(float)` | Vertical gap between items in points |
-| `.Item()` | Adds an item; returns `ContainerBuilder` |
-
----
-
-## RowBuilder
-
-| Method | Description |
-|--------|-------------|
-| `.Spacing(float)` | Horizontal gap between items in points |
-| `.Item()` | Relative item with weight 1 (same as `RelativeItem(1)`) |
-| `.RelativeItem(float weight = 1)` | Item with proportional width |
-| `.FixedItem(float width)` | Item with fixed width in points |
-
-```csharp
-page.Content().Row(row =>
-{
-    row.Spacing(12);
-    row.RelativeItem(2).Text("Customer").Bold();
-    row.RelativeItem(1).Text("Date");
-    row.FixedItem(80).AlignRight().Text("$1,200").Bold();
-});
-```
+| `ColumnBuilder.Spacing(float)` / `.Item()` | Gap between items; adds an item. |
+| `RowBuilder.Spacing(float)` | Gap between items. |
+| `RowBuilder.RelativeItem(float weight = 1)` / `.Item()` | Proportional width. |
+| `RowBuilder.FixedItem(float width)` | Fixed width in points. |
 
 ---
 
@@ -192,354 +156,116 @@ page.Content().Row(row =>
 
 | Method | Description |
 |--------|-------------|
-| `.ColumnsDefinition(Action<TableColumnDefinitionBuilder>)` | Defines column count and widths |
-| `.Header(Action<TableHeaderBuilder>)` | Defines the header row |
-| `.Cell(int colSpan = 1)` | Adds a data cell; returns `ContainerBuilder` |
-| `.BorderEachCell(float width = 1, string? colorHex = null)` | Applies a border to every cell |
+| `.ColumnsDefinition(c => c.RelativeColumn(w) / c.ConstantColumn(pt))` | Columns and their widths. |
+| `.Header(h => h.Cell(colSpan))` | Header rows (`<thead>`, bold in Excel). |
+| `.Cell(int colSpan = 1)` | Data cell. |
+| `.Footer(f => f.Cell(colSpan))` | Rows after the data (totals, notes): `<tfoot>` in HTML. |
+| `.BorderEachCell(float width = 1, string? colorHex = null)` | Border on every cell. |
 
-**TableHeaderBuilder** — same as above but cells belong to the header row.
-
-**TableColumnDefinitionBuilder:**
-
-| Method | Description |
-|--------|-------------|
-| `.RelativeColumn(float weight = 1)` | Column with proportional width |
-| `.ConstantColumn(float width)` | Column with fixed width in points |
+Cells are listed left-to-right, top-to-bottom and wrap into rows automatically, respecting `colSpan`.
 
 ```csharp
 col.Item().Table(table =>
 {
-    table.ColumnsDefinition(cols =>
-    {
-        cols.RelativeColumn(3);
-        cols.RelativeColumn(2);
-        cols.ConstantColumn(80);
-    });
+    table.ColumnsDefinition(cols => { cols.RelativeColumn(3); cols.ConstantColumn(80); });
     table.Header(h =>
     {
-        h.Cell(2).Background("#4472C4").Padding(5).Text("Product / Description").Bold().Color("#FFFFFF");
+        h.Cell().Background("#4472C4").Padding(5).Text("Product").Bold().Color("#FFFFFF");
         h.Cell().Background("#4472C4").Padding(5).Text("Price").Bold().Color("#FFFFFF");
     });
-    table.BorderEachCell(0.5f, "#CCCCCC");
-
     foreach (var item in products)
     {
         table.Cell().Padding(4).Text(item.Name);
-        table.Cell().Padding(4).Text(item.Description);
-        table.Cell().Padding(4).AlignRight().Text(item.Price.ToString("C"));
+        table.Cell().Padding(4).Text(item.Price.ToString("N2")).AlignRight();
     }
+    table.Footer(f =>
+    {
+        f.Cell().Padding(4).Text("Total").Bold();
+        f.Cell().Padding(4).Text(total.ToString("N2")).Bold().AlignRight();
+    });
+    table.BorderEachCell(0.5f, "#CCCCCC");
 });
 ```
-
-Cells are added left-to-right, top-to-bottom; FluentReport wraps them into rows automatically respecting `colSpan`.
 
 ---
 
 ## ChartBuilder
 
-Returned by `ContainerBuilder.Chart()`.
-
 | Method | Description |
 |--------|-------------|
-| `.Type(ChartType)` | `ChartType.Bar` or `ChartType.Line` |
-| `.Title(string)` | Chart title |
-| `.Height(float)` | Height in points (default `200`) |
-| `.Categories(IEnumerable<string>)` | X-axis labels |
-| `.AddSeries(string label, IEnumerable<double> values, string? colorHex = null)` | Adds a data series; color defaults to the built-in palette |
-
-```csharp
-page.Content().Chart()
-    .Type(ChartType.Bar)
-    .Title("Quarterly Sales")
-    .Height(220)
-    .Categories(new[] { "Q1", "Q2", "Q3", "Q4" })
-    .AddSeries("Revenue", new double[] { 100_000, 145_000, 132_000, 198_000 })
-    .AddSeries("Costs",   new double[] {  78_000,  91_000,  85_000, 110_000 }, "#FF6666");
-```
-
-Default series palette (in order): steel blue `(70,130,180)`, red `(220,80,80)`, green `(80,160,80)`, orange `(210,140,40)`, purple `(140,80,200)`, teal `(60,180,180)`.
+| `.Type(ChartType.Bar \| ChartType.Line)` | Chart type. |
+| `.Title(string)` / `.Height(float)` | Title; height in points (default 200). |
+| `.Categories(IEnumerable<string>)` | X-axis labels. |
+| `.AddSeries(label, values, colorHex?)` | Data series; color defaults to a palette. Bars grow from zero, so negative values point down. |
+| `.Fallback(string)` | Text HTML and Excel show instead of the chart. |
 
 ---
 
-## List\<T\>
+## Styling
 
-Repeats a template for each item in a collection, stacked vertically.
+`ReportColor` (in `FluentReport.Styling`): `new ReportColor(r, g, b[, a])`, `ReportColor.FromHex("#RRGGBB" | "#RRGGBBAA")`, constants `Black`, `White`, `Gray`, `LightGray`, `Transparent`.
 
-```csharp
-page.Content().List(orders, (container, order) =>
-{
-    container.Column(col =>
-    {
-        col.Item().Text(order.Description).Bold();
-        col.Item().Text($"Total: {order.Total:C}");
-    });
-}, spacing: 8f);
-```
+`TextStyle` properties: `FontSize` (12), `FontFamily` ("sans-serif" → the HTML font option), `Bold`, `Italic`, `Underline`, `Color`, `Alignment`, `LineSpacing` (1.2), `Rotation` (PDF only), and the optional `BoldResolver`, `ItalicResolver`, `ColorResolver` delegates that override the static value when the document is rendered.
+
+`PageSizes`: `A3`, `A4`, `A5`, `Letter`, `Legal`.
 
 ---
 
-## Subreport
+## PDF output
 
-Embeds a complete `Document` as an inline element. Its pages render sequentially at the insertion point.
+Content flows across pages: columns split between items (also nested or inside padding/background/border), text between lines, and tables between rows, repeating header rows and keeping footer rows on the last page. Rows, images, charts and canvases move to the next page whole; one taller than a page is cut at the footer.
 
-```csharp
-var annex = Document.Create(c => { c.Page(/* ... */); });
-page.Content().Column(col =>
-{
-    col.Item().Text("Main body");
-    col.Item().Subreport(annex);
-});
-```
+`PdfOptions`:
 
----
+| Option | Description |
+|--------|-------------|
+| `FontResolver` | `Func<TextStyle, SKTypeface?>` — e.g. embedded fonts. Return `null` for the system font. Typefaces are cached per render and never disposed. |
+| `Title` / `Author` | PDF metadata. |
 
-## ReportColor
-
-Immutable color struct in `FluentReport.Styling`.
-
-| Form | Description |
-|------|-------------|
-| `new ReportColor(r, g, b)` | Opaque color |
-| `new ReportColor(r, g, b, a)` | Color with alpha (`255` = fully opaque) |
-| `ReportColor.FromHex("#RRGGBB")` | From hex string |
-
-Predefined constants: `Black`, `White`, `Gray`, `LightGray`, `Transparent`.
-
-All three forms below are equivalent:
-```csharp
-.Color("#4472C4")
-.Color(ReportColor.FromHex("#4472C4"))
-.Color(new ReportColor(68, 114, 196))
-```
+Fonts are embedded whole (SkiaSharp does not subset), adding a few hundred KB per face.
 
 ---
 
-## TextStyle and conditional styling
+## Renderer options
 
-`TextStyle` holds all style properties for a text span, accessible in `DynamicTextBuilder` callbacks.
+`HtmlRendererOptions`: `MaxWidth` (600 px, `null` = 100 %), `FontFamily` (default font stack), `PageDividerStyle`, `OutlookCompatible`.
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `FontSize` | `float` | `12` | Font size in points |
-| `FontFamily` | `string` | `"sans-serif"` | Font family |
-| `Bold` | `bool` | `false` | Bold (static) |
-| `Italic` | `bool` | `false` | Italic (static) |
-| `Underline` | `bool` | `false` | Underline |
-| `Color` | `ReportColor` | `Black` | Color (static) |
-| `Alignment` | `TextAlignment` | `Left` | `Left`, `Center`, `Right`, `Justify` |
-| `LineSpacing` | `float` | `1.2f` | Line height multiplier |
-| `Rotation` | `float` | `0` | Visual rotation in degrees, counter-clockwise. **PDF only** — HTML and Excel renderers ignore this value. Layout is not affected |
-| `BoldResolver` | `Func<bool>?` | `null` | Overrides `Bold` at render time |
-| `ItalicResolver` | `Func<bool>?` | `null` | Overrides `Italic` at render time |
-| `ColorResolver` | `Func<ReportColor>?` | `null` | Overrides `Color` at render time |
+Numbers in the generated CSS always use `.` as decimal separator, whatever the machine culture.
 
-Resolvers take precedence over the corresponding static property when non-null.
-
-```csharp
-col.Item().Text(t =>
-{
-    t.Span("Status: ", s => s.Bold = true);
-    t.Span(item.Status, s =>
-    {
-        s.ColorResolver = () => item.Active
-            ? new ReportColor(0, 150, 0)
-            : new ReportColor(200, 0, 0);
-    });
-});
-```
+A custom `IElement` that a renderer does not know throws `NotSupportedException` instead of being dropped; an `IRendererSpecificElement` (charts, canvases) renders its `Fallback` in renderers that cannot draw it.
 
 ---
 
-## PageSizes
-
-| Constant | Width (pt) | Height (pt) |
-|----------|------------|-------------|
-| `PageSizes.A4` | 595.28 | 841.89 |
-| `PageSizes.A3` | 841.89 | 1190.55 |
-| `PageSizes.A5` | 419.53 | 595.28 |
-| `PageSizes.Letter` | 612 | 792 |
-| `PageSizes.Legal` | 612 | 1008 |
-
----
-
-## RDLC Import
-
-`FluentReport.Rdlc` converts `.rdlc` (SSRS) files into a standard `Document`.
-
-```shell
-dotnet add package FluentReport.Rdlc
-```
-
-### API overloads
-
-| Method | Source |
-|--------|--------|
-| `DocumentRdlcExtensions.FromRdlc(path, datasets?, parameters?)` | File path |
-| `DocumentRdlcExtensions.FromRdlcStream(stream, datasets?, parameters?)` | `Stream` (e.g. embedded resource) |
-| `DocumentRdlcExtensions.FromRdlcXml(xml, datasets?, parameters?)` | XML `string` |
-
-All three share the same `datasets` and `parameters` parameters:
-- `datasets` — `IDictionary<string, IEnumerable<object>>` — rows per dataset name
-- `parameters` — `IDictionary<string, object>` — report parameter values
+## RDLC import
 
 ```csharp
 using FluentReport.Rdlc;
 
-var doc = DocumentRdlcExtensions.FromRdlc(
+var doc = Document.FromRdlc(
     "reports/catalog.rdlc",
-    datasets: new Dictionary<string, IEnumerable<object>>
-    {
-        ["Products"] = products.Cast<object>()
-    },
-    parameters: new Dictionary<string, object>
-    {
-        ["Company"] = "Acme Corp."
-    });
+    datasets: new Dictionary<string, IEnumerable<object>> { ["Products"] = products.Cast<object>() },
+    parameters: new Dictionary<string, object> { ["Company"] = "Acme Corp." },
+    options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") });
 
 doc.GeneratePdf("catalog.pdf");
 ```
 
-**Dataset rows** can be POCOs (public properties) or `IDictionary<string, object>`. Field names are case-insensitive.
+| Entry point | Source |
+|-------------|--------|
+| `Document.FromRdlc(path, datasets?, parameters?, globals?, options?)` | File |
+| `Document.FromRdlcStream(stream, …)` | Stream |
+| `Document.FromRdlcXml(xml, …)` | XML string |
+| `new RdlcDocumentFactory(…).ParseFromFile/Stream/Xml(…)` | Same, plus `factory.Warnings` |
 
-### Supported expressions
+Rows can be POCOs or dictionaries; field names are case-insensitive.
 
-| Expression | Description |
-|------------|-------------|
-| `=Fields!FieldName.Value` | Field value from the current data row |
-| `=First(Fields!FieldName.Value, "DataSetName")` | Field value from the first row of the named dataset |
-| `=Parameters!ParamName.Value` | Report parameter value |
-| `=IIF(condition, trueValue, falseValue)` | Conditional expression (supports simple equality checks) |
-| `=Switch(cond1, val1, cond2, val2, ...)` | Multi-branch conditional expression |
-| Literal (no `=` prefix) | Returned as-is |
+`RdlcImportOptions`:
 
-Unsupported/unknown expressions (aggregates, `Format`, `Globals!`, concatenations, etc.) are replaced with an empty string.
+| Option | Default | Description |
+|--------|---------|-------------|
+| `Culture` | report `<Language>`, else invariant | Formats values and reads numbers/dates given as text. Never the machine culture. |
+| `LoadExternalImages` | `true` | Load `<Image Source="External">`. |
+| `ExternalImageDirectory` | the `.rdlc` folder (file import only) | External images are read only from inside this directory. |
+| `StrictExpressions` | `false` | Throw instead of rendering empty text for unsupported expressions. |
 
-### Supported RDLC elements
-
-| RDLC element | FluentReport equivalent | Notes |
-|---|---|---|
-| `<Textbox>` | `TextElement` | FontSize, FontWeight, FontStyle, TextDecoration, Color, TextAlign, BackgroundColor, Padding |
-| `<Line>` | `LineElement` | Color, BorderWidth |
-| `<Image>` | `ImageElement` | `External` (file path) and `Database` (base64 bytes from field). `Embedded` source is ignored. |
-| `<Tablix>` | `TableElement` | Static header rows + detail rows repeated per dataset row. Supports `ColSpan`. |
-| `<PageHeader>` / `<PageFooter>` | Document header/footer | |
-| `<Page>` dimensions | `PageSettings.Size` + margins | PageWidth, PageHeight, all four margins |
-
-Unsupported elements (`<Chart>`, `<Subreport>`, `<Rectangle>`, `<List>`, gauges, maps, groups, aggregates) are silently ignored.
-
-### Unit conversion
-
-| Unit | Equivalent |
-|------|-----------|
-| `in` | 72 pt |
-| `cm` | ≈ 28.35 pt |
-| `mm` | ≈ 2.83 pt |
-| `pt` | 1:1 |
-| `px` | 0.75 pt (96 dpi) |
-
-### Colors
-
-Accepted formats: `#RRGGBB`, `#RRGGBBAA`, and basic CSS color names (`Black`, `White`, `Red`, etc.).  
-3-digit hex (`#RGB`) is **not supported** — always use 6 digits.  
-Unrecognized colors fall back to black.
-
-Both SSRS 2005 and 2008+ XML namespaces are accepted automatically.
-
-> For known limitations and the internal processing flow see [rdlc-limitations.md](rdlc-limitations.md).
-
----
-
-## Schema Import
-
-`FluentReport.Schema` converts schema files (`.yaml`, `.yml`, `.json`) into a standard `Document`.
-
-```shell
-dotnet add package FluentReport.Schema
-```
-
-### API overloads
-
-| Method | Source |
-|--------|--------|
-| `DocumentSchemaExtensions.FromSchema(path, dataSources?, parameters?)` | File path |
-| `DocumentSchemaExtensions.FromSchemaStream(stream, format?, dataSources?, parameters?)` | `Stream` |
-| `DocumentSchemaExtensions.FromSchemaYaml(yaml, dataSources?, parameters?)` | YAML `string` |
-| `DocumentSchemaExtensions.FromSchemaJson(json, dataSources?, parameters?)` | JSON `string` |
-
-All four overloads share:
-- `dataSources` — `IDictionary<string, IEnumerable<object>>` — rows per data source name.
-- `parameters` — `IDictionary<string, object>` — values used in templates like `{{ parameters.period }}`.
-
-### Validation and code-generation helpers
-
-| Method | Description |
-|--------|-------------|
-| `DocumentSchemaExtensions.ValidateSchema(yaml)` | Validates a YAML schema string; returns `ValidationResult` with `IsValid`, `Errors`, and `Warnings`. Parse errors are captured as `ValidationError` entries rather than thrown |
-| `DocumentSchemaExtensions.ValidateSchemaJson(json)` | Same as above for a JSON schema string |
-| `DocumentSchemaExtensions.ToFluentCSharp(schema, format?)` | Converts a YAML or JSON schema to equivalent C# `Document.Create(...)` code; `format` is auto-detected when omitted |
-
-### Mapping YAML => fluent API
-
-| YAML node | FluentReport equivalent |
-|-----------|-------------------------|
-| `type: text` | `.Text(...)` / `TextElement` |
-| `type: line` | `.Line(...)` / `LineElement` |
-| `type: spacer` | `.Spacer(...)` / `SpacerElement` |
-| `type: pageBreak` | `.PageBreak()` / `PageBreakElement` |
-| `type: image` | `.Image(...)` / `ImageElement` |
-| `type: table` | `.Table(...)` / `TableElement` |
-| `type: repeat` | `.List(...)` / `ListElement` |
-| `type: groupInstance` | group expansion from `definitions.groups` |
-| `styles.*` + `styleRef` | `TextStyle` merge |
-| `{{ parameters.* }}` / `{{ row.* }}` | template resolution before render |
-
-### Example: YAML and equivalent fluent shape
-
-YAML:
-
-```yaml
-pages:
-  - id: p1
-    regions:
-      content:
-        nodes:
-          - type: text
-            value: "Revenue Report - {{ parameters.period }}"
-            styleRef: title
-          - type: line
-            thickness: 1
-          - type: table
-            dataSource: sales
-            columns:
-              - field: region
-                header: Region
-                width: 2
-              - field: revenue
-                header: Revenue
-                width: 1
-                align: right
-```
-
-Equivalent fluent shape:
-
-```csharp
-page.Content().Column(col =>
-{
-    col.Item().Text("Revenue Report - ...").FontSize(20).Bold().AlignCenter();
-    col.Item().Line(1);
-    col.Item().Table(table =>
-    {
-        table.ColumnsDefinition(c =>
-        {
-            c.RelativeColumn(2);
-            c.RelativeColumn(1);
-        });
-        table.Header(h =>
-        {
-            h.Cell().Text("Region").Bold();
-            h.Cell().AlignRight().Text("Revenue").Bold();
-        });
-        // repeated data rows from dataSources["sales"]
-    });
-});
-```
+Supported report items, expressions and known limitations: [rdlc-limitations.md](rdlc-limitations.md).

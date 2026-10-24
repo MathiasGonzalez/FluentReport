@@ -1,20 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <Nullable>enable</Nullable>
-    <ImplicitUsings>enable</ImplicitUsings>
-    <LangVersion>latest</LangVersion>
     <PackageId>FluentReport.Core</PackageId>
-    <Version>1.0.0</Version>
-    <Authors>Mathías González Benítez</Authors>
-    <Description>Core model and abstractions for FluentReport: elements, builders, and styling. No rendering dependencies.</Description>
-    <PackageTags>pdf;report;fluent</PackageTags>
-    <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/MathiasGonzalez/FluentReport</RepositoryUrl>
-    <RepositoryType>git</RepositoryType>
-    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Description>Document model and fluent API for FluentReport: elements, builders and styling, shared by the HTML and Excel renderers and the RDLC importer.</Description>
+    <PackageTags>report;fluent;html;excel</PackageTags>
   </PropertyGroup>
-  <ItemGroup>
-    <None Include="README.md" Pack="true" PackagePath="\" />
-  </ItemGroup>
 </Project>

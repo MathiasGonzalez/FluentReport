@@ -25,10 +25,10 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
 
       - name: Generate landing page
         run: |
@@ -72,10 +72,9 @@ jobs:
             <header>
               <img src="logo.png" alt="FluentReport logo" />
               <h1>FluentReport</h1>
-              <p>.NET 10 library for generating PDF, Excel, and HTML reports using a fluent C# API — with built-in AI-agent support via MCP.</p>
+              <p>.NET 10 library for generating PDF reports with a fluent C# API — also rendering to HTML/email and Excel, with RDLC import.</p>
               <div class="badges">
                 <img src="https://github.com/MathiasGonzalez/FluentReport/actions/workflows/ci.yml/badge.svg" alt="CI" />
-                <img src="https://img.shields.io/nuget/v/FluentReport.Core.svg?label=FluentReport.Core" alt="NuGet" />
                 <img src="https://img.shields.io/nuget/v/FluentReport.svg?label=FluentReport" alt="NuGet" />
               </div>
             </header>
@@ -84,42 +83,33 @@ jobs:
               <div class="cta">
                 <a class="btn btn-primary" href="https://github.com/MathiasGonzalez/FluentReport">View on GitHub</a>
                 <a class="btn btn-secondary" href="https://www.nuget.org/packages/FluentReport">NuGet packages</a>
-                <a class="btn btn-secondary" href="https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/agent-quickstart.md">Agent quickstart</a>
               </div>
 
               <h2>Packages</h2>
               <table>
                 <thead><tr><th>Package</th><th>Description</th></tr></thead>
                 <tbody>
-                  <tr><td><a href="https://www.nuget.org/packages/FluentReport"><code>FluentReport</code></a></td><td>PDF renderer (SkiaSharp — Linux compatible)</td></tr>
+                  <tr><td><a href="https://www.nuget.org/packages/FluentReport"><code>FluentReport</code></a></td><td>PDF renderer (SkiaSharp, real pagination)</td></tr>
                   <tr><td><a href="https://www.nuget.org/packages/FluentReport.Excel"><code>FluentReport.Excel</code></a></td><td>Excel (.xlsx) renderer (ClosedXML)</td></tr>
                   <tr><td><a href="https://www.nuget.org/packages/FluentReport.Html"><code>FluentReport.Html</code></a></td><td>HTML/email renderer (inline styles)</td></tr>
                   <tr><td><a href="https://www.nuget.org/packages/FluentReport.Rdlc"><code>FluentReport.Rdlc</code></a></td><td>RDLC/SSRS importer</td></tr>
-                  <tr><td><a href="https://www.nuget.org/packages/FluentReport.Schema"><code>FluentReport.Schema</code></a></td><td>YAML/JSON schema importer + validator</td></tr>
-                  <tr><td><a href="https://www.nuget.org/packages/FluentReport.Core"><code>FluentReport.Core</code></a></td><td>Core model (custom renderer base)</td></tr>
+                  <tr><td><a href="https://www.nuget.org/packages/FluentReport.Core"><code>FluentReport.Core</code></a></td><td>Document model and fluent API</td></tr>
                 </tbody>
               </table>
 
               <h2>Quick start</h2>
               <pre><code>dotnet add package FluentReport           # PDF
-          dotnet add package FluentReport.Excel     # + Excel
           dotnet add package FluentReport.Html      # + HTML/email
-          dotnet add package FluentReport.Schema    # + YAML/JSON schema
-          dotnet tool install -g FluentReport.Mcp   # MCP server for AI agents</code></pre>
+          dotnet add package FluentReport.Excel     # + Excel (.xlsx)
+          dotnet add package FluentReport.Rdlc      # + RDLC import</code></pre>
 
-              <h2>AI-first design</h2>
-              <p>FluentReport is designed to be used directly by AI coding agents. Install the MCP server and let your agent validate schemas, preview HTML, and render PDFs — all from the chat window.</p>
-              <pre><code>dotnet tool install -g FluentReport.Mcp</code></pre>
-              <p>See the <a href="https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/agent-quickstart.md">agent quickstart</a> for a complete end-to-end guide.</p>
 
               <h2>Documentation</h2>
               <table>
                 <thead><tr><th>Document</th><th>Description</th></tr></thead>
                 <tbody>
-                  <tr><td><a href="https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/agent-quickstart.md">Agent quickstart</a></td><td>Minimal end-to-end flow, binding syntax, common errors</td></tr>
                   <tr><td><a href="https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/api.md">API reference</a></td><td>All builders and methods</td></tr>
-                  <tr><td><a href="https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/schema/report-schema.md">YAML schema reference</a></td><td>Schema contract, binding grammar, style precedence</td></tr>
-                  <tr><td><a href="https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Mcp/README.md">MCP server setup</a></td><td>Use FluentReport from any AI agent via MCP</td></tr>
+                  <tr><td><a href="https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/rdlc-limitations.md">RDLC import</a></td><td>Supported report items, expressions and options</td></tr>
                 </tbody>
               </table>
             </main>
@@ -132,7 +122,7 @@ jobs:
           EOF
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: _site
 
@@ -148,4 +138,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
