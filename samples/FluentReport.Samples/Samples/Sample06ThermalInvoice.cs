@@ -1,6 +1,5 @@
 using FluentReport;
 using FluentReport.Core;
-using FluentReport.Html;
 
 namespace FluentReport.Samples;
 
@@ -19,7 +18,7 @@ internal static class Sample06ThermalInvoice
         var invoice = Sample05Invoice.GetSampleData();
         var qrBytes = SampleHelpers.GenerarQrPlaceholder(70);
 
-        File.WriteAllText(Path.Combine(outputDir, "06-thermal-invoice.html"),
+        File.WriteAllBytes(Path.Combine(outputDir, "06-thermal-invoice.pdf"),
             Document.Create(c =>
             {
                 c.Page(page =>
@@ -93,8 +92,8 @@ internal static class Sample06ThermalInvoice
                         col.Item().Text("Verifique en efactura.dgi.gub.uy").FontFamily(FacturaUY.FontPrimary).FontSize(6).AlignCenter().Color(FacturaUY.TextSecondary);
                     });
                 });
-            }).GenerateHtml());
+            }).GeneratePdf());
 
-        Console.WriteLine("Generated 06-thermal-invoice.html");
+        Console.WriteLine("Generated 06-thermal-invoice.pdf");
     }
 }

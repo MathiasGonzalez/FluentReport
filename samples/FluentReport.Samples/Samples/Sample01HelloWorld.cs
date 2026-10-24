@@ -1,18 +1,17 @@
 using FluentReport;
 using FluentReport.Core;
-using FluentReport.Html;
 
 namespace FluentReport.Samples;
 
-/// <summary>Sample 01 – Minimal "Hello World" HTML document.</summary>
+/// <summary>Sample 01 – Minimal "Hello World" PDF.</summary>
 internal static class Sample01HelloWorld
 {
     private static readonly string Title   = "Hello, FluentReport!";
-    private static readonly string Subtitle = "This is a simple HTML document generated with FluentReport.";
+    private static readonly string Subtitle = "This is a simple PDF generated with FluentReport.";
 
     public static void Generate(string outputDir)
     {
-        File.WriteAllText(Path.Combine(outputDir, "01-hello-world.html"),
+        File.WriteAllBytes(Path.Combine(outputDir, "01-hello-world.pdf"),
             Document.Create(c =>
             {
                 c.Page(page =>
@@ -26,8 +25,8 @@ internal static class Sample01HelloWorld
                         col.Item().Text(Subtitle);
                     });
                 });
-            }).GenerateHtml());
+            }).GeneratePdf());
 
-        Console.WriteLine("Generated 01-hello-world.html");
+        Console.WriteLine("Generated 01-hello-world.pdf");
     }
 }

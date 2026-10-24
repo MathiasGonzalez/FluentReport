@@ -1,6 +1,5 @@
 using FluentReport;
 using FluentReport.Core;
-using FluentReport.Html;
 
 namespace FluentReport.Samples;
 
@@ -20,7 +19,7 @@ internal static class Sample02ReportWithTable
 
     public static void Generate(string outputDir)
     {
-        File.WriteAllText(Path.Combine(outputDir, "02-report-with-table.html"),
+        File.WriteAllBytes(Path.Combine(outputDir, "02-report-with-table.pdf"),
             Document.Create(c =>
             {
                 c.Page(page =>
@@ -79,8 +78,8 @@ internal static class Sample02ReportWithTable
                         x.TotalPages();
                     });
                 });
-            }).GenerateHtml());
+            }).GeneratePdf());
 
-        Console.WriteLine("Generated 02-report-with-table.html");
+        Console.WriteLine("Generated 02-report-with-table.pdf");
     }
 }

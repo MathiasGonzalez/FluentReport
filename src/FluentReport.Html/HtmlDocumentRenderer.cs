@@ -148,6 +148,7 @@ public class HtmlDocumentRenderer
             SpacerElement spacer  => RenderSpacer(spacer),
             ImageElement image    => RenderImage(image),
             PageBreakElement      => RenderPageBreak(),
+            IRendererSpecificElement specific => specific.Fallback is { } fallback ? RenderElement(fallback) : "",
             _ => throw new NotSupportedException($"The HTML renderer does not support {element.GetType().Name}.")
         };
     }

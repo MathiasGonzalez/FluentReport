@@ -145,6 +145,11 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
             case ImageElement:
                 break;
 
+            case IRendererSpecificElement specific:
+                if (specific.Fallback != null)
+                    WriteElement(sheet, specific.Fallback, ref row, startCol, endCol, style);
+                break;
+
             default:
                 throw new NotSupportedException($"The Excel renderer does not support {element.GetType().Name}.");
         }

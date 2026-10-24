@@ -1,6 +1,5 @@
 using FluentReport;
 using FluentReport.Core;
-using FluentReport.Html;
 
 namespace FluentReport.Samples;
 
@@ -36,7 +35,7 @@ internal static class Sample05Invoice
         var invoice  = GetSampleData();
         var qrBytes  = SampleHelpers.GenerarQrPlaceholder(80);
 
-        File.WriteAllText(Path.Combine(outputDir, "05-invoice.html"),
+        File.WriteAllBytes(Path.Combine(outputDir, "05-invoice.pdf"),
             Document.Create(c =>
             {
                 c.Page(page =>
@@ -157,8 +156,8 @@ internal static class Sample05Invoice
                         x.TotalPages(footerStyle);
                     });
                 });
-            }).GenerateHtml());
+            }).GeneratePdf());
 
-        Console.WriteLine("Generated 05-invoice.html");
+        Console.WriteLine("Generated 05-invoice.pdf");
     }
 }

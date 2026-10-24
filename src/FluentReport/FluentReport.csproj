@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>FluentReport</PackageId>
+    <Description>PDF renderer for FluentReport: a fluent C# API for reports with real pagination (split columns, text and tables with repeated headers), built on SkiaSharp. Linux compatible.</Description>
+    <PackageTags>pdf;report;fluent;skiasharp</PackageTags>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FluentReport.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\FluentReport.Core\FluentReport.Core.csproj" />
+  </ItemGroup>
+</Project>

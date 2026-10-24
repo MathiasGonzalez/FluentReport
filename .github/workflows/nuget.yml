@@ -44,7 +44,7 @@ jobs:
 
       - name: Pack
         run: |
-          for project in FluentReport.Core FluentReport.Html FluentReport.Excel FluentReport.Rdlc; do
+          for project in FluentReport.Core FluentReport FluentReport.Html FluentReport.Excel FluentReport.Rdlc; do
             dotnet pack src/$project/$project.csproj --no-build --configuration Release -p:Version=$PACKAGE_VERSION --output ./nupkgs
           done
 

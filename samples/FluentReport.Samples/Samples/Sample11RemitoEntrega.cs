@@ -1,6 +1,5 @@
 using FluentReport;
 using FluentReport.Core;
-using FluentReport.Html;
 
 namespace FluentReport.Samples;
 
@@ -61,7 +60,7 @@ internal static class Sample11RemitoEntrega
     {
         var d = Data;
 
-        File.WriteAllText(Path.Combine(outputDir, "11-remito-entrega.html"),
+        File.WriteAllBytes(Path.Combine(outputDir, "11-remito-entrega.pdf"),
             Document.Create(c =>
             {
                 c.Page(page =>
@@ -194,8 +193,8 @@ internal static class Sample11RemitoEntrega
                         x.TotalPages(footerStyle);
                     });
                 });
-            }).GenerateHtml());
+            }).GeneratePdf());
 
-        Console.WriteLine("Generated 11-remito-entrega.html");
+        Console.WriteLine("Generated 11-remito-entrega.pdf");
     }
 }

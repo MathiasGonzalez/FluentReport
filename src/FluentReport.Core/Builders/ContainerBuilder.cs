@@ -156,6 +156,35 @@ public class ContainerBuilder
 
 
 
+    /// <summary>Adds a chart. Drawn in PDF; HTML and Excel render its fallback (nothing by default).</summary>
+    public ChartBuilder Chart()
+    {
+        var chart = new ChartElement();
+        SetContent(chart);
+        return new ChartBuilder(chart, this);
+    }
+
+    /// <summary>
+    /// Inserts the content of every page of <paramref name="nested"/> here, one after another.
+    /// The nested document's headers, footers, sizes and margins are not used.
+    /// </summary>
+    public ContainerBuilder Subreport(Document nested)
+    {
+        ArgumentNullException.ThrowIfNull(nested);
+        var column = new ColumnElement();
+        foreach (var page in nested.Settings.Pages)
+            if (page.ContentElement != null)
+                column.Items.Add(page.ContentElement);
+        return SetContent(column);
+    }
+
+    /// <summary>Uses a custom element as content. Renderers must know the element type (or it must be an <see cref="IRendererSpecificElement"/>).</summary>
+    public ContainerBuilder Element(IElement element)
+    {
+        ArgumentNullException.ThrowIfNull(element);
+        return SetContent(element);
+    }
+
     private ContainerBuilder SetContent(IElement content)
     {
         if (_child != null)

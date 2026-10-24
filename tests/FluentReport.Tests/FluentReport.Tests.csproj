@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\FluentReport\FluentReport.csproj" />
+    <ProjectReference Include="..\..\src\FluentReport.Html\FluentReport.Html.csproj" />
+  </ItemGroup>
+  <!-- Embedded DejaVu Sans so measurements are the same on every OS. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Fonts\DejaVuSans.ttf" LogicalName="DejaVuSans.ttf" />
+    <EmbeddedResource Include="Fonts\DejaVuSans-Bold.ttf" LogicalName="DejaVuSans-Bold.ttf" />
+  </ItemGroup>
+</Project>

@@ -1,6 +1,9 @@
 <Project>
   <ItemGroup>
     <PackageVersion Include="ClosedXML" Version="0.105.1" />
+    <!-- 4.x resolves "sans-serif" bold to a regular face on macOS; stay on 3.x until that is handled. -->
+    <PackageVersion Include="SkiaSharp" Version="3.119.4" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="3.119.4" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
   </ItemGroup>
 </Project>

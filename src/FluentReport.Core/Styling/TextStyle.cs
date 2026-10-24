@@ -11,6 +11,9 @@ public class TextStyle
     public TextAlignment Alignment { get; set; } = TextAlignment.Left;
     public float LineSpacing { get; set; } = 1.2f;
 
+    /// <summary>Rotation in degrees, counter-clockwise. Drawn by the PDF renderer only; layout uses the unrotated box.</summary>
+    public float Rotation { get; set; }
+
     /// <summary>
     /// Optional delegate that overrides <see cref="Bold"/> at render time.
     /// The delegate receives no arguments; close over any data context you need.
@@ -49,6 +52,7 @@ public class TextStyle
         Color = Color,
         Alignment = Alignment,
         LineSpacing = LineSpacing,
+        Rotation = Rotation,
         BoldResolver = BoldResolver,
         ItalicResolver = ItalicResolver,
         ColorResolver = ColorResolver

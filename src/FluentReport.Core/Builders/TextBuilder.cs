@@ -21,6 +21,12 @@ public class TextBuilder
     public TextBuilder AlignLeft() { _text.Style.Alignment = TextAlignment.Left; return this; }
     public TextBuilder AlignJustify() { _text.Style.Alignment = TextAlignment.Justify; return this; }
     public TextBuilder LineSpacing(float spacing) { _text.Style.LineSpacing = spacing; return this; }
+
+    /// <summary>
+    /// Rotates the text (degrees, counter-clockwise). PDF only; layout uses the unrotated box,
+    /// so rotated text can overlap its neighbours.
+    /// </summary>
+    public TextBuilder Rotate(float degrees) { _text.Style.Rotation = degrees; return this; }
 }
 
 public class DynamicTextBuilder(TextElement text)
