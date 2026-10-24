@@ -96,6 +96,19 @@ public class PdfRenderingTests
         Assert.Equal("DejaVu Sans", TestFonts.Resolve(new TextStyle()).FamilyName);
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void SystemFont_KeepsBoldAndItalic(bool bold, bool italic)
+    {
+        using var fonts = new FontCache(null);
+        var font = fonts.Font(new TextStyle { Bold = bold, Italic = italic });
+
+        if (bold) Assert.True(font.Typeface.FontWeight >= 600 || font.Embolden);
+        if (italic) Assert.True(font.Typeface.FontSlant != SKFontStyleSlant.Upright || font.SkewX != 0);
+    }
+
     // ── Images ───────────────────────────────────────────────────────────────
 
     [Fact]

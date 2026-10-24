@@ -667,14 +667,11 @@ internal sealed class LayoutEngine : IDisposable
             {
                 using var stroke = Stroke(color, 2);
                 using var dot = Fill(color);
-                using var path = new SKPath();
-                for (int c = 0; c < categories && c < series.Values.Count; c++)
-                {
-                    var point = new SKPoint(plotX + categoryWidth * c + categoryWidth / 2, ToY(series.Values[c]));
-                    if (c == 0) path.MoveTo(point); else path.LineTo(point);
-                    canvas.DrawCircle(point, 3, dot);
-                }
-                canvas.DrawPath(path, stroke);
+                var points = new SKPoint[Math.Min(categories, series.Values.Count)];
+                for (int c = 0; c < points.Length; c++)
+                    points[c] = new SKPoint(plotX + categoryWidth * c + categoryWidth / 2, ToY(series.Values[c]));
+                canvas.DrawPoints(SKPointMode.Polygon, points, stroke);
+                foreach (var point in points) canvas.DrawCircle(point, 3, dot);
             }
         }
 
