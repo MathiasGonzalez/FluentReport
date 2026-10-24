@@ -1,12 +1,15 @@
 name: Publish to NuGet
 
+# Publishes when a release tag is pushed (e.g. v2.0.0). The package version comes from the tag,
+# so every release produces new package versions instead of being skipped as a duplicate.
 on:
   push:
-    branches: [ "main" ]
-    paths:
-      - 'src/**'
-      - 'README.md'
-      - 'LICENSE'
+    tags: [ "v*.*.*" ]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version to publish (e.g. 2.0.1)"
+        required: true
 
 jobs:
   publish:
@@ -14,6 +17,9 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+
+    env:
+      VERSION: ${{ inputs.version || github.ref_name }}
 
     steps:
       - name: Checkout
@@ -24,25 +30,23 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Resolve version
+        run: echo "PACKAGE_VERSION=${VERSION#v}" >> "$GITHUB_ENV"
+
       - name: Restore dependencies
         run: dotnet restore
 
       - name: Build (Release)
-        run: dotnet build --no-restore --configuration Release
+        run: dotnet build --no-restore --configuration Release -p:Version=$PACKAGE_VERSION
 
-      - name: Pack FluentReport.Core
-        run: dotnet pack src/FluentReport.Core/FluentReport.Core.csproj --no-build --configuration Release --output ./nupkgs
+      - name: Test
+        run: dotnet test --no-build --configuration Release
 
-
-      - name: Pack FluentReport.Excel
-        run: dotnet pack src/FluentReport.Excel/FluentReport.Excel.csproj --no-build --configuration Release --output ./nupkgs
-
-      - name: Pack FluentReport.Html
-        run: dotnet pack src/FluentReport.Html/FluentReport.Html.csproj --no-build --configuration Release --output ./nupkgs
-
-      - name: Pack FluentReport.Rdlc
-        run: dotnet pack src/FluentReport.Rdlc/FluentReport.Rdlc.csproj --no-build --configuration Release --output ./nupkgs
-
+      - name: Pack
+        run: |
+          for project in FluentReport.Core FluentReport.Html FluentReport.Excel FluentReport.Rdlc; do
+            dotnet pack src/$project/$project.csproj --no-build --configuration Release -p:Version=$PACKAGE_VERSION --output ./nupkgs
+          done
 
       - name: Push to NuGet
-        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_FLUENT_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+        run: dotnet nuget push ./nupkgs/*.nupkg --api-key ${{ secrets.NUGET_FLUENT_API_KEY }} --source https://api.nuget.org/v3/index.json

@@ -1,0 +1,6 @@
+<Project>
+  <ItemGroup>
+    <PackageVersion Include="ClosedXML" Version="0.105.1" />
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+  </ItemGroup>
+</Project>
