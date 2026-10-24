@@ -264,6 +264,20 @@ public class ExcelRenderingTests
         Assert.NotEmpty(bytes);
     }
 
+    // ── Lists ──────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void GenerateExcel_List_WritesEveryItem()
+    {
+        var bytes = Document.Create(c => c.Page(p =>
+            p.Content().List(new[] { "ALPHA", "BETA" }, (cb, s) => cb.Text(s)))).GenerateExcel();
+
+        using var wb = new XLWorkbook(new MemoryStream(bytes));
+        var values = wb.Worksheet(1).CellsUsed().Select(x => x.GetString()).ToList();
+        Assert.Contains("ALPHA", values);
+        Assert.Contains("BETA", values);
+    }
+
     [Fact]
     public void GenerateExcel_WritesToStream()
     {

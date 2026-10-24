@@ -1,4 +1,3 @@
-using FluentReport.Builders;
 using FluentReport.Core;
 using FluentReport.Elements;
 using FluentReport.Styling;
@@ -130,8 +129,7 @@ public class HtmlDocumentRenderer
 
     private string RenderElement(IElement element)
     {
-        var resolved = Resolve(element);
-        return resolved switch
+        return element switch
         {
             ColumnElement col     => RenderColumn(col),
             RowElement row        => RenderRow(row),
@@ -144,7 +142,7 @@ public class HtmlDocumentRenderer
             SpacerElement spacer  => RenderSpacer(spacer),
             ImageElement image    => RenderImage(image),
             PageBreakElement      => RenderPageBreak(),
-            _                    => ""
+            _ => throw new NotSupportedException($"The HTML renderer does not support {element.GetType().Name}.")
         };
     }
 
@@ -307,8 +305,7 @@ public class HtmlDocumentRenderer
     /// <summary>Renders cell content preferring inline text over block-level wrappers.</summary>
     private string RenderCellContent(IElement element)
     {
-        var resolved = Resolve(element);
-        return resolved switch
+        return element switch
         {
             TextElement text          => RenderTextInline(text),
             PaddingElement pad        => pad.Child != null ? RenderCellContent(pad.Child) : "",
@@ -436,7 +433,7 @@ public class HtmlDocumentRenderer
 
     private string RenderSpacer(SpacerElement spacer)
     {
-        float h = spacer.Measure(new() { AvailableWidth = 600, AvailableHeight = 9999 }).Height;
+        float h = spacer.Height;
         return $"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">" +
                $"<tr><td style=\"height: {(int)h}px; font-size: 0; line-height: 0; padding: 0;\">&nbsp;</td></tr>" +
                "</table>";
@@ -444,11 +441,10 @@ public class HtmlDocumentRenderer
 
     private static string RenderImage(ImageElement image)
     {
-        if (image.SourceBytes == null || image.SourceBytes.Length == 0)
+        if (image.MimeType is not { } mime)
             return "<!-- image not available -->";
 
         string base64 = Convert.ToBase64String(image.SourceBytes);
-        string mime = DetectImageMimeType(image.SourceBytes);
 
         var style = new StringBuilder("display: block; max-width: 100%; height: auto;");
         if (image.FixedWidth.HasValue)  style.Append($" width: {(int)image.FixedWidth.Value}px;");
@@ -500,7 +496,7 @@ public class HtmlDocumentRenderer
     private static ReportColor? ExtractBackgroundColor(IElement? element)
     {
         if (element == null) return null;
-        return Resolve(element) switch
+        return element switch
         {
             BorderElement b  => b.BackgroundColor,
             PaddingElement p => ExtractBackgroundColor(p.Child),
@@ -512,30 +508,12 @@ public class HtmlDocumentRenderer
     private static HorizontalAlignment? ExtractHorizontalAlignment(IElement? element)
     {
         if (element == null) return null;
-        return Resolve(element) switch
+        return element switch
         {
             AlignElement a   => a.Alignment,
             PaddingElement p => ExtractHorizontalAlignment(p.Child),
             BorderElement b  => ExtractHorizontalAlignment(b.Child),
             _                => null
         };
-    }
-
-    // ── Utilities ─────────────────────────────────────────────────────────────
-
-    private static IElement Resolve(IElement element) =>
-        element is LazyElement lazy ? lazy.Built : element;
-
-    private static string DetectImageMimeType(byte[] bytes)
-    {
-        if (bytes.Length >= 4 && bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
-            return "image/png";
-        if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xD8)
-            return "image/jpeg";
-        if (bytes.Length >= 3 && bytes[0] == 0x47 && bytes[1] == 0x49 && bytes[2] == 0x46)
-            return "image/gif";
-        if (bytes.Length >= 4 && bytes[0] == 0x52 && bytes[1] == 0x49 && bytes[2] == 0x46 && bytes[3] == 0x46)
-            return "image/webp";
-        return "image/png";
     }
 }

@@ -440,7 +440,7 @@ public sealed class RdlcDocumentFactory
         else
         {
             // External: value is a file path.
-            img = new ImageElement(valueStr);
+            img = File.Exists(valueStr) ? new ImageElement(valueStr) : new ImageElement([]);
         }
 
         var fixedW = ParseUnit(el.Element(_ns + "Width")?.Value);
@@ -536,18 +536,18 @@ public sealed class RdlcDocumentFactory
             if (!isDetail)
             {
                 // Static row (header / footer) — rendered once.
-                AppendTableCells(table.HeaderCells, cells, dataRow: null, isHeader: true);
+                AppendTableCells(table.HeaderCells, cells, dataRow: null);
             }
             else if (dataRows.Count > 0)
             {
                 // Detail row — repeated for each data row.
                 foreach (var dataRow in dataRows)
-                    AppendTableCells(table.DataCells, cells, dataRow, isHeader: false);
+                    AppendTableCells(table.DataCells, cells, dataRow);
             }
             else
             {
                 // No data — add one empty placeholder row to preserve table structure.
-                AppendTableCells(table.DataCells, cells, dataRow: null, isHeader: false);
+                AppendTableCells(table.DataCells, cells, dataRow: null);
             }
         }
 
@@ -557,8 +557,7 @@ public sealed class RdlcDocumentFactory
     private void AppendTableCells(
         List<TableCell> target,
         List<XElement> cellXElements,
-        object? dataRow,
-        bool isHeader)
+        object? dataRow)
     {
         foreach (var cellEl in cellXElements)
         {
@@ -582,8 +581,7 @@ public sealed class RdlcDocumentFactory
             target.Add(new TableCell
             {
                 Content = content,
-                ColumnSpan = Math.Max(1, colSpan),
-                IsHeader = isHeader
+                ColumnSpan = Math.Max(1, colSpan)
             });
         }
     }

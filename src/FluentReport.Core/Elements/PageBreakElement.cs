@@ -1,9 +1,4 @@
-using FluentReport.Core;
-
 namespace FluentReport.Elements;
 
-public class PageBreakElement : ElementBase
-{
-    public override Size Measure(MeasureContext context) => Size.Zero;
-    public override void Render(RenderContext context, Position position, Size size) { }
-}
+/// <summary>Starts a new page: a divider in HTML, a new worksheet in Excel.</summary>
+public class PageBreakElement : IElement;

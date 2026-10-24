@@ -6,7 +6,7 @@ namespace FluentReport.Builders;
 
 public class ContainerBuilder
 {
-    protected IElement? _child;
+    private IElement? _child;
     private float _paddingTop, _paddingBottom, _paddingLeft, _paddingRight;
     private ReportColor? _background;
     private BorderStyle? _border;
@@ -68,8 +68,8 @@ public class ContainerBuilder
     public TextBuilder Text(string text)
     {
         var textEl = new TextElement(text);
-        _child = textEl;
-        return new TextBuilder(textEl, this);
+        SetContent(textEl);
+        return new TextBuilder(textEl);
     }
 
     public TextBuilder Text(Action<DynamicTextBuilder> configure)
@@ -77,8 +77,8 @@ public class ContainerBuilder
         var textEl = new TextElement();
         var builder = new DynamicTextBuilder(textEl);
         configure(builder);
-        _child = textEl;
-        return new TextBuilder(textEl, this);
+        SetContent(textEl);
+        return new TextBuilder(textEl);
     }
 
     public ContainerBuilder Column(Action<ColumnBuilder> configure)
@@ -86,8 +86,7 @@ public class ContainerBuilder
         var col = new ColumnElement();
         var builder = new ColumnBuilder(col);
         configure(builder);
-        _child = col;
-        return this;
+        return SetContent(col);
     }
 
     public ContainerBuilder Row(Action<RowBuilder> configure)
@@ -95,8 +94,7 @@ public class ContainerBuilder
         var row = new RowElement();
         var builder = new RowBuilder(row);
         configure(builder);
-        _child = row;
-        return this;
+        return SetContent(row);
     }
 
     public ContainerBuilder Table(Action<TableBuilder> configure)
@@ -104,40 +102,34 @@ public class ContainerBuilder
         var table = new TableElement();
         var builder = new TableBuilder(table);
         configure(builder);
-        _child = table;
-        return this;
+        return SetContent(table);
     }
 
     public ContainerBuilder Image(string path)
     {
-        _child = new ImageElement(path);
-        return this;
+        return SetContent(new ImageElement(path));
     }
 
     public ContainerBuilder Image(byte[] imageBytes)
     {
-        _child = new ImageElement(imageBytes);
-        return this;
+        return SetContent(new ImageElement(imageBytes));
     }
 
     public ContainerBuilder Spacer(float size = 0)
     {
-        _child = new SpacerElement(size);
-        return this;
+        return SetContent(new SpacerElement(size));
     }
 
     public ContainerBuilder Line(float thickness = 1, string? colorHex = null)
     {
         var line = new LineElement { Thickness = thickness };
         if (colorHex != null) line.Color = ReportColor.FromHex(colorHex);
-        _child = line;
-        return this;
+        return SetContent(line);
     }
 
     public ContainerBuilder PageBreak()
     {
-        _child = new PageBreakElement();
-        return this;
+        return SetContent(new PageBreakElement());
     }
 
     /// <summary>
@@ -151,42 +143,29 @@ public class ContainerBuilder
     /// <param name="spacing">Vertical gap between items, in points.</param>
     public ContainerBuilder List<T>(IEnumerable<T> items, Action<ContainerBuilder, T> itemTemplate, float spacing = 0)
     {
-        var elements = items.Select(item =>
+        var column = new ColumnElement { Spacing = spacing };
+        foreach (var item in items)
         {
             var cb = new ContainerBuilder();
             itemTemplate(cb, item);
-            return (IElement)new LazyElement(cb);
-        });
-        _child = new ListElement(elements, spacing);
+            column.Items.Add(new LazyElement(cb));
+        }
+        return SetContent(column);
+    }
+
+
+
+
+    private ContainerBuilder SetContent(IElement content)
+    {
+        if (_child != null)
+            throw new InvalidOperationException(
+                $"This container already has content ({_child.GetType().Name}). Use Column() or Row() to place several elements.");
+        _child = content;
         return this;
     }
 
-    /// <summary>Adds a chart element and returns a <see cref="ChartBuilder"/> for configuration.</summary>
-    public ChartBuilder Chart()
-    {
-        var chart = new ChartElement();
-        _child = chart;
-        return new ChartBuilder(chart, this);
-    }
-
-    /// <summary>Renders a nested <see cref="Document"/> inline.</summary>
-    public ContainerBuilder Subreport(Document nested)
-    {
-        _child = new SubreportElement(nested);
-        return this;
-    }
-
-    /// <summary>
-    /// Renders arbitrary drawing commands at a fixed size.
-    /// Useful for vector graphics regions imported from external sources.
-    /// </summary>
-    public ContainerBuilder Canvas(float width, float height, Action<IDrawingCanvas, Position, Size> draw)
-    {
-        _child = new CanvasElement(width, height, draw);
-        return this;
-    }
-
-    internal virtual IElement Build()
+    internal IElement Build()
     {
         IElement element = _child ?? new SpacerElement();
 

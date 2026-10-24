@@ -1,5 +1,4 @@
 using ClosedXML.Excel;
-using FluentReport.Builders;
 using FluentReport.Core;
 using FluentReport.Elements;
 using FluentReport.Styling;
@@ -52,7 +51,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
 
         foreach (var element in topElements)
         {
-            if (Resolve(element) is PageBreakElement)
+            if (element is PageBreakElement)
             {
                 currentGroup = [];
                 sheetGroups.Add(currentGroup);
@@ -95,9 +94,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
         int endCol,
         StyleInfo? style)
     {
-        var resolved = Resolve(element);
-
-        switch (resolved)
+        switch (element)
         {
             case ColumnElement col:
                 WriteColumn(sheet, col, ref row, startCol, endCol, style);
@@ -138,9 +135,14 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
                 row++; // blank row
                 break;
 
-            // PageBreakElement handled upstream; ImageElement not supported in Excel
-            default:
+            // Top-level page breaks become new sheets (see WritePageToWorkbook); nested ones and
+            // images have no cell-based equivalent and are skipped.
+            case PageBreakElement:
+            case ImageElement:
                 break;
+
+            default:
+                throw new NotSupportedException($"The Excel renderer does not support {element.GetType().Name}.");
         }
     }
 
@@ -388,7 +390,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     private static string ExtractText(IElement? element)
     {
         if (element == null) return "";
-        return Resolve(element) switch
+        return element switch
         {
             TextElement text => string.Concat(text.Spans.Select(s =>
                 s.IsCurrentPage ? "1" : s.IsTotalPages ? "?" : s.StaticText ?? "")),
@@ -404,7 +406,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     private static TextStyle? ExtractTextStyle(IElement? element)
     {
         if (element == null) return null;
-        return Resolve(element) switch
+        return element switch
         {
             TextElement text => text.Spans.Count > 0 ? text.Spans[0].Style : text.Style,
             PaddingElement p => ExtractTextStyle(p.Child),
@@ -417,7 +419,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     private static ReportColor? ExtractBackgroundColor(IElement? element)
     {
         if (element == null) return null;
-        return Resolve(element) switch
+        return element switch
         {
             BorderElement b => b.BackgroundColor,
             PaddingElement p => ExtractBackgroundColor(p.Child),
@@ -433,7 +435,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     private static HorizontalAlignment? ExtractHorizontalAlignment(IElement? element)
     {
         if (element == null) return null;
-        return Resolve(element) switch
+        return element switch
         {
             AlignElement a => a.Alignment,
             PaddingElement p => ExtractHorizontalAlignment(p.Child),
@@ -566,9 +568,6 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
 
     // ── Utilities ────────────────────────────────────────────────────────────
 
-    private static IElement Resolve(IElement element) =>
-        element is LazyElement lazy ? lazy.Built : element;
-
     /// <summary>
     /// Returns the top-level items of the content element, inserting
     /// <see cref="SpacerElement"/> instances between items when the column has
@@ -577,8 +576,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     private static List<IElement> GetTopLevelElements(IElement? content)
     {
         if (content == null) return [];
-        var resolved = Resolve(content);
-        if (resolved is ColumnElement column)
+        if (content is ColumnElement column)
         {
             if (column.Spacing <= 0) return column.Items.ToList();
             var items = new List<IElement>();

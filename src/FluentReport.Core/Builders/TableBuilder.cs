@@ -24,7 +24,7 @@ public class TableHeaderBuilder(TableElement table)
     {
         var cb = new ContainerBuilder();
         var lazy = new LazyElement(cb);
-        table.HeaderCells.Add(new TableCell { Content = lazy, IsHeader = true, ColumnSpan = Math.Max(1, colSpan) });
+        table.HeaderCells.Add(new TableCell { Content = lazy, ColumnSpan = Math.Max(1, colSpan) });
         return cb;
     }
 }
