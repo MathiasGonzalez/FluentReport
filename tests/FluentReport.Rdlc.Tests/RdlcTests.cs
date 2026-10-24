@@ -385,14 +385,23 @@ public class RdlcTests
     [InlineData("Red", 255, 0, 0)]
     [InlineData("#FF0000", 255, 0, 0)]
     [InlineData("#0000FF", 0, 0, 255)]
-    [InlineData("unknown-color", 0, 0, 0)] // falls back to black
+    [InlineData("SteelBlue", 70, 130, 180)]
+    [InlineData("LightGrey", 211, 211, 211)]
+    [InlineData("#FF336699", 0x33, 0x66, 0x99)] // RDL: #AARRGGBB
     public void ParseColor_ConvertsNamedAndHexColors(string input, byte r, byte g, byte b)
     {
-        var color = RdlcDocumentFactory.ParseColor(input);
+        var color = RdlcDocumentFactory.ParseColor(input)!.Value;
         Assert.Equal(r, color.R);
         Assert.Equal(g, color.G);
         Assert.Equal(b, color.B);
     }
+
+    [Theory]
+    [InlineData("unknown-color")]
+    [InlineData("Transparent")]
+    [InlineData("#00FFFFFF")]
+    public void ParseColor_UnknownOrTransparent_ReturnsNull(string input)
+        => Assert.Null(RdlcDocumentFactory.ParseColor(input));
 
     // ── Phase 2: ListElement tests ────────────────────────────────────────────
 
