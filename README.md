@@ -4,28 +4,28 @@
 
 [![CI](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/ci.yml/badge.svg)](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/ci.yml)
 [![Publish to NuGet](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/nuget.yml/badge.svg)](https://github.com/MathiasGonzalez/FluentReport/actions/workflows/nuget.yml)
-[![NuGet FluentReport.Core](https://img.shields.io/nuget/v/FluentReport.Core.svg?label=FluentReport.Core)](https://www.nuget.org/packages/FluentReport.Core)
+[![NuGet FluentReport](https://img.shields.io/nuget/v/FluentReport.svg?label=FluentReport)](https://www.nuget.org/packages/FluentReport)
 [![NuGet FluentReport.Html](https://img.shields.io/nuget/v/FluentReport.Html.svg?label=FluentReport.Html)](https://www.nuget.org/packages/FluentReport.Html)
 [![NuGet FluentReport.Excel](https://img.shields.io/nuget/v/FluentReport.Excel.svg?label=FluentReport.Excel)](https://www.nuget.org/packages/FluentReport.Excel)
 [![NuGet FluentReport.Rdlc](https://img.shields.io/nuget/v/FluentReport.Rdlc.svg?label=FluentReport.Rdlc)](https://www.nuget.org/packages/FluentReport.Rdlc)
 
-.NET 10 library for building reports with a fluent C# API and rendering them as **HTML / email** or **Excel**, plus an importer for **RDLC / SSRS** report definitions. No native dependencies.
-
-> **2.0** removed the PDF renderer, the YAML schema importer and the MCP server. See [the migration guide](docs/migration-2.0.md).
+.NET 10 library for generating **PDF** reports with a fluent C# API, with the same document also rendering to **HTML / email** and **Excel**, and an importer for **RDLC / SSRS** report definitions. Linux compatible.
 
 ## Packages
 
 | Package | Description |
 |---------|-------------|
+| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer (SkiaSharp) with real pagination |
 | [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer (table layout, inline styles) |
 | [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel (.xlsx) renderer (ClosedXML) |
 | [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
 | [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API, brought in by the packages above |
 
 ```shell
-dotnet add package FluentReport.Html
-dotnet add package FluentReport.Excel
-dotnet add package FluentReport.Rdlc
+dotnet add package FluentReport          # PDF
+dotnet add package FluentReport.Html     # + HTML / email
+dotnet add package FluentReport.Excel    # + Excel
+dotnet add package FluentReport.Rdlc     # + RDLC import
 ```
 
 ## Quick start
@@ -33,8 +33,6 @@ dotnet add package FluentReport.Rdlc
 ```csharp
 using FluentReport;
 using FluentReport.Core;
-using FluentReport.Excel;
-using FluentReport.Html;
 
 var doc = Document.Create(container =>
 {
@@ -75,10 +73,21 @@ var doc = Document.Create(container =>
     });
 });
 
-doc.GenerateHtml("report.html");            // full HTML document
-string emailBody = doc.GenerateHtmlFragment(); // fragment for an email
+doc.GeneratePdf("report.pdf");
+```
+
+The same `doc` renders to the other formats:
+
+```csharp
+using FluentReport.Excel;
+using FluentReport.Html;
+
+doc.GenerateHtml("report.html");
+string emailBody = doc.GenerateHtmlFragment();
 doc.GenerateExcel("report.xlsx");
 ```
+
+Long content paginates on its own: columns split between items (also when nested or decorated), text between lines, and tables between rows with the header repeated on every page.
 
 ### RDLC
 
@@ -91,37 +100,43 @@ var invoice = Document.FromRdlc(
     datasets: new Dictionary<string, IEnumerable<object>> { ["Lines"] = lines.Cast<object>() },
     options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") });
 
-invoice.GenerateHtml("invoice.html");
+invoice.GeneratePdf("invoice.pdf");
 ```
 
 ## Renderer support
 
-| Feature | HTML | Excel |
-|---------|:----:|:-----:|
-| Text, fonts, colors, alignment | ✓ | ✓ |
-| Rich text (spans) and page numbers | ✓ | ✓ |
-| Column / Row layout | ✓ | ✓ (merged cells) |
-| Tables: header, footer, column spans, borders | ✓ | ✓ |
-| Lists | ✓ | ✓ |
-| Images (PNG, JPEG, GIF, WebP, BMP) | ✓ (data URI) | — |
-| Backgrounds, borders, padding | ✓ | ✓ (no padding) |
-| Lines and spacers | ✓ | ✓ |
-| Multiple pages / page breaks | ✓ (divider) | ✓ (worksheets) |
+| Feature | PDF | HTML | Excel |
+|---------|:---:|:----:|:-----:|
+| Text, fonts, colors, alignment, rich text | ✓ | ✓ | ✓ |
+| Page numbers | ✓ | ✓ | ✓ |
+| Column / Row layout | ✓ | ✓ | ✓ (merged cells) |
+| Tables: header, footer, column spans, borders | ✓ (split across pages) | ✓ | ✓ |
+| Lists | ✓ | ✓ | ✓ |
+| Images (PNG, JPEG, GIF, WebP, BMP) | ✓ | ✓ (data URI) | — |
+| Backgrounds, borders, padding | ✓ | ✓ | ✓ (no padding) |
+| Charts, canvas, rotated text | ✓ | fallback | fallback |
+| Pagination / page breaks | ✓ | ✓ (divider) | ✓ (worksheets) |
+| Custom fonts | ✓ | font-family | font name |
 
 Output does not depend on the machine's regional settings: CSS numbers always use `.`, and the RDLC importer formats values with an explicit culture.
 
+### Example output — e-Factura (Uruguay)
+
+See `samples/FluentReport.Samples` (`05-invoice.pdf`, `10-recibo-sueldo.pdf`, …) and [the UY samples guide](docs/uy-fiscal-samples.md).
+
 ## Documentation
 
-- [API reference](docs/api.md) — builders, elements, renderer options, RDLC options
+- [API reference](docs/api.md) — builders, elements, PDF/HTML options, RDLC options
 - [RDLC support and limitations](docs/rdlc-limitations.md)
 - [Migration to 2.0](docs/migration-2.0.md)
 - [UY fiscal document samples](docs/uy-fiscal-samples.md) — salary slip, delivery note, payment receipt
-- Package READMEs: [Core](src/FluentReport.Core/README.md) · [Html](src/FluentReport.Html/README.md) · [Excel](src/FluentReport.Excel/README.md) · [Rdlc](src/FluentReport.Rdlc/README.md)
+- Package READMEs: [PDF](src/FluentReport/README.md) · [Core](src/FluentReport.Core/README.md) · [Html](src/FluentReport.Html/README.md) · [Excel](src/FluentReport.Excel/README.md) · [Rdlc](src/FluentReport.Rdlc/README.md)
 
 ## Project structure
 
 ```
 src/
+├── FluentReport/          # PDF renderer (SkiaSharp) and layout engine
 ├── FluentReport.Core/     # Document model and fluent API
 ├── FluentReport.Html/     # HTML / email renderer
 ├── FluentReport.Excel/    # Excel renderer (ClosedXML)
@@ -137,4 +152,5 @@ Push a tag such as `v2.0.0`; the [NuGet workflow](.github/workflows/nuget.yml) b
 
 ## Dependencies
 
+- [SkiaSharp](https://www.nuget.org/packages/SkiaSharp) 3.119.4 — PDF rendering
 - [ClosedXML](https://www.nuget.org/packages/ClosedXML) 0.105.1 — Excel rendering

@@ -84,9 +84,10 @@ Document.Create(c =>
 
 | Package | Purpose |
 |---------|---------|
-| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API |
+| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer |
 | [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer |
 | [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel (.xlsx) renderer |
 | [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
+| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API |
 
 > Full documentation is available in the [repository](https://github.com/MathiasGonzalez/FluentReport).

@@ -2,7 +2,7 @@
 
 [![NuGet](https://img.shields.io/nuget/v/FluentReport.Core.svg?label=FluentReport.Core)](https://www.nuget.org/packages/FluentReport.Core)
 
-Document model and fluent API for **FluentReport**. You normally install a renderer (`FluentReport.Html`, `FluentReport.Excel`) or the importer (`FluentReport.Rdlc`), which bring this package along. Install it directly to build documents in a project that does not render them, or to write your own renderer.
+Document model and fluent API for **FluentReport**. You normally install a renderer (`FluentReport` for PDF, `FluentReport.Html`, `FluentReport.Excel`) or the importer (`FluentReport.Rdlc`), which bring this package along. Install it directly to build documents in a project that does not render them, or to write your own renderer.
 
 ## Installation
 
@@ -13,8 +13,8 @@ dotnet add package FluentReport.Core
 ## What is included
 
 - `Document`, `DocumentSettings`, `PageSettings`, `PageSizes`
-- Builders: `DocumentBuilder`, `PageBuilder`, `ContainerBuilder`, `ColumnBuilder`, `RowBuilder`, `TableBuilder`, `TextBuilder`, `DynamicTextBuilder`
-- Elements (data only): `TextElement`, `TableElement`, `ImageElement`, `ColumnElement`, `RowElement`, `BorderElement`, `PaddingElement`, `AlignElement`, `LineElement`, `SpacerElement`, `PageBreakElement`
+- Builders: `DocumentBuilder`, `PageBuilder`, `ContainerBuilder`, `ColumnBuilder`, `RowBuilder`, `TableBuilder`, `TextBuilder`, `DynamicTextBuilder`, `ChartBuilder`
+- Elements (data only): `TextElement`, `TableElement`, `ImageElement`, `ColumnElement`, `RowElement`, `BorderElement`, `PaddingElement`, `AlignElement`, `LineElement`, `SpacerElement`, `PageBreakElement`, `ChartElement`, and `IRendererSpecificElement` for elements only some renderers draw
 - Styling: `TextStyle`, `ReportColor`, `BorderStyle`
 
 ## Writing a renderer
@@ -42,9 +42,10 @@ foreach (var page in doc.Settings.Pages)
 
 | Package | Purpose |
 |---------|---------|
-| `FluentReport.Core` | Document model and fluent API (this package) |
+| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer |
 | [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer |
 | [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel (.xlsx) renderer |
 | [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
+| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API |
 
 > Full documentation is available in the [repository](https://github.com/MathiasGonzalez/FluentReport).

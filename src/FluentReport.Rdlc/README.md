@@ -2,13 +2,13 @@
 
 [![NuGet](https://img.shields.io/nuget/v/FluentReport.Rdlc.svg?label=FluentReport.Rdlc)](https://www.nuget.org/packages/FluentReport.Rdlc)
 
-**RDLC / SSRS** importer for FluentReport. Converts `.rdlc` files (Visual Studio Report Designer / SQL Server Reporting Services) into FluentReport documents that render to **HTML** or **Excel**, without SSRS or ReportViewer.
+**RDLC / SSRS** importer for FluentReport. Converts `.rdlc` files (Visual Studio Report Designer / SQL Server Reporting Services) into FluentReport documents that render to **PDF**, **HTML** or **Excel**, without SSRS or ReportViewer.
 
 ## Installation
 
 ```shell
 dotnet add package FluentReport.Rdlc
-dotnet add package FluentReport.Html    # and/or FluentReport.Excel
+dotnet add package FluentReport         # PDF (and/or FluentReport.Html, FluentReport.Excel)
 ```
 
 ## Quick start
@@ -16,7 +16,6 @@ dotnet add package FluentReport.Html    # and/or FluentReport.Excel
 ```csharp
 using System.Globalization;
 using FluentReport;
-using FluentReport.Html;
 using FluentReport.Rdlc;
 
 var doc = Document.FromRdlc(
@@ -28,7 +27,7 @@ var doc = Document.FromRdlc(
     parameters: new Dictionary<string, object> { ["Customer"] = "Cliente S.A." },
     options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") });
 
-doc.GenerateHtml("invoice.html");
+doc.GeneratePdf("invoice.pdf");
 ```
 
 ## Entry points
@@ -67,9 +66,10 @@ Full list and limitations: [rdlc-limitations.md](https://github.com/MathiasGonza
 
 | Package | Purpose |
 |---------|---------|
-| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API |
+| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer |
 | [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer |
 | [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel (.xlsx) renderer |
-| `FluentReport.Rdlc` | RDLC / SSRS importer (this package) |
+| [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
+| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API |
 
 > Full documentation is available in the [repository](https://github.com/MathiasGonzalez/FluentReport).

@@ -72,23 +72,24 @@ jobs:
             <header>
               <img src="logo.png" alt="FluentReport logo" />
               <h1>FluentReport</h1>
-              <p>.NET 10 library for generating HTML/email and Excel reports with a fluent C# API, and for importing RDLC report definitions.</p>
+              <p>.NET 10 library for generating PDF reports with a fluent C# API — also rendering to HTML/email and Excel, with RDLC import.</p>
               <div class="badges">
                 <img src="https://github.com/MathiasGonzalez/FluentReport/actions/workflows/ci.yml/badge.svg" alt="CI" />
-                <img src="https://img.shields.io/nuget/v/FluentReport.Core.svg?label=FluentReport.Core" alt="NuGet" />
+                <img src="https://img.shields.io/nuget/v/FluentReport.svg?label=FluentReport" alt="NuGet" />
               </div>
             </header>
 
             <main>
               <div class="cta">
                 <a class="btn btn-primary" href="https://github.com/MathiasGonzalez/FluentReport">View on GitHub</a>
-                <a class="btn btn-secondary" href="https://www.nuget.org/packages/FluentReport.Core">NuGet packages</a>
+                <a class="btn btn-secondary" href="https://www.nuget.org/packages/FluentReport">NuGet packages</a>
               </div>
 
               <h2>Packages</h2>
               <table>
                 <thead><tr><th>Package</th><th>Description</th></tr></thead>
                 <tbody>
+                  <tr><td><a href="https://www.nuget.org/packages/FluentReport"><code>FluentReport</code></a></td><td>PDF renderer (SkiaSharp, real pagination)</td></tr>
                   <tr><td><a href="https://www.nuget.org/packages/FluentReport.Excel"><code>FluentReport.Excel</code></a></td><td>Excel (.xlsx) renderer (ClosedXML)</td></tr>
                   <tr><td><a href="https://www.nuget.org/packages/FluentReport.Html"><code>FluentReport.Html</code></a></td><td>HTML/email renderer (inline styles)</td></tr>
                   <tr><td><a href="https://www.nuget.org/packages/FluentReport.Rdlc"><code>FluentReport.Rdlc</code></a></td><td>RDLC/SSRS importer</td></tr>
@@ -97,9 +98,10 @@ jobs:
               </table>
 
               <h2>Quick start</h2>
-              <pre><code>dotnet add package FluentReport.Html      # HTML/email
-          dotnet add package FluentReport.Excel     # Excel (.xlsx)
-          dotnet add package FluentReport.Rdlc      # RDLC import</code></pre>
+              <pre><code>dotnet add package FluentReport           # PDF
+          dotnet add package FluentReport.Html      # + HTML/email
+          dotnet add package FluentReport.Excel     # + Excel (.xlsx)
+          dotnet add package FluentReport.Rdlc      # + RDLC import</code></pre>
 
 
               <h2>Documentation</h2>

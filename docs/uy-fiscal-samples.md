@@ -2,14 +2,14 @@
 
 Three Uruguayan fiscal/legal documents included in `FluentReport.Samples`, intended as starting points for generating real documents with live data.
 
-**To generate all samples:**
+**To generate all PDFs:**
 ```shell
 dotnet run --project samples/FluentReport.Samples
 # or with a custom output directory:
 dotnet run --project samples/FluentReport.Samples -- /path/to/output
 ```
 
-Output: `10-recibo-sueldo.html`, `11-remito-entrega.html`, `12-recibo-pago.html`
+Output: `10-recibo-sueldo.pdf`, `11-remito-entrega.pdf`, `12-recibo-pago.pdf`
 
 ---
 
@@ -34,7 +34,7 @@ All three documents (plus the e-invoice sample) share constants from `FacturaUY.
 
 ---
 
-## 1. Salary Slip (`10-recibo-sueldo.html`)
+## 1. Salary Slip (`10-recibo-sueldo.pdf`)
 
 Monthly payslip required by Uruguayan law (MTSS). Includes employer, employee, pay period, earnings, deductions, and net pay.
 
@@ -69,7 +69,7 @@ var data = new ReciboSueldoData(
 
 ---
 
-## 2. Delivery Note (`11-remito-entrega.html`)
+## 2. Delivery Note (`11-remito-entrega.pdf`)
 
 Required by DGI for goods in transit (Resolución DGI Nº 2.530/991).
 
@@ -104,7 +104,7 @@ var data = new RemitoData(
 
 ---
 
-## 3. Payment Receipt (`12-recibo-pago.html`)
+## 3. Payment Receipt (`12-recibo-pago.pdf`)
 
 Proof of payment issued by the payee (Código de Comercio, Ley 16.060).
 

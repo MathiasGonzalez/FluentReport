@@ -2,8 +2,9 @@
 
 > **Required namespaces**
 > ```csharp
-> using FluentReport;           // Document
+> using FluentReport;           // Document, GeneratePdf (FluentReport package)
 > using FluentReport.Core;      // PageSizes, DocumentSettings
+> using FluentReport.Elements;  // ChartType
 > using FluentReport.Styling;   // ReportColor, TextStyle
 > using FluentReport.Html;      // GenerateHtml (FluentReport.Html package)
 > using FluentReport.Excel;     // GenerateExcel (FluentReport.Excel package)
@@ -19,6 +20,9 @@
 | `Document.Create(Action<DocumentBuilder>)` | Builds a document with the fluent API. At least one page is required. |
 | `Document.FromSettings(DocumentSettings)` | Wraps a model built by hand or by an importer. At least one page is required. |
 | `.Settings` | The document model (`DocumentSettings` → pages → elements). |
+| `.GeneratePdf(path\|stream\|—, options?)` | PDF *(FluentReport)* — see [PDF output](#pdf-output). |
+| `.GenerateImages(scale = 1, options?)` | One PNG per page *(FluentReport)*. |
+| `.GetPdfPageCount(options?)` | Number of PDF pages *(FluentReport)*. |
 | `.GenerateHtml(path\|stream\|—, options?)` | Full HTML document *(FluentReport.Html)*. |
 | `.GenerateHtmlFragment(options?)` | HTML fragment for an email body *(FluentReport.Html)*. |
 | `.GenerateExcel(path\|stream\|—)` | `.xlsx` workbook *(FluentReport.Excel)*. |
@@ -30,7 +34,7 @@
 
 | Method | Description |
 |--------|-------------|
-| `.Page(Action<PageBuilder>)` | Adds a page. In HTML each page is a block separated by a divider; in Excel each page is a worksheet. |
+| `.Page(Action<PageBuilder>)` | Adds a page section. In PDF its content flows over as many pages as needed with the header and footer repeated; in HTML each section is a block separated by a divider; in Excel a worksheet. |
 
 ## PageBuilder
 
@@ -74,10 +78,14 @@ Every region, column/row item and table cell is a `ContainerBuilder`. It holds *
 | `.Row(Action<RowBuilder>)` | `ContainerBuilder` | Horizontal stack. |
 | `.Table(Action<TableBuilder>)` | `ContainerBuilder` | Table. |
 | `.List<T>(items, template, spacing = 0)` | `ContainerBuilder` | One item per element of `items`, stacked vertically. |
-| `.Image(string path)` / `.Image(byte[])` | `ContainerBuilder` | PNG, JPEG, GIF, WebP or BMP. `Image(path)` throws if the file does not exist. HTML embeds it as a data URI; Excel skips images. |
+| `.Image(string path)` / `.Image(byte[])` | `ContainerBuilder` | PNG, JPEG, GIF, WebP or BMP. `Image(path)` throws if the file does not exist. HTML embeds it as a data URI; Excel skips images. Size: natural size (1 px = 1 pt) capped to the width; a single fixed side keeps the aspect ratio. |
 | `.Spacer(float height = 0)` | `ContainerBuilder` | Empty vertical space. |
 | `.Line(float thickness = 1, string? colorHex = null)` | `ContainerBuilder` | Horizontal rule. |
-| `.PageBreak()` | `ContainerBuilder` | At the top level of `Content()`: a divider in HTML, a new worksheet in Excel. |
+| `.PageBreak()` | `ContainerBuilder` | New page in PDF (at any depth); a divider in HTML; a new worksheet in Excel (top level of `Content()`). |
+| `.Chart()` | `ChartBuilder` | Bar or line chart (PDF; HTML/Excel render its fallback). |
+| `.Subreport(Document)` | `ContainerBuilder` | Inserts the content of another document's pages (headers/footers not repeated). |
+| `.Canvas(width, height, (SKCanvas, SKRect) => …)` | `ContainerBuilder` | Custom vector drawing, PDF only *(FluentReport)*. |
+| `.Element(IElement)` | `ContainerBuilder` | Custom element (the renderer must know it). |
 
 ### Decorators
 
@@ -111,6 +119,7 @@ col.Item()
 | `.Color(string hex)` / `.Color(ReportColor)` | Text color. |
 | `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` / `.AlignJustify()` | Text alignment (inside a table cell it aligns the cell). |
 | `.LineSpacing(float)` | Line height multiplier (default `1.2`). |
+| `.Rotate(float degrees)` | Rotation, counter-clockwise. PDF only; layout uses the unrotated box. |
 
 The style applies to every span of `Text(x => …)` as well; a span's own settings win:
 
@@ -180,13 +189,40 @@ col.Item().Table(table =>
 
 ---
 
+## ChartBuilder
+
+| Method | Description |
+|--------|-------------|
+| `.Type(ChartType.Bar \| ChartType.Line)` | Chart type. |
+| `.Title(string)` / `.Height(float)` | Title; height in points (default 200). |
+| `.Categories(IEnumerable<string>)` | X-axis labels. |
+| `.AddSeries(label, values, colorHex?)` | Data series; color defaults to a palette. Bars grow from zero, so negative values point down. |
+| `.Fallback(string)` | Text HTML and Excel show instead of the chart. |
+
+---
+
 ## Styling
 
 `ReportColor` (in `FluentReport.Styling`): `new ReportColor(r, g, b[, a])`, `ReportColor.FromHex("#RRGGBB" | "#RRGGBBAA")`, constants `Black`, `White`, `Gray`, `LightGray`, `Transparent`.
 
-`TextStyle` properties: `FontSize` (12), `FontFamily` ("sans-serif" → the HTML font option), `Bold`, `Italic`, `Underline`, `Color`, `Alignment`, `LineSpacing` (1.2), and the optional `BoldResolver`, `ItalicResolver`, `ColorResolver` delegates that override the static value when the document is rendered.
+`TextStyle` properties: `FontSize` (12), `FontFamily` ("sans-serif" → the HTML font option), `Bold`, `Italic`, `Underline`, `Color`, `Alignment`, `LineSpacing` (1.2), `Rotation` (PDF only), and the optional `BoldResolver`, `ItalicResolver`, `ColorResolver` delegates that override the static value when the document is rendered.
 
 `PageSizes`: `A3`, `A4`, `A5`, `Letter`, `Legal`.
+
+---
+
+## PDF output
+
+Content flows across pages: columns split between items (also nested or inside padding/background/border), text between lines, and tables between rows, repeating header rows and keeping footer rows on the last page. Rows, images, charts and canvases move to the next page whole; one taller than a page is cut at the footer.
+
+`PdfOptions`:
+
+| Option | Description |
+|--------|-------------|
+| `FontResolver` | `Func<TextStyle, SKTypeface?>` — e.g. embedded fonts. Return `null` for the system font. Typefaces are cached per render and never disposed. |
+| `Title` / `Author` | PDF metadata. |
+
+Fonts are embedded whole (SkiaSharp does not subset), adding a few hundred KB per face.
 
 ---
 
@@ -196,7 +232,7 @@ col.Item().Table(table =>
 
 Numbers in the generated CSS always use `.` as decimal separator, whatever the machine culture.
 
-A custom `IElement` that a renderer does not know throws `NotSupportedException` instead of being dropped.
+A custom `IElement` that a renderer does not know throws `NotSupportedException` instead of being dropped; an `IRendererSpecificElement` (charts, canvases) renders its `Fallback` in renderers that cannot draw it.
 
 ---
 
@@ -211,7 +247,7 @@ var doc = Document.FromRdlc(
     parameters: new Dictionary<string, object> { ["Company"] = "Acme Corp." },
     options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") });
 
-doc.GenerateHtml("catalog.html");
+doc.GeneratePdf("catalog.pdf");
 ```
 
 | Entry point | Source |
