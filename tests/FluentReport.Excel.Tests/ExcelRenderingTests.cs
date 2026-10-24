@@ -278,6 +278,56 @@ public class ExcelRenderingTests
         Assert.Contains("BETA", values);
     }
 
+    // ── Column spans, footers, page numbers ───────────────────────────────────
+
+    private static List<string> RowTexts(byte[] bytes)
+    {
+        using var wb = new XLWorkbook(new MemoryStream(bytes));
+        return wb.Worksheet(1).RowsUsed()
+            .Select(r => string.Join("|", r.CellsUsed().Select(c => c.GetString()).Where(v => v.Length > 0)))
+            .ToList();
+    }
+
+    [Fact]
+    public void GenerateExcel_ColumnSpan_KeepsFollowingRowsAligned()
+    {
+        var bytes = Document.Create(c => c.Page(p => p.Content().Table(t =>
+        {
+            t.ColumnsDefinition(d => { d.RelativeColumn(); d.RelativeColumn(); d.RelativeColumn(); });
+            t.Cell(colSpan: 2).Text("AB"); t.Cell().Text("C");
+            t.Cell().Text("1"); t.Cell().Text("2"); t.Cell().Text("3");
+        }))).GenerateExcel();
+
+        Assert.Equal(new[] { "AB|C", "1|2|3" }, RowTexts(bytes));
+    }
+
+    [Fact]
+    public void GenerateExcel_FooterRows_FollowTheData()
+    {
+        var bytes = Document.Create(c => c.Page(p => p.Content().Table(t =>
+        {
+            t.ColumnsDefinition(d => { d.RelativeColumn(); d.RelativeColumn(); });
+            t.Header(h => { h.Cell().Text("Item"); h.Cell().Text("Qty"); });
+            t.Cell().Text("A"); t.Cell().Text("1");
+            t.Footer(f => { f.Cell().Text("Total"); f.Cell().Text("1"); });
+        }))).GenerateExcel();
+
+        Assert.Equal(new[] { "Item|Qty", "A|1", "Total|1" }, RowTexts(bytes));
+    }
+
+    [Fact]
+    public void GenerateExcel_PageNumbers_ShowPageIndexAndCount()
+    {
+        var bytes = Document.Create(c =>
+        {
+            for (int i = 0; i < 2; i++)
+                c.Page(p => p.Content().Text(x => { x.Span("Page "); x.CurrentPageNumber(); x.Span(" of "); x.TotalPages(); }));
+        }).GenerateExcel();
+
+        using var wb = new XLWorkbook(new MemoryStream(bytes));
+        Assert.Equal("Page 2 of 2", wb.Worksheet(2).Cell(1, 1).GetString());
+    }
+
     [Fact]
     public void GenerateExcel_WritesToStream()
     {
