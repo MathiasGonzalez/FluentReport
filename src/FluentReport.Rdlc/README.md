@@ -58,7 +58,7 @@ foreach (var warning in factory.Warnings)
 
 ## What is supported
 
-Textboxes (with paragraphs and runs), lines, images (embedded, database, external), tablix tables (header, detail and footer rows, column spans), page header/footer, page size and margins. Expressions support field/parameter/global references, VB operators, `IIF`/`Switch`, `Format`, common conversion and text functions, and dataset aggregates.
+Textboxes (with paragraphs and runs, `Format`, borders), rectangles, lines, images (embedded, database, external), tablix tables and lists (row groups with group headers and subtotals, sorting, filters, hidden rows/columns, column spans), visibility, page header/footer with page numbers, page size and margins. Expressions support field/parameter/global references, VB operators, `IIF`/`Switch`, `Format`, common conversion and text functions, aggregates scoped to groups, `RowNumber`, `RunningValue` and `Previous`.
 
 Full list and limitations: [rdlc-limitations.md](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/rdlc-limitations.md).
 

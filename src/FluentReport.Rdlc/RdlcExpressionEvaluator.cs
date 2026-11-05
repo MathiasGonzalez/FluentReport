@@ -16,6 +16,10 @@ namespace FluentReport.Rdlc;
 /// evaluated and are turned into text only at the end, with <see cref="Culture"/>. Numbers that
 /// arrive as strings are read as invariant ("1234.5") first and with <see cref="Culture"/> second.
 /// <para>
+/// Aggregates run over a scope: the innermost one pushed with <see cref="PushScope"/> (detail row,
+/// group, data region) unless the expression names one, else the only dataset.
+/// </para>
+/// <para>
 /// Supported: literals, <c>Fields!X.Value</c>, <c>Parameters!X.Value</c>/<c>.Label</c>,
 /// <c>Globals!X(.Value)</c>, operators <c>^ * / \ Mod + - &amp; = &lt;&gt; &lt; &gt; &lt;= &gt;= Not And AndAlso Or OrElse Xor</c>,
 /// and the functions listed in <see cref="CallFunction"/>. Anything else is reported through the
@@ -36,6 +40,72 @@ internal sealed class RdlcExpressionEvaluator
     private readonly bool _strict;
     private readonly Dictionary<string, Node> _parsed = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<object>> _materialized = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<Scope> _scopes = new();
+
+    /// <summary>
+    /// Stand-in for <c>Globals!PageNumber</c> in the evaluated text; the importer turns it into a
+    /// current-page span, because page numbers are only known when the document is rendered.
+    /// </summary>
+    internal const char PageNumberMarker = '';
+
+    /// <summary>Stand-in for <c>Globals!TotalPages</c>; see <see cref="PageNumberMarker"/>.</summary>
+    internal const char TotalPagesMarker = '';
+
+    /// <summary>Values for globals that were not supplied (e.g. <c>ReportName</c>, <c>ExecutionTime</c>).</summary>
+    internal Dictionary<string, object> DefaultGlobals { get; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// A set of rows aggregates can run over: the rows of a data region, a group instance or a
+    /// detail row. Scopes nest; aggregates without an explicit scope use the innermost one.
+    /// </summary>
+    private sealed class Scope(IReadOnlyCollection<string> names, IReadOnlyList<object> rows)
+    {
+        private Dictionary<object, int>? _index;
+
+        public IReadOnlyCollection<string> Names { get; } = names;
+        public IReadOnlyList<object> Rows { get; } = rows;
+
+        /// <summary>Position of <paramref name="row"/> in this scope (by reference), or -1.</summary>
+        public int IndexOf(object row)
+        {
+            if (_index == null)
+            {
+                _index = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
+                for (int i = 0; i < Rows.Count; i++)
+                    _index.TryAdd(Rows[i], i);
+            }
+            return _index.TryGetValue(row, out var index) ? index : -1;
+        }
+    }
+
+    /// <summary>
+    /// Makes <paramref name="rows"/> the innermost aggregate scope until the result is disposed.
+    /// <paramref name="names"/> are the names expressions can refer to it by (group, data region, dataset).
+    /// </summary>
+    internal IDisposable PushScope(IReadOnlyList<object> rows, params string?[] names)
+    {
+        var scope = new Scope(names.Where(n => !string.IsNullOrEmpty(n)).Select(n => n!).ToList(), rows);
+        _scopes.Add(scope);
+        return new PopScope(this, scope);
+    }
+
+    private sealed class PopScope(RdlcExpressionEvaluator owner, Scope scope) : IDisposable
+    {
+        public void Dispose() => owner._scopes.Remove(scope);
+    }
+
+    /// <summary>Rows of the innermost scope, or <c>null</c> outside any data region.</summary>
+    internal IReadOnlyList<object>? InnermostScopeRows => _scopes.Count > 0 ? _scopes[^1].Rows : null;
+
+    /// <summary>The scope named <paramref name="name"/>, the innermost one for <c>null</c>.</summary>
+    private Scope? FindScope(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return _scopes.Count > 0 ? _scopes[^1] : null;
+        for (int i = _scopes.Count - 1; i >= 0; i--)
+            if (_scopes[i].Names.Contains(name, StringComparer.OrdinalIgnoreCase))
+                return _scopes[i];
+        return null;
+    }
 
     public RdlcExpressionEvaluator(
         IDictionary<string, object>? parameters = null,
@@ -138,16 +208,16 @@ internal sealed class RdlcExpressionEvaluator
         _ => throw new RdlcExpressionException($"'{ToDisplay(value)}' is not a boolean")
     };
 
-    private int Compare(object? a, object? b)
+    internal int Compare(object? a, object? b)
     {
         if (ToNumber(a) is { } na && ToNumber(b) is { } nb)
             return na.CompareTo(nb);
         if ((a is DateTime || b is DateTime) && ToDate(a) is { } da && ToDate(b) is { } db)
             return da.CompareTo(db);
-        return string.Compare(ToDisplay(a), ToDisplay(b), StringComparison.OrdinalIgnoreCase);
+        return string.Compare(ToDisplay(a), ToDisplay(b), Culture, CompareOptions.IgnoreCase); // collation of the report culture
     }
 
-    private bool AreEqual(object? a, object? b)
+    internal bool AreEqual(object? a, object? b)
     {
         if (a is null && b is null) return true;
         if ((IsNumeric(a) || IsNumeric(b)) && ToNumber(a) is { } na && ToNumber(b) is { } nb) return na == nb;
@@ -203,8 +273,8 @@ internal sealed class RdlcExpressionEvaluator
     /// <summary>
     /// Supported functions: IIF, Switch, Choose, Format, FormatNumber, FormatCurrency, FormatPercent,
     /// CStr, CInt, CLng, CDec, CDbl, CBool, CDate, Len, Trim, LTrim, RTrim, UCase, LCase, Left, Right,
-    /// Mid, Replace, IsNothing, Now, Today, and the aggregates Sum, Count, CountDistinct, CountRows,
-    /// Avg/Average, Min, Max, First, Last.
+    /// Mid, Replace, IsNothing, Now, Today, the aggregates Sum, Count, CountDistinct, CountRows,
+    /// Avg/Average, Min, Max, First, Last, and RowNumber, RunningValue, Previous.
     /// </summary>
     private object? CallFunction(string name, IReadOnlyList<Node> args, object? row)
     {
@@ -265,28 +335,75 @@ internal sealed class RdlcExpressionEvaluator
             case "MIN": case "MAX": case "FIRST": case "LAST": case "COUNTROWS":
                 return Aggregate(name.ToUpperInvariant(), args, row);
 
+            case "ROWNUMBER":
+            {
+                // RowNumber(Nothing) counts in the outermost scope (the data region).
+                var scopeName = args.Count > 0 ? Arg(0) : null;
+                var scope = scopeName is null ? (_scopes.Count > 0 ? _scopes[0] : null) : FindScope(ToDisplay(scopeName));
+                if (scope == null || row == null) return null;
+                int position = scope.IndexOf(row);
+                return position < 0 ? null : (decimal)(position + 1);
+            }
+            case "RUNNINGVALUE":
+            {
+                // RunningValue(expression, function, scope): the aggregate over the scope's rows up to this one.
+                if (args.Count < 2) throw new RdlcExpressionException("RunningValue() expects an expression and a function");
+                if (args[1] is not FunctionName { Name: var fn })
+                    throw new RdlcExpressionException("RunningValue() expects an aggregate function name");
+                var scopeName = args.Count > 2 ? args[2].Eval(this, row) : null;
+                var scope = scopeName is null ? (_scopes.Count > 0 ? _scopes[0] : null) : FindScope(ToDisplay(scopeName));
+                if (scope == null || row == null) return null;
+                int position = scope.IndexOf(row);
+                if (position < 0) return null;
+                return AggregateOver(fn.ToUpperInvariant(), args[0], scope.Rows.Take(position + 1).ToList());
+            }
+            case "PREVIOUS":
+            {
+                if (args.Count == 0) throw new RdlcExpressionException("Previous() expects an argument");
+                var scope = args.Count > 1 ? FindScope(Str(1)) : (_scopes.Count > 0 ? _scopes[0] : null);
+                if (scope == null || row == null) return null;
+                int position = scope.IndexOf(row);
+                return position > 0 ? args[0].Eval(this, scope.Rows[position - 1]) : null;
+            }
+
             default:
                 throw new RdlcExpressionException($"function '{name}' is not supported");
         }
+    }
+
+    /// <summary>
+    /// Rows an aggregate runs over: the named group / data region / dataset, or without a name the
+    /// innermost scope (the current group or detail row), else the only dataset.
+    /// </summary>
+    private IReadOnlyList<object>? AggregateRows(string? scopeName)
+    {
+        if (FindScope(scopeName) is { } scope) return scope.Rows;
+        return GetDataset(scopeName);
     }
 
     private object? Aggregate(string fn, IReadOnlyList<Node> args, object? row)
     {
         if (fn == "COUNTROWS")
         {
-            var scopeRows = GetDataset(args.Count > 0 ? ToDisplay(args[0].Eval(this, row)) : null);
+            var scopeRows = AggregateRows(args.Count > 0 ? ToDisplay(args[0].Eval(this, row)) : null);
             return scopeRows == null ? null : (decimal)scopeRows.Count;
         }
 
         if (args.Count == 0) throw new RdlcExpressionException($"{fn}() expects an argument");
 
-        // First() inside a detail row reads the current row, as before.
-        if (fn == "FIRST" && row != null) return args[0].Eval(this, row);
+        var scopeName = args.Count > 1 ? ToDisplay(args[1].Eval(this, row)) : null;
 
-        var rows = GetDataset(args.Count > 1 ? ToDisplay(args[1].Eval(this, row)) : null);
+        // Outside any scope, First() reads the current row (e.g. a textbox evaluated against one row).
+        if (fn == "FIRST" && row != null && scopeName == null && _scopes.Count == 0) return args[0].Eval(this, row);
+
+        var rows = AggregateRows(scopeName);
         if (rows == null) return null;
+        return AggregateOver(fn, args[0], rows);
+    }
 
-        var values = rows.Select(r => args[0].Eval(this, r)).ToList();
+    private object? AggregateOver(string fn, Node expression, IReadOnlyList<object> rows)
+    {
+        var values = rows.Select(r => expression.Eval(this, r)).ToList();
         switch (fn)
         {
             case "FIRST": return values.FirstOrDefault();
@@ -316,7 +433,7 @@ internal sealed class RdlcExpressionEvaluator
         };
     }
 
-    private object? Format(object? value, string? format)
+    internal object? Format(object? value, string? format)
     {
         if (string.IsNullOrEmpty(format)) return value;
         format = format.ToLowerInvariant() switch
@@ -376,6 +493,13 @@ internal sealed class RdlcExpressionEvaluator
                     return null;
                 case "GLOBALS":
                     if (ev._globals != null && ev._globals.TryGetValue(Name, out var g)) return g;
+                    if (Name.Equals("PageNumber", StringComparison.OrdinalIgnoreCase)
+                        || Name.Equals("OverallPageNumber", StringComparison.OrdinalIgnoreCase))
+                        return PageNumberMarker.ToString();
+                    if (Name.Equals("TotalPages", StringComparison.OrdinalIgnoreCase)
+                        || Name.Equals("OverallTotalPages", StringComparison.OrdinalIgnoreCase))
+                        return TotalPagesMarker.ToString();
+                    if (ev.DefaultGlobals.TryGetValue(Name, out var d)) return d;
                     ev._warn?.Invoke($"Global '{Name}' was not supplied (pass it through the globals dictionary).");
                     return null;
                 default:
@@ -451,6 +575,13 @@ internal sealed class RdlcExpressionEvaluator
                 throw new RdlcExpressionException("numeric overflow");
             }
         }
+    }
+
+    /// <summary>A bare aggregate name, as in <c>RunningValue(Fields!X.Value, Sum, Nothing)</c>.</summary>
+    private sealed record FunctionName(string Name) : Node
+    {
+        public override object? Eval(RdlcExpressionEvaluator ev, object? row)
+            => throw new RdlcExpressionException($"'{Name}' must be called with arguments");
     }
 
     private sealed record Call(string Name, IReadOnlyList<Node> Args) : Node
@@ -652,6 +783,9 @@ internal sealed class RdlcExpressionEvaluator
 
             if (name.Equals("Now", StringComparison.OrdinalIgnoreCase) || name.Equals("Today", StringComparison.OrdinalIgnoreCase))
                 return new Call(name, []);
+
+            if (name.ToUpperInvariant() is "SUM" or "COUNT" or "COUNTDISTINCT" or "AVG" or "AVERAGE" or "MIN" or "MAX" or "FIRST" or "LAST")
+                return new FunctionName(name);
 
             throw new RdlcExpressionException($"'{name}' is not supported");
         }

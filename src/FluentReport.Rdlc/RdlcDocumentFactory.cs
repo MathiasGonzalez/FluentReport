@@ -10,19 +10,9 @@ namespace FluentReport.Rdlc;
 /// Parses a <c>.rdlc</c> XML file into a FluentReport <see cref="Document"/>.
 /// </summary>
 /// <remarks>
-/// Supported RDLC elements (Phase 1 MVP):
-/// <list type="bullet">
-///   <item><c>Textbox</c> → <see cref="TextElement"/></item>
-///   <item><c>Line</c> → <see cref="LineElement"/></item>
-///   <item><c>Image</c> → <see cref="ImageElement"/></item>
-///   <item>
-///     <c>Tablix</c> (basic, no row groups) → <see cref="TableElement"/>;
-///     detail rows repeat per dataset row.
-///   </item>
-///   <item>Page dimensions and margins from <c>&lt;Page&gt;</c>.</item>
-///   <item><c>PageHeader</c> / <c>PageFooter</c>.</item>
-/// </list>
-/// Expressions supported: <c>=Fields!X.Value</c>, <c>=Parameters!Y.Value</c>, literals.
+/// Supported report items: <c>Textbox</c>, <c>Line</c>, <c>Image</c>, <c>Rectangle</c> and
+/// <c>Tablix</c> (tables and lists, with row groups, sorting and filters). See
+/// <c>docs/rdlc-limitations.md</c> for the full list and what is approximated.
 /// </remarks>
 public sealed class RdlcDocumentFactory
 {
@@ -31,6 +21,8 @@ public sealed class RdlcDocumentFactory
     private readonly IDictionary<string, object>? _globals;
     private readonly RdlcImportOptions _options;
     private readonly List<string> _warnings = new();
+    private readonly HashSet<string> _warningSet = new(StringComparer.Ordinal);
+    private IDictionary<string, IEnumerable<object>>? _effectiveDatasets;
 
     private RdlcExpressionEvaluator _evaluator = new();
     private XNamespace _ns = XNamespace.None;
@@ -55,6 +47,13 @@ public sealed class RdlcDocumentFactory
     /// </summary>
     public IReadOnlyList<string> Warnings => _warnings;
 
+    /// <summary>Records a warning once; the same construct in every row is reported a single time.</summary>
+    private void Warn(string warning)
+    {
+        if (_warningSet.Add(warning))
+            _warnings.Add(warning);
+    }
+
     // ── Public entry points ──────────────────────────────────────────────────
 
     /// <summary>Parses the <c>.rdlc</c> file at <paramref name="path"/> into a <see cref="Document"/>.</summary>
@@ -62,30 +61,32 @@ public sealed class RdlcDocumentFactory
     {
         var fullPath = Path.GetFullPath(path);
         using var stream = File.OpenRead(fullPath);
-        return Parse(XDocument.Load(stream), Path.GetDirectoryName(fullPath));
+        return Parse(XDocument.Load(stream), Path.GetDirectoryName(fullPath), Path.GetFileNameWithoutExtension(fullPath));
     }
 
     /// <summary>Parses RDLC XML from a stream.</summary>
     public Document ParseFromStream(Stream stream)
-        => Parse(XDocument.Load(stream), reportDirectory: null);
+        => Parse(XDocument.Load(stream), reportDirectory: null, reportName: null);
 
     /// <summary>Parses RDLC XML from a string.</summary>
     public Document ParseFromXml(string xml)
-        => Parse(XDocument.Parse(xml), reportDirectory: null);
+        => Parse(XDocument.Parse(xml), reportDirectory: null, reportName: null);
 
     // ── Core parse pipeline ──────────────────────────────────────────────────
 
-    private Document Parse(XDocument xdoc, string? reportDirectory)
+    private Document Parse(XDocument xdoc, string? reportDirectory, string? reportName)
     {
         _warnings.Clear();
+        _warningSet.Clear();
         _ns = DetectNamespace(xdoc);
         var root = xdoc.Root ?? throw new InvalidOperationException("RDLC XML has no root element.");
+        var culture = _options.Culture ?? ReportCulture(root);
 
-        _evaluator = new RdlcExpressionEvaluator(
-            _parameters, _datasets, _globals,
-            _options.Culture ?? ReportCulture(root),
-            _warnings.Add,
-            _options.StrictExpressions);
+        // Dataset <Filters> are applied first; every aggregate then sees the filtered rows.
+        _effectiveDatasets = _datasets;
+        _evaluator = CreateEvaluator(culture, reportName);
+        _effectiveDatasets = ApplyDataSetFilters(root);
+        _evaluator = CreateEvaluator(culture, reportName);
 
         _externalImageRoot = !_options.LoadExternalImages ? null
             : _options.ExternalImageDirectory != null ? Path.GetFullPath(_options.ExternalImageDirectory)
@@ -107,6 +108,30 @@ public sealed class RdlcDocumentFactory
         return Document.FromSettings(settings);
     }
 
+    private RdlcExpressionEvaluator CreateEvaluator(CultureInfo culture, string? reportName)
+    {
+        var evaluator = new RdlcExpressionEvaluator(
+            _parameters, _effectiveDatasets, _globals, culture, Warn, _options.StrictExpressions);
+        evaluator.DefaultGlobals["ExecutionTime"] = DateTime.Now;
+        if (reportName != null) evaluator.DefaultGlobals["ReportName"] = reportName;
+        return evaluator;
+    }
+
+    private IDictionary<string, IEnumerable<object>>? ApplyDataSetFilters(XElement root)
+    {
+        if (_datasets == null) return null;
+
+        var filters = root.Element(_ns + "DataSets")?.Elements(_ns + "DataSet")
+            .Where(d => d.Attribute("Name") != null && d.Element(_ns + "Filters") != null)
+            .ToDictionary(d => d.Attribute("Name")!.Value, d => d.Element(_ns + "Filters")!, StringComparer.OrdinalIgnoreCase);
+        if (filters == null || filters.Count == 0) return _datasets;
+
+        var result = new Dictionary<string, IEnumerable<object>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (name, rows) in _datasets)
+            result[name] = filters.TryGetValue(name, out var f) ? Filter(rows, f).ToList() : rows;
+        return result;
+    }
+
     /// <summary>The report's literal &lt;Language&gt; (e.g. "es-UY"), or invariant when absent or an expression.</summary>
     private CultureInfo ReportCulture(XElement root)
     {
@@ -119,7 +144,7 @@ public sealed class RdlcDocumentFactory
         }
         catch (CultureNotFoundException)
         {
-            _warnings.Add($"Report language '{language}' is not a known culture; using the invariant culture.");
+            Warn($"Report language '{language}' is not a known culture; using the invariant culture.");
             return CultureInfo.InvariantCulture;
         }
     }
@@ -227,19 +252,39 @@ public sealed class RdlcDocumentFactory
     /// Returns <c>null</c> for unsupported element types.
     /// </summary>
     private IElement? BuildSingleElement(XElement child, object? dataRow)
-        => child.Name.LocalName switch
+    {
+        if (IsHidden(child, dataRow)) return null;
+        return child.Name.LocalName switch
         {
-            "Textbox" => BuildTextbox(child, dataRow),
-            "Line"    => BuildLine(child),
-            "Image"   => BuildImage(child, dataRow),
-            "Tablix"  => BuildTablix(child),
-            _         => Unsupported(child)
+            "Textbox"   => BuildTextbox(child, dataRow),
+            "Line"      => BuildLine(child),
+            "Image"     => BuildImage(child, dataRow),
+            "Tablix"    => BuildTablix(child),
+            "Rectangle" => BuildRectangle(child, dataRow),
+            _           => Unsupported(child)
         };
+    }
+
+    /// <summary>Evaluates <c>&lt;Visibility&gt;&lt;Hidden&gt;</c>; hidden items (and tablix rows/columns) are not rendered.</summary>
+    private bool IsHidden(XElement item, object? row)
+    {
+        var hidden = item.Element(_ns + "Visibility")?.Element(_ns + "Hidden")?.Value;
+        if (string.IsNullOrWhiteSpace(hidden)) return false;
+        try
+        {
+            return _evaluator.ToBool(_evaluator.EvaluateValue(hidden.Trim(), row));
+        }
+        catch (RdlcExpressionException)
+        {
+            Warn($"Visibility '{hidden}' is not a boolean; the item is shown.");
+            return false;
+        }
+    }
 
     private IElement? Unsupported(XElement item)
     {
         var name = item.Attribute("Name")?.Value;
-        _warnings.Add($"Report item <{item.Name.LocalName}>{(name != null ? $" '{name}'" : "")} is not supported and was skipped.");
+        Warn($"Report item <{item.Name.LocalName}>{(name != null ? $" '{name}'" : "")} is not supported and was skipped.");
         return null;
     }
 
@@ -271,11 +316,12 @@ public sealed class RdlcDocumentFactory
     /// Items that share the same <c>Top</c> value (within a 2 pt tolerance) are grouped
     /// into a <see cref="RowElement"/> so that side-by-side panels are rendered correctly.
     /// </summary>
-    private IElement BuildBodyLayout(XElement? reportItemsEl, float containerWidth, object? dataRow)
+    private IElement BuildBodyLayout(XElement? reportItemsEl, float containerWidth, object? dataRow, float minHeight = 0)
     {
-        if (reportItemsEl == null) return new SpacerElement();
+        if (reportItemsEl == null) return new SpacerElement(minHeight);
 
         var positioned = reportItemsEl.Elements()
+            .Where(e => !IsHidden(e, dataRow)) // hidden items take no space
             .Select(e => (
                 el:     e,
                 top:    ParseUnit(e.Element(_ns + "Top")?.Value),
@@ -287,7 +333,7 @@ public sealed class RdlcDocumentFactory
             .ThenBy(i => i.left)
             .ToList();
 
-        if (positioned.Count == 0) return new SpacerElement();
+        if (positioned.Count == 0) return new SpacerElement(minHeight);
 
         // Group items into horizontal bands: items whose Top values are within 2 pt.
         const float topTolerance = 2f;
@@ -317,8 +363,11 @@ public sealed class RdlcDocumentFactory
             if (band.Count == 1)
             {
                 // Single item — render inline, no horizontal offset needed.
+                var breakAt = band[0].el.Element(_ns + "PageBreak")?.Element(_ns + "BreakLocation")?.Value;
+                if (breakAt is "Start" or "StartAndEnd") col.Items.Add(new PageBreakElement());
                 var built = BuildSingleElement(band[0].el, dataRow);
                 if (built != null) col.Items.Add(built);
+                if (breakAt is "End" or "StartAndEnd") col.Items.Add(new PageBreakElement());
                 continue;
             }
 
@@ -343,6 +392,10 @@ public sealed class RdlcDocumentFactory
 
             col.Items.Add(row);
         }
+
+        // A container taller than its content (a bordered rectangle) keeps its designed height.
+        if (minHeight - previousBottom >= minGap)
+            col.Items.Add(new SpacerElement(minHeight - previousBottom));
 
         return col;
     }
@@ -378,17 +431,123 @@ public sealed class RdlcDocumentFactory
             };
         }
 
-        if (StyleColor(styleEl, "BackgroundColor", row) is { } background)
+        return WrapBoxStyle(result, styleEl, row);
+    }
+
+    /// <summary>
+    /// Wraps <paramref name="content"/> with the item's background and borders. RDLC borders are per
+    /// side; sides that share a width and color go into one <see cref="BorderElement"/>, others nest.
+    /// </summary>
+    private IElement WrapBoxStyle(IElement content, XElement? styleEl, object? row)
+    {
+        var background = StyleColor(styleEl, "BackgroundColor", row);
+        var sides = ReadBorders(styleEl, row);
+
+        var groups = sides.GroupBy(s => (s.Width, s.Color)).ToList();
+        IElement result = content;
+        for (int i = 0; i < groups.Count; i++)
         {
+            var g = groups[i];
             result = new BorderElement
             {
                 Child = result,
-                Border = new BorderStyle { Width = 0 },
-                BackgroundColor = background
+                Border = new BorderStyle
+                {
+                    Width = g.Key.Width,
+                    Color = g.Key.Color,
+                    Sides = g.Aggregate(BorderSide.None, (acc, s) => acc | s.Side)
+                },
+                BackgroundColor = i == groups.Count - 1 ? background : null
             };
         }
 
+        if (groups.Count == 0 && background is { } bg)
+            result = new BorderElement { Child = result, Border = new BorderStyle { Width = 0 }, BackgroundColor = bg };
+
         return result;
+    }
+
+    /// <summary>
+    /// Reads the visible border sides of a style: RDL 2008+ (<c>Border</c>, <c>TopBorder</c>…, each with
+    /// Style/Color/Width) and RDL 2005 (<c>BorderStyle</c>/<c>BorderColor</c>/<c>BorderWidth</c> with
+    /// Default/Top/… children). Every style other than <c>None</c> is drawn as a solid line.
+    /// </summary>
+    private List<(BorderSide Side, float Width, ReportColor Color)> ReadBorders(XElement? styleEl, object? row)
+    {
+        var result = new List<(BorderSide, float, ReportColor)>();
+        if (styleEl == null) return result;
+
+        foreach (var (side, name) in new[] { (BorderSide.Top, "Top"), (BorderSide.Right, "Right"), (BorderSide.Bottom, "Bottom"), (BorderSide.Left, "Left") })
+        {
+            string? Prop(string prop)
+            {
+                var raw = styleEl.Element(_ns + (name + "Border"))?.Element(_ns + prop)?.Value
+                          ?? styleEl.Element(_ns + "Border")?.Element(_ns + prop)?.Value
+                          ?? styleEl.Element(_ns + ("Border" + prop))?.Element(_ns + name)?.Value
+                          ?? styleEl.Element(_ns + ("Border" + prop))?.Element(_ns + "Default")?.Value;
+                if (string.IsNullOrWhiteSpace(raw)) return null;
+                var value = _evaluator.Evaluate(raw, row).Trim();
+                return value.Length == 0 ? null : value;
+            }
+
+            var style = Prop("Style");
+            if (style == null || style.Equals("None", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var colorText = Prop("Color");
+            var color = colorText == null ? ReportColor.Black : ParseColor(colorText);
+            if (color == null)
+            {
+                if (colorText != null && !colorText.Equals("Transparent", StringComparison.OrdinalIgnoreCase))
+                    Warn($"Color '{colorText}' (border) is not recognized and was ignored.");
+                continue;
+            }
+
+            float width = Prop("Width") is { } w && ParseUnit(w) is > 0 and var pt ? pt : 1f;
+            result.Add((side, width, color.Value));
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Evaluates a textbox value and applies the <c>Format</c> style property (from the run, else the
+    /// textbox) to numbers and dates, the way SSRS does.
+    /// </summary>
+    private string EvaluateText(string? expression, object? row, params XElement?[] styles)
+    {
+        var value = _evaluator.EvaluateValue(expression, row);
+        if (value is not (null or string or bool))
+        {
+            var format = styles.Select(s => StyleValue(s, "Format", row)).FirstOrDefault(f => f != null);
+            if (format != null)
+            {
+                try { value = _evaluator.Format(value, format); }
+                catch (RdlcExpressionException ex) { Warn($"Format '{format}' could not be applied: {ex.Message}"); }
+            }
+        }
+        return _evaluator.ToDisplay(value);
+    }
+
+    /// <summary>Adds <paramref name="text"/> as spans, turning page-number markers into page-number spans.</summary>
+    private static void AddText(TextElement element, string text, TextStyle? style)
+    {
+        if (text.IndexOfAny([RdlcExpressionEvaluator.PageNumberMarker, RdlcExpressionEvaluator.TotalPagesMarker]) < 0)
+        {
+            element.AddSpan(text, style);
+            return;
+        }
+
+        int start = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            bool page = text[i] == RdlcExpressionEvaluator.PageNumberMarker;
+            bool total = text[i] == RdlcExpressionEvaluator.TotalPagesMarker;
+            if (!page && !total) continue;
+            if (i > start) element.AddSpan(text[start..i], style);
+            if (page) element.AddCurrentPageSpan(style);
+            else element.AddTotalPagesSpan(style);
+            start = i + 1;
+        }
+        if (start < text.Length) element.AddSpan(text[start..], style);
     }
 
     /// <summary>
@@ -396,8 +555,8 @@ public sealed class RdlcDocumentFactory
     /// </summary>
     private TextElement BuildTextFromDirectValue(XElement el, object? row, XElement? styleEl)
     {
-        var value = _evaluator.Evaluate(el.Element(_ns + "Value")?.Value, row);
-        var text = new TextElement(value);
+        var text = new TextElement();
+        AddText(text, EvaluateText(el.Element(_ns + "Value")?.Value, row, styleEl), style: null);
         ApplyTextStyle(text.Style, styleEl, row);
         return text;
     }
@@ -418,8 +577,8 @@ public sealed class RdlcDocumentFactory
                 .Elements(_ns + "TextRuns")
                 .Elements(_ns + "TextRun"))
             {
-                var value      = _evaluator.Evaluate(runEl.Element(_ns + "Value")?.Value, row);
                 var runStyleEl = runEl.Element(_ns + "Style");
+                var value      = EvaluateText(runEl.Element(_ns + "Value")?.Value, row, runStyleEl, boxStyleEl);
 
                 var spanStyle = new TextStyle();
                 // Textbox defaults first, then the paragraph (where RDLC keeps TextAlign), then the run.
@@ -427,7 +586,7 @@ public sealed class RdlcDocumentFactory
                 ApplyTextStyle(spanStyle, paraStyleEl, row);
                 ApplyTextStyle(spanStyle, runStyleEl, row);
 
-                text.AddSpan(value, spanStyle);
+                AddText(text, value, spanStyle);
             }
         }
 
@@ -442,15 +601,18 @@ public sealed class RdlcDocumentFactory
         var styleEl = el.Element(_ns + "Style");
         var line = new LineElement();
 
+        // RDL 2008+ draws a line with its Border; legacy reports use Color and a flat BorderWidth.
+        if (ReadBorders(styleEl, row: null).FirstOrDefault() is { Width: > 0 } border)
+        {
+            line.Color = border.Color;
+            line.Thickness = border.Width;
+        }
+
         if (StyleColor(styleEl, "Color", row: null) is { } color)
             line.Color = color;
 
-        var thicknessStr = styleEl?.Element(_ns + "BorderWidth")?.Value;
-        if (!string.IsNullOrWhiteSpace(thicknessStr))
-        {
-            var t = ParseUnit(thicknessStr);
-            if (t > 0) line.Thickness = t;
-        }
+        if (styleEl?.Element(_ns + "BorderWidth") is { HasElements: false } widthEl && ParseUnit(widthEl.Value) is > 0 and var t)
+            line.Thickness = t;
 
         return line;
     }
@@ -486,7 +648,7 @@ public sealed class RdlcDocumentFactory
         }
 
         if (img.SourceBytes.Length > 0 && img.MimeType == null)
-            _warnings.Add($"Image '{el.Attribute("Name")?.Value}' is not a recognized image format and will not be rendered.");
+            Warn($"Image '{el.Attribute("Name")?.Value}' is not a recognized image format and will not be rendered.");
 
         var fixedW = ParseUnit(el.Element(_ns + "Width")?.Value);
         var fixedH = ParseUnit(el.Element(_ns + "Height")?.Value);
@@ -498,7 +660,7 @@ public sealed class RdlcDocumentFactory
 
     private ImageElement MissingImage(string reason)
     {
-        _warnings.Add($"Image skipped: {reason}.");
+        Warn($"Image skipped: {reason}.");
         return new ImageElement([]);
     }
 
@@ -536,132 +698,289 @@ public sealed class RdlcDocumentFactory
         return new ImageElement(File.ReadAllBytes(fullPath));
     }
 
+    private IElement BuildRectangle(XElement el, object? row)
+    {
+        float width  = ParseUnit(el.Element(_ns + "Width")?.Value);
+        float height = ParseUnit(el.Element(_ns + "Height")?.Value);
+        var content = BuildBodyLayout(el.Element(_ns + "ReportItems"), width, row, height);
+        return WrapBoxStyle(content, el.Element(_ns + "Style"), row);
+    }
+
+    // ── Tablix ────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Builds a table from a <c>&lt;Tablix&gt;</c> (table or list). The row hierarchy is walked as
+    /// SSRS does: static members render once in their scope, group members render once per group
+    /// instance (sorted and filtered), detail members once per row. Static rows before the first
+    /// group become the repeated table header, static rows after the last one the footer.
+    /// </summary>
     private IElement BuildTablix(XElement tablixEl)
     {
+        var tablixName  = tablixEl.Attribute("Name")?.Value;
         var dataSetName = tablixEl.Element(_ns + "DataSetName")?.Value ?? string.Empty;
         var bodyEl      = tablixEl.Element(_ns + "TablixBody");
         if (bodyEl == null) return new SpacerElement();
 
-        // ── Column widths ─────────────────────────────────────────────────────
         var colWidths = bodyEl.Element(_ns + "TablixColumns")
             ?.Elements(_ns + "TablixColumn")
             .Select(c => ParseUnit(c.Element(_ns + "Width")?.Value))
-            .ToList() ?? [];
-
-        // ── Row hierarchy: distinguish header rows from detail rows ───────────
-        var hierarchyMembers = tablixEl
-            .Element(_ns + "TablixRowHierarchy")
-            ?.Element(_ns + "TablixMembers")
-            ?.Elements(_ns + "TablixMember")
             .ToList() ?? [];
 
         var tblRows = bodyEl.Element(_ns + "TablixRows")
             ?.Elements(_ns + "TablixRow")
             .ToList() ?? [];
 
-        // Flatten the hierarchy into a list of (isDetail) flags, one per TablixRow.
-        // When a member has nested TablixMembers, its children map to consecutive rows.
-        // A row is "detail" when its closest ancestor member with a <Group> is that group.
-        var flatHierarchy = FlattenRowHierarchy(hierarchyMembers);
+        var rowMembers = Members(tablixEl.Element(_ns + "TablixRowHierarchy"));
+        var hiddenColumns = HiddenColumns(tablixEl, colWidths.Count);
 
-        // A row is a detail row when its TablixMember has a <Group> child.
-        bool IsDetailByHierarchy(int rowIndex)
-            => rowIndex < flatHierarchy.Count && flatHierarchy[rowIndex];
+        // ── Rows: the enclosing group's rows for a nested region, else the dataset ──
+        IEnumerable<object> source = _evaluator.InnermostScopeRows is { } outer && _currentRegionDataset is { } outerSet
+                                     && (dataSetName.Length == 0 || dataSetName.Equals(outerSet, StringComparison.OrdinalIgnoreCase))
+            ? outer
+            : _effectiveDatasets != null && _effectiveDatasets.TryGetValue(dataSetName, out var ds) ? ds : [];
+        var dataRows = Sort(Filter(source, tablixEl.Element(_ns + "Filters")), tablixEl.Element(_ns + "SortExpressions"));
 
-        // Fallback: any cell value that starts with =Fields! marks the row as detail.
-        bool IsDetailByExpression(XElement row)
-            => row.Descendants(_ns + "Value")
-                  .Any(v => RdlcExpressionEvaluator.IsFieldExpression(v.Value));
-
-        bool hasHierarchy = flatHierarchy.Count == tblRows.Count;
-
-        // ── Scale column widths to fit the declared tablix Width ─────────────
-        // Always use proportional (relative) widths so the table fills whatever
-        // rendered space it is given, with columns scaled to their declared proportions.
-        // This handles cases where the declared tablix width is wider than the page.
-        float tablixDeclaredWidth = ParseUnit(tablixEl.Element(_ns + "Width")?.Value);
-        if (tablixDeclaredWidth > 0 && colWidths.Count > 0)
+        if (dataRows.Count == 0 && tablixEl.Element(_ns + "NoRowsMessage")?.Value is { Length: > 0 } noRows)
         {
-            float totalColWidth = colWidths.Sum();
-            if (totalColWidth > tablixDeclaredWidth + 1f)
-            {
-                float scale = tablixDeclaredWidth / totalColWidth;
-                colWidths = colWidths.Select(w => w * scale).ToList();
-            }
+            var message = new TextElement();
+            AddText(message, _evaluator.Evaluate(noRows), style: null);
+            ApplyTextStyle(message.Style, tablixEl.Element(_ns + "Style"), row: null);
+            return message;
         }
 
-        // ── Build TableElement ────────────────────────────────────────────────
+        // ── Columns (hidden columns dropped), scaled to the declared tablix width ──
+        float tablixDeclaredWidth = ParseUnit(tablixEl.Element(_ns + "Width")?.Value);
+        float totalColWidth = colWidths.Sum();
+        if (tablixDeclaredWidth > 0 && totalColWidth > tablixDeclaredWidth + 1f)
+            colWidths = colWidths.Select(w => w * tablixDeclaredWidth / totalColWidth).ToList();
+
         var table = new TableElement();
-
-        // Convert to relative (proportional) widths so the table always fits its
-        // available container width rather than rendering at its absolute declared width.
-        float totalWidth = colWidths.Count > 0 ? colWidths.Sum() : 1f;
-        foreach (var w in colWidths)
-            table.Columns.Add(new TableColumnDefinition
-            {
-                RelativeWidth = totalWidth > 0 ? w / totalWidth : 1f
-            });
-
+        var visibleWidths = colWidths.Where((_, i) => !hiddenColumns[i]).ToList();
+        float totalWidth = visibleWidths.Sum();
+        foreach (var w in visibleWidths)
+            table.Columns.Add(new TableColumnDefinition { RelativeWidth = totalWidth > 0 ? w / totalWidth : 1f });
         if (table.Columns.Count == 0)
             table.Columns.Add(new TableColumnDefinition { RelativeWidth = 1 });
 
-        var dataRows = _datasets != null && _datasets.TryGetValue(dataSetName, out var ds)
-            ? ds.ToList()
-            : [];
-
-        bool seenDetail = false;
-        for (int ri = 0; ri < tblRows.Count; ri++)
+        var previousRegion = _currentRegionDataset;
+        var previousOrder = _displayOrder; // a nested tablix must not change the outer one's order
+        _currentRegionDataset = dataSetName.Length > 0 ? dataSetName : previousRegion;
+        try
         {
-            var tblRow  = tblRows[ri];
-            bool isDetail = hasHierarchy ? IsDetailByHierarchy(ri) : IsDetailByExpression(tblRow);
-            seenDetail |= isDetail;
+            if (rowMembers.Sum(LeafCount) != tblRows.Count)
+            {
+                BuildTablixWithoutHierarchy(table, tblRows, dataRows, hiddenColumns, tablixName, dataSetName);
+                return table;
+            }
 
-            var cells = tblRow.Element(_ns + "TablixCells")
-                ?.Elements(_ns + "TablixCell")
-                .ToList() ?? [];
+            // RowNumber / RunningValue count rows in the order they are displayed.
+            var displayed = new List<object>();
+            CollectDetailRows(rowMembers, dataRows, displayed);
+            var order = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
+            foreach (var r in displayed) order.TryAdd(r, order.Count);
+            _displayOrder = order;
 
-            if (!isDetail)
+            using var region = _evaluator.PushScope(InDisplayOrder(dataRows), tablixName, dataSetName);
+
+            int firstDynamic = rowMembers.FindIndex(ContainsGroup);
+            int lastDynamic  = rowMembers.FindLastIndex(ContainsGroup);
+            int cursor = 0;
+            for (int i = 0; i < rowMembers.Count; i++)
             {
-                // Static row, rendered once: a header before the details, a footer (totals) after them.
-                AppendTableCells(seenDetail ? table.FooterCells : table.HeaderCells, cells, dataRow: null);
+                var target = firstDynamic < 0 || i < firstDynamic ? table.HeaderCells
+                           : i > lastDynamic ? table.FooterCells
+                           : table.DataCells;
+                EmitMember(rowMembers[i], dataRows, row: null, target, tblRows, hiddenColumns, ref cursor);
             }
-            else if (dataRows.Count > 0)
+
+            // A table with only static rows renders them as the body.
+            if (firstDynamic < 0)
             {
-                // Detail row — repeated for each data row.
-                foreach (var dataRow in dataRows)
-                    AppendTableCells(table.DataCells, cells, dataRow);
+                table.DataCells.AddRange(table.HeaderCells);
+                table.HeaderCells.Clear();
             }
-            else
-            {
-                // No data — add one empty placeholder row to preserve table structure.
-                AppendTableCells(table.DataCells, cells, dataRow: null);
-            }
+        }
+        finally
+        {
+            _currentRegionDataset = previousRegion;
+            _displayOrder = previousOrder;
         }
 
         return table;
     }
 
-    private void AppendTableCells(
-        List<TableCell> target,
-        List<XElement> cellXElements,
-        object? dataRow)
+    private string? _currentRegionDataset;
+    private Dictionary<object, int> _displayOrder = new(ReferenceEqualityComparer.Instance);
+
+    private List<object> InDisplayOrder(IEnumerable<object> rows)
+        => rows.OrderBy(r => _displayOrder.TryGetValue(r, out var i) ? i : int.MaxValue).ToList();
+
+    /// <summary>
+    /// Renders one row-hierarchy member: <paramref name="cursor"/> is the index of its first
+    /// <c>&lt;TablixRow&gt;</c> and is advanced past all of its rows.
+    /// </summary>
+    private void EmitMember(XElement member, IReadOnlyList<object> scopeRows, object? row, List<TableCell> target,
+                            List<XElement> tblRows, bool[] hiddenColumns, ref int cursor)
     {
+        int start = cursor;
+        cursor += LeafCount(member);
+        var children = Members(member);
+        var group = member.Element(_ns + "Group");
+
+        if (group == null)
+        {
+            if (IsHidden(member, row)) return;
+            if (children.Count == 0)
+            {
+                AppendTableCells(target, RowCells(tblRows[start]), row, hiddenColumns);
+                return;
+            }
+            int c = start;
+            foreach (var child in children)
+                EmitMember(child, scopeRows, row, target, tblRows, hiddenColumns, ref c);
+            return;
+        }
+
+        var groupName = group.Attribute("Name")?.Value;
+        foreach (var instance in GroupInstances(member, scopeRows))
+        {
+            using var scope = _evaluator.PushScope(InDisplayOrder(instance), groupName);
+            var first = instance[0];
+            if (IsHidden(member, first)) continue;
+
+            if (children.Count == 0)
+            {
+                AppendTableCells(target, RowCells(tblRows[start]), first, hiddenColumns);
+                continue;
+            }
+            int c = start;
+            foreach (var child in children)
+                EmitMember(child, instance, first, target, tblRows, hiddenColumns, ref c);
+        }
+    }
+
+    /// <summary>
+    /// The instances of a group member over <paramref name="rows"/>: one per distinct group key, or one
+    /// per row for a details group (no group expressions). Group filters and sort expressions apply.
+    /// </summary>
+    private List<List<object>> GroupInstances(XElement member, IReadOnlyList<object> rows)
+    {
+        var group = member.Element(_ns + "Group")!;
+        var filtered = Filter(rows, group.Element(_ns + "Filters"));
+        var sortEl = member.Element(_ns + "SortExpressions");
+        var expressions = group.Element(_ns + "GroupExpressions")?.Elements(_ns + "GroupExpression")
+            .Select(e => e.Value).Where(v => !string.IsNullOrWhiteSpace(v)).ToList() ?? [];
+
+        if (expressions.Count == 0)
+            return Sort(filtered, sortEl).Select(r => new List<object> { r }).ToList();
+
+        var instances = new List<List<object>>();
+        var byKey = new Dictionary<string, List<object>>(StringComparer.Ordinal);
+        foreach (var r in filtered)
+        {
+            var key = string.Join('\u001F', expressions.Select(e => _evaluator.Evaluate(e, r)));
+            if (!byKey.TryGetValue(key, out var list))
+                instances.Add(byKey[key] = list = new List<object>());
+            list.Add(r);
+        }
+
+        // Group sort expressions may aggregate (e.g. =Sum(Fields!Total.Value)), so each instance is its own scope.
+        var groupName = group.Attribute("Name")?.Value;
+        return SortBy(instances, sortEl, instance =>
+        {
+            using var _ = _evaluator.PushScope(instance, groupName);
+            return SortKeys(sortEl, instance[0]);
+        });
+    }
+
+    /// <summary>Detail rows in the order the hierarchy displays them (for RowNumber / RunningValue).</summary>
+    private void CollectDetailRows(List<XElement> members, IReadOnlyList<object> rows, List<object> output)
+    {
+        foreach (var member in members)
+        {
+            var children = Members(member);
+            if (member.Element(_ns + "Group") == null)
+            {
+                CollectDetailRows(children, rows, output);
+                continue;
+            }
+            foreach (var instance in GroupInstances(member, rows))
+            {
+                if (children.Count > 0) CollectDetailRows(children, instance, output);
+                else output.AddRange(instance);
+            }
+        }
+    }
+
+    /// <summary>Fallback for a row hierarchy that does not match the rows: rows that read fields repeat per data row.</summary>
+    private void BuildTablixWithoutHierarchy(TableElement table, List<XElement> tblRows, List<object> dataRows,
+                                             bool[] hiddenColumns, string? tablixName, string dataSetName)
+    {
+        using var region = _evaluator.PushScope(dataRows, tablixName, dataSetName);
+        bool seenDetail = false;
+        foreach (var tblRow in tblRows)
+        {
+            bool isDetail = tblRow.Descendants(_ns + "Value").Any(v => RdlcExpressionEvaluator.IsFieldExpression(v.Value));
+            seenDetail |= isDetail;
+            var cells = RowCells(tblRow);
+
+            if (!isDetail)
+                AppendTableCells(seenDetail ? table.FooterCells : table.HeaderCells, cells, null, hiddenColumns);
+            else if (dataRows.Count == 0)
+                AppendTableCells(table.DataCells, cells, null, hiddenColumns);
+            else
+                foreach (var dataRow in dataRows)
+                {
+                    using var detail = _evaluator.PushScope([dataRow]);
+                    AppendTableCells(table.DataCells, cells, dataRow, hiddenColumns);
+                }
+        }
+    }
+
+    private List<XElement> RowCells(XElement tblRow)
+        => tblRow.Element(_ns + "TablixCells")?.Elements(_ns + "TablixCell").ToList() ?? [];
+
+    private List<XElement> Members(XElement? parent)
+        => parent?.Element(_ns + "TablixMembers")?.Elements(_ns + "TablixMember").ToList() ?? [];
+
+    /// <summary>Number of body rows (or columns) a hierarchy member covers: one per leaf.</summary>
+    private int LeafCount(XElement member)
+    {
+        var children = Members(member);
+        return children.Count == 0 ? 1 : children.Sum(LeafCount);
+    }
+
+    private bool ContainsGroup(XElement member)
+        => member.Element(_ns + "Group") != null || Members(member).Any(ContainsGroup);
+
+    /// <summary>Columns whose hierarchy member (or an ancestor) is hidden. Column groups are reported, not expanded.</summary>
+    private bool[] HiddenColumns(XElement tablixEl, int columnCount)
+    {
+        var hidden = new bool[columnCount];
+        var members = Members(tablixEl.Element(_ns + "TablixColumnHierarchy"));
+        if (members.Any(ContainsGroup))
+            Warn($"Tablix '{tablixEl.Attribute("Name")?.Value}': column groups (matrix) are not supported; columns are rendered once.");
+        if (members.Sum(LeafCount) != columnCount) return hidden;
+
+        int index = 0;
+        void Walk(XElement member, bool parentHidden)
+        {
+            bool isHidden = parentHidden || IsHidden(member, row: null);
+            var children = Members(member);
+            if (children.Count == 0) { hidden[index++] = isHidden; return; }
+            foreach (var child in children) Walk(child, isHidden);
+        }
+        foreach (var member in members) Walk(member, false);
+        return hidden;
+    }
+
+    private void AppendTableCells(List<TableCell> target, List<XElement> cellXElements, object? dataRow, bool[] hiddenColumns)
+    {
+        int column = 0;
         for (int ci = 0; ci < cellXElements.Count; ci++)
         {
             var cellEl = cellXElements[ci];
             var contentEl = cellEl.Element(_ns + "CellContents");
-            IElement content;
-
-            if (contentEl != null)
-            {
-                // CellContents holds one report item (plus optional ColSpan/RowSpan).
-                var innerItems = BuildReportItems(WrapAsReportItems(contentEl), dataRow);
-                content = innerItems.Count == 1 ? innerItems[0] : BuildColumn(innerItems);
-            }
-            else
-            {
-                content = new SpacerElement();
-            }
 
             // RDL keeps ColSpan inside <CellContents>; older drafts put it on the cell.
             int colSpan = Math.Max(1, TryParseInt(
@@ -669,7 +988,26 @@ public sealed class RdlcDocumentFactory
                 ?? cellEl.Element(_ns + "ColSpan")?.Value
                 ?? cellEl.Attribute("ColSpan")?.Value, 1));
 
-            target.Add(new TableCell { Content = content, ColumnSpan = colSpan });
+            int visibleSpan = 0;
+            for (int c = column; c < column + colSpan; c++)
+                if (c >= hiddenColumns.Length || !hiddenColumns[c]) visibleSpan++;
+
+            if (visibleSpan > 0)
+            {
+                IElement content;
+                if (contentEl != null)
+                {
+                    // CellContents holds one report item (plus optional ColSpan/RowSpan).
+                    var innerItems = BuildReportItems(WrapAsReportItems(contentEl), dataRow);
+                    content = innerItems.Count == 1 ? innerItems[0] : BuildColumn(innerItems);
+                }
+                else
+                {
+                    content = new SpacerElement();
+                }
+                target.Add(new TableCell { Content = content, ColumnSpan = visibleSpan });
+            }
+            column += colSpan;
 
             // A spanning cell is followed by empty <TablixCell/> placeholders for the columns it covers.
             for (int skip = 1; skip < colSpan && ci + 1 < cellXElements.Count
@@ -692,37 +1030,80 @@ public sealed class RdlcDocumentFactory
         return wrapper;
     }
 
-    // ── Row hierarchy flattening ──────────────────────────────────────────────
+    // ── Filters and sorting ───────────────────────────────────────────────────
 
-    /// <summary>
-    /// Recursively flattens the TablixRowHierarchy members into a list of <c>isDetail</c> booleans,
-    /// one per body row.  When a member has a <c>&lt;Group&gt;</c> element, its leaf descendants
-    /// are detail rows; otherwise they are static (header/footer) rows.
-    /// </summary>
-    private List<bool> FlattenRowHierarchy(List<XElement> members, bool parentIsDetail = false)
+    /// <summary>Rows that pass every <c>&lt;Filter&gt;</c> in <paramref name="filtersEl"/>.</summary>
+    private List<object> Filter(IEnumerable<object> rows, XElement? filtersEl)
     {
-        var result = new List<bool>();
-        foreach (var member in members)
+        var filters = filtersEl?.Elements(_ns + "Filter").ToList();
+        if (filters == null || filters.Count == 0) return rows as List<object> ?? rows.ToList();
+        return rows.Where(r => filters.All(f => PassesFilter(f, r))).ToList();
+    }
+
+    private bool PassesFilter(XElement filter, object row)
+    {
+        var expression = filter.Element(_ns + "FilterExpression")?.Value;
+        var op = filter.Element(_ns + "Operator")?.Value ?? "Equal";
+        var value = _evaluator.EvaluateValue(expression, row);
+        var targets = new List<object?>();
+        foreach (var fv in filter.Element(_ns + "FilterValues")?.Elements(_ns + "FilterValue") ?? [])
         {
-            bool hasGroup = member.Element(_ns + "Group") != null;
-            bool isDetail = parentIsDetail || hasGroup;
-
-            var nested = member.Element(_ns + "TablixMembers")
-                ?.Elements(_ns + "TablixMember")
-                .ToList();
-
-            if (nested != null && nested.Count > 0)
-            {
-                // This member groups child rows — recurse and don't emit a row for the parent.
-                result.AddRange(FlattenRowHierarchy(nested, isDetail));
-            }
+            var target = _evaluator.EvaluateValue(fv.Value, row);
+            if (target is System.Collections.IEnumerable many and not string)
+                targets.AddRange(many.Cast<object?>()); // multi-value parameters
             else
-            {
-                // Leaf member → corresponds to exactly one TablixRow.
-                result.Add(isDetail);
-            }
+                targets.Add(target);
         }
-        return result;
+
+        object? First() => targets.Count > 0 ? targets[0] : null;
+        switch (op)
+        {
+            case "Equal":              return _evaluator.AreEqual(value, First());
+            case "NotEqual":           return !_evaluator.AreEqual(value, First());
+            case "GreaterThan":        return _evaluator.Compare(value, First()) > 0;
+            case "GreaterThanOrEqual": return _evaluator.Compare(value, First()) >= 0;
+            case "LessThan":           return _evaluator.Compare(value, First()) < 0;
+            case "LessThanOrEqual":    return _evaluator.Compare(value, First()) <= 0;
+            case "In":                 return targets.Any(t => _evaluator.AreEqual(value, t));
+            case "Between":
+                return targets.Count >= 2 && _evaluator.Compare(value, targets[0]) >= 0 && _evaluator.Compare(value, targets[1]) <= 0;
+            case "Like":
+                var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(_evaluator.ToDisplay(First()))
+                    .Replace("\\*", ".*").Replace("\\?", ".") + "$";
+                return System.Text.RegularExpressions.Regex.IsMatch(_evaluator.ToDisplay(value), pattern,
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+            default:
+                Warn($"Filter operator '{op}' is not supported; the filter was ignored.");
+                return true;
+        }
+    }
+
+    private List<object> Sort(IEnumerable<object> rows, XElement? sortEl)
+        => SortBy(rows as List<object> ?? rows.ToList(), sortEl, r => SortKeys(sortEl, r));
+
+    private object?[] SortKeys(XElement? sortEl, object row)
+        => sortEl?.Elements(_ns + "SortExpression")
+               .Select(e => _evaluator.EvaluateValue(e.Element(_ns + "Value")?.Value, row))
+               .ToArray() ?? [];
+
+    /// <summary>Stable sort by the <c>&lt;SortExpression&gt;</c>s (ascending unless <c>Direction</c> is Descending).</summary>
+    private List<T> SortBy<T>(List<T> items, XElement? sortEl, Func<T, object?[]> keys)
+    {
+        var descending = sortEl?.Elements(_ns + "SortExpression")
+            .Select(e => string.Equals(e.Element(_ns + "Direction")?.Value, "Descending", StringComparison.OrdinalIgnoreCase))
+            .ToArray() ?? [];
+        if (descending.Length == 0 || items.Count < 2) return items;
+
+        var keyed = items.Select(i => (Item: i, Keys: keys(i))).ToList();
+        return keyed.OrderBy(k => k.Keys, Comparer<object?[]>.Create((a, b) =>
+        {
+            for (int i = 0; i < descending.Length; i++)
+            {
+                int c = _evaluator.Compare(a[i], b[i]);
+                if (c != 0) return descending[i] ? -c : c;
+            }
+            return 0;
+        })).Select(k => k.Item).ToList();
     }
 
     // ── Style helpers ─────────────────────────────────────────────────────────
@@ -781,7 +1162,7 @@ public sealed class RdlcDocumentFactory
 
         var color = ParseColor(value);
         if (color == null)
-            _warnings.Add($"Color '{value}' ({name}) is not recognized and was ignored.");
+            Warn($"Color '{value}' ({name}) is not recognized and was ignored.");
         return color;
     }
 
