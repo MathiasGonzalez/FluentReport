@@ -152,5 +152,5 @@ Bump `<Version>` in [Directory.Build.props](Directory.Build.props) and merge to 
 
 ## Dependencies
 
-- [SkiaSharp](https://www.nuget.org/packages/SkiaSharp) 3.119.4 — PDF rendering
+- [SkiaSharp](https://www.nuget.org/packages/SkiaSharp) 4.154.0 — PDF rendering
 - [ClosedXML](https://www.nuget.org/packages/ClosedXML) 0.105.1 — Excel rendering
