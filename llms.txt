@@ -1,0 +1,32 @@
+# FluentReport
+
+> .NET 10 library for generating PDF reports with a fluent C# API. The same document also renders to HTML (for email) and Excel, and RDLC / SSRS report definitions can be imported and rendered with data. Runs on Windows, macOS and Linux (including containers without fonts). MIT licensed, published on NuGet.
+
+Facts to get right when writing code with FluentReport:
+
+- Target framework: `net10.0`. Install only the output packages you need: `FluentReport` (PDF, SkiaSharp 4), `FluentReport.Html`, `FluentReport.Excel` (ClosedXML), `FluentReport.Rdlc` (RDLC import). `FluentReport.Core` (document model and fluent API) comes with any of them.
+- Namespaces: `FluentReport` (`Document`, `GeneratePdf`, `PdfOptions`), `FluentReport.Core` (`PageSizes`), `FluentReport.Styling` (`ReportColor`, `TextStyle`), `FluentReport.Elements` (`ChartType`, element types), `FluentReport.Html` (`GenerateHtml`, `GenerateHtmlFragment`), `FluentReport.Excel` (`GenerateExcel`), `FluentReport.Rdlc` (`Document.FromRdlc`, `RdlcImportOptions`).
+- Entry point: `Document.Create(container => container.Page(page => { page.Header()…; page.Content()…; page.Footer()…; }))`. Output: `doc.GeneratePdf(path | stream)` or `byte[] doc.GeneratePdf()`, `doc.GenerateHtml(...)`, `doc.GenerateHtmlFragment()`, `doc.GenerateExcel(...)`.
+- Every container holds exactly one content element (`Text`, `Column`, `Row`, `Table`, `Image`, `List`, `Line`, `Spacer`, `Chart`, …); a second one throws `InvalidOperationException`. Use `Column(col => { col.Item()…; col.Item()…; })` or `Row(row => { row.RelativeItem()…; row.FixedItem(80)…; })` for several.
+- Container decorators (`Padding`, `Background`, `Border`, `AlignCenter`) go before the content: `.Padding(5).Background("#EEEEEE").Text("x")`. After `.Text(...)` the chain is a `TextBuilder`: `.FontSize()`, `.Bold()`, `.Italic()`, `.Color()`, `.AlignRight()` style the text.
+- Units are points (1/72 inch). Colors are `"#RRGGBB"` or `"#RRGGBBAA"` strings (the 3-digit `"#EEE"` form throws) or `ReportColor`.
+- Tables: `ColumnsDefinition(c => { c.RelativeColumn(2); c.ConstantColumn(80); })`, then `Header(h => h.Cell()…)`, `table.Cell()` per data cell (cells wrap into rows by column count), optional `Footer(...)` and `BorderEachCell()`. In PDF, tables split across pages and repeat the header.
+- Page numbers: `page.Footer().Text(x => { x.Span("Page "); x.CurrentPageNumber(); x.Span(" of "); x.TotalPages(); })`.
+- Fonts in PDF: the system font by default, the bundled DejaVu Sans when the system has none. For identical output everywhere pass `new PdfOptions { FontResolver = style => style.EffectiveBold ? boldTypeface : regularTypeface }` with `SKTypeface.FromFile(...)`.
+- RDLC: `Document.FromRdlc(path, datasets: new Dictionary<string, IEnumerable<object>> { ["DataSetName"] = rows.Cast<object>() }, parameters: …, options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") })`, then any `Generate*` method. Rows can be POCOs or dictionaries. Use `new RdlcDocumentFactory(...)` and its `Warnings` to see what was not supported.
+- Excel skips images; charts, canvases and rotated text render a text fallback in HTML and Excel.
+
+## Docs
+
+- [Full documentation in one file](https://mathiasgonzalez.github.io/FluentReport/llms-full.txt): this summary, the README, the complete API reference, RDLC support and the security notes
+- [API reference](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/docs/api.md): every builder method, PDF/HTML options and RDLC import options
+- [README](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/README.md): packages, quick start, renderer support matrix
+- [RDLC support and limitations](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/docs/rdlc-limitations.md): supported report items, expressions and functions, known gaps
+- [Security](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/SECURITY.md): limits and guarantees when rendering untrusted RDLC files and images
+
+## Optional
+
+- [Migration to 3.0](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/docs/migration-3.0.md): SkiaSharp 4 changes for code that uses `FontResolver` or `Canvas`
+- [Migration to 2.0](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/docs/migration-2.0.md): removed and renamed APIs from 1.x
+- [Uruguay fiscal document samples](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/docs/uy-fiscal-samples.md): complete invoice, salary slip and receipt examples
+- [Sample project](https://github.com/MathiasGonzalez/FluentReport/tree/main/samples/FluentReport.Samples): runnable examples with their generated PDF, HTML and Excel output

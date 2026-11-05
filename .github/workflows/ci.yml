@@ -23,6 +23,9 @@ jobs:
         with:
           dotnet-version: '10.0.x'
 
+      - name: Check llms-full.txt is up to date
+        run: scripts/build-llms-full.sh --check
+
       - name: Restore dependencies
         run: dotnet restore --locked-mode
 

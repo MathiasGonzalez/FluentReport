@@ -4,6 +4,8 @@
 
 **HTML / email** renderer for FluentReport. Generates static HTML or fragments ready to embed in transactional emails: table-based layout, inline styles, images as data URIs. No native dependencies; renders the same document as the PDF and Excel packages.
 
+> Using an AI coding assistant? Point it to [llms-full.txt](https://mathiasgonzalez.github.io/FluentReport/llms-full.txt): the whole API and usage guide in one file.
+
 ## Installation
 
 ```shell

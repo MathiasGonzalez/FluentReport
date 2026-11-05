@@ -4,6 +4,8 @@
 
 **RDLC / SSRS** importer for FluentReport. Converts `.rdlc` files (Visual Studio Report Designer / SQL Server Reporting Services) into FluentReport documents that render to **PDF**, **HTML** or **Excel**, without SSRS or ReportViewer.
 
+> Using an AI coding assistant? Point it to [llms-full.txt](https://mathiasgonzalez.github.io/FluentReport/llms-full.txt): the whole API and usage guide in one file.
+
 ## Installation
 
 ```shell

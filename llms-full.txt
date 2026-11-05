@@ -1,0 +1,567 @@
+# FluentReport
+
+> .NET 10 library for generating PDF reports with a fluent C# API. The same document also renders to HTML (for email) and Excel, and RDLC / SSRS report definitions can be imported and rendered with data. Runs on Windows, macOS and Linux (including containers without fonts). MIT licensed, published on NuGet.
+
+Facts to get right when writing code with FluentReport:
+
+- Target framework: `net10.0`. Install only the output packages you need: `FluentReport` (PDF, SkiaSharp 4), `FluentReport.Html`, `FluentReport.Excel` (ClosedXML), `FluentReport.Rdlc` (RDLC import). `FluentReport.Core` (document model and fluent API) comes with any of them.
+- Namespaces: `FluentReport` (`Document`, `GeneratePdf`, `PdfOptions`), `FluentReport.Core` (`PageSizes`), `FluentReport.Styling` (`ReportColor`, `TextStyle`), `FluentReport.Elements` (`ChartType`, element types), `FluentReport.Html` (`GenerateHtml`, `GenerateHtmlFragment`), `FluentReport.Excel` (`GenerateExcel`), `FluentReport.Rdlc` (`Document.FromRdlc`, `RdlcImportOptions`).
+- Entry point: `Document.Create(container => container.Page(page => { page.Header()…; page.Content()…; page.Footer()…; }))`. Output: `doc.GeneratePdf(path | stream)` or `byte[] doc.GeneratePdf()`, `doc.GenerateHtml(...)`, `doc.GenerateHtmlFragment()`, `doc.GenerateExcel(...)`.
+- Every container holds exactly one content element (`Text`, `Column`, `Row`, `Table`, `Image`, `List`, `Line`, `Spacer`, `Chart`, …); a second one throws `InvalidOperationException`. Use `Column(col => { col.Item()…; col.Item()…; })` or `Row(row => { row.RelativeItem()…; row.FixedItem(80)…; })` for several.
+- Container decorators (`Padding`, `Background`, `Border`, `AlignCenter`) go before the content: `.Padding(5).Background("#EEEEEE").Text("x")`. After `.Text(...)` the chain is a `TextBuilder`: `.FontSize()`, `.Bold()`, `.Italic()`, `.Color()`, `.AlignRight()` style the text.
+- Units are points (1/72 inch). Colors are `"#RRGGBB"` or `"#RRGGBBAA"` strings (the 3-digit `"#EEE"` form throws) or `ReportColor`.
+- Tables: `ColumnsDefinition(c => { c.RelativeColumn(2); c.ConstantColumn(80); })`, then `Header(h => h.Cell()…)`, `table.Cell()` per data cell (cells wrap into rows by column count), optional `Footer(...)` and `BorderEachCell()`. In PDF, tables split across pages and repeat the header.
+- Page numbers: `page.Footer().Text(x => { x.Span("Page "); x.CurrentPageNumber(); x.Span(" of "); x.TotalPages(); })`.
+- Fonts in PDF: the system font by default, the bundled DejaVu Sans when the system has none. For identical output everywhere pass `new PdfOptions { FontResolver = style => style.EffectiveBold ? boldTypeface : regularTypeface }` with `SKTypeface.FromFile(...)`.
+- RDLC: `Document.FromRdlc(path, datasets: new Dictionary<string, IEnumerable<object>> { ["DataSetName"] = rows.Cast<object>() }, parameters: …, options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") })`, then any `Generate*` method. Rows can be POCOs or dictionaries. Use `new RdlcDocumentFactory(...)` and its `Warnings` to see what was not supported.
+- Excel skips images; charts, canvases and rotated text render a text fallback in HTML and Excel.
+
+## Docs
+
+- [Full documentation in one file](https://mathiasgonzalez.github.io/FluentReport/llms-full.txt): this summary, the README, the complete API reference, RDLC support and the security notes
+- [API reference](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/docs/api.md): every builder method, PDF/HTML options and RDLC import options
+- [README](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/README.md): packages, quick start, renderer support matrix
+- [RDLC support and limitations](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/docs/rdlc-limitations.md): supported report items, expressions and functions, known gaps
+- [Security](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/SECURITY.md): limits and guarantees when rendering untrusted RDLC files and images
+
+## Optional
+
+- [Migration to 3.0](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/docs/migration-3.0.md): SkiaSharp 4 changes for code that uses `FontResolver` or `Canvas`
+- [Migration to 2.0](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/docs/migration-2.0.md): removed and renamed APIs from 1.x
+- [Uruguay fiscal document samples](https://raw.githubusercontent.com/MathiasGonzalez/FluentReport/main/docs/uy-fiscal-samples.md): complete invoice, salary slip and receipt examples
+- [Sample project](https://github.com/MathiasGonzalez/FluentReport/tree/main/samples/FluentReport.Samples): runnable examples with their generated PDF, HTML and Excel output
+
+
+---
+
+<!-- Source: README.md -->
+
+# FluentReport
+
+.NET 10 library for generating **PDF** reports with a fluent C# API, with the same document also rendering to **HTML / email** and **Excel**, and an importer for **RDLC / SSRS** report definitions. Linux compatible.
+
+## Packages
+
+| Package | Description |
+|---------|-------------|
+| [`FluentReport`](https://www.nuget.org/packages/FluentReport) | PDF renderer (SkiaSharp) with real pagination |
+| [`FluentReport.Html`](https://www.nuget.org/packages/FluentReport.Html) | HTML / email renderer (table layout, inline styles) |
+| [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel (.xlsx) renderer (ClosedXML) |
+| [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
+| [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API, brought in by the packages above |
+
+```shell
+dotnet add package FluentReport          # PDF
+dotnet add package FluentReport.Html     # + HTML / email
+dotnet add package FluentReport.Excel    # + Excel
+dotnet add package FluentReport.Rdlc     # + RDLC import
+```
+
+## Quick start
+
+```csharp
+using FluentReport;
+using FluentReport.Core;
+
+var doc = Document.Create(container =>
+{
+    container.Page(page =>
+    {
+        page.Size(PageSizes.A4);
+        page.MarginAll(40);
+
+        page.Header().Text("My Report").FontSize(20).Bold().AlignCenter();
+
+        page.Content().Column(col =>
+        {
+            col.Spacing(8);
+            col.Item().Text("Summary").FontSize(14).Bold();
+            col.Item().Line(1);
+            col.Item().Table(table =>
+            {
+                table.ColumnsDefinition(cols => { cols.RelativeColumn(2); cols.RelativeColumn(1); });
+                table.Header(h =>
+                {
+                    h.Cell().Background("#4472C4").Padding(5).Text("Product").Bold().Color("#FFFFFF");
+                    h.Cell().Background("#4472C4").Padding(5).Text("Price").Bold().Color("#FFFFFF");
+                });
+                table.Cell().Padding(5).Text("Widget A");
+                table.Cell().Padding(5).Text("9.99").AlignRight();
+                table.Footer(f =>
+                {
+                    f.Cell().Padding(5).Text("Total").Bold();
+                    f.Cell().Padding(5).Text("9.99").Bold().AlignRight();
+                });
+            });
+        });
+
+        page.Footer().AlignCenter().Text(x =>
+        {
+            x.Span("Page "); x.CurrentPageNumber(); x.Span(" of "); x.TotalPages();
+        }).FontSize(8);
+    });
+});
+
+doc.GeneratePdf("report.pdf");
+```
+
+The same `doc` renders to the other formats:
+
+```csharp
+using FluentReport.Excel;
+using FluentReport.Html;
+
+doc.GenerateHtml("report.html");
+string emailBody = doc.GenerateHtmlFragment();
+doc.GenerateExcel("report.xlsx");
+```
+
+Long content paginates on its own: columns split between items (also when nested or decorated), text between lines, and tables between rows with the header repeated on every page.
+
+### RDLC
+
+```csharp
+using System.Globalization;
+using FluentReport.Rdlc;
+
+var invoice = Document.FromRdlc(
+    "reports/invoice.rdlc",
+    datasets: new Dictionary<string, IEnumerable<object>> { ["Lines"] = lines.Cast<object>() },
+    options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") });
+
+invoice.GeneratePdf("invoice.pdf");
+```
+
+## Renderer support
+
+| Feature | PDF | HTML | Excel |
+|---------|:---:|:----:|:-----:|
+| Text, fonts, colors, alignment, rich text | ✓ | ✓ | ✓ |
+| Page numbers | ✓ | ✓ | ✓ |
+| Column / Row layout | ✓ | ✓ | ✓ (merged cells) |
+| Tables: header, footer, column spans, borders | ✓ (split across pages) | ✓ | ✓ |
+| Lists | ✓ | ✓ | ✓ |
+| Images (PNG, JPEG, GIF, WebP, BMP) | ✓ | ✓ (data URI) | — |
+| Backgrounds, borders, padding | ✓ | ✓ | ✓ (no padding) |
+| Charts, canvas, rotated text | ✓ | fallback | fallback |
+| Pagination / page breaks | ✓ | ✓ (divider) | ✓ (worksheets) |
+| Custom fonts | ✓ | font-family | font name |
+
+Output does not depend on the machine's regional settings: CSS numbers always use `.`, and the RDLC importer formats values with an explicit culture.
+
+### Example output — e-Factura (Uruguay)
+
+See the generated files in [`samples/FluentReport.Samples/output`](https://github.com/MathiasGonzalez/FluentReport/blob/main/samples/FluentReport.Samples/output) ([invoice](https://github.com/MathiasGonzalez/FluentReport/blob/main/samples/FluentReport.Samples/output/05-invoice.pdf), [salary slip](https://github.com/MathiasGonzalez/FluentReport/blob/main/samples/FluentReport.Samples/output/10-recibo-sueldo.pdf), …) and [the UY samples guide](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/uy-fiscal-samples.md).
+
+## Documentation
+
+- [API reference](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/api.md) — builders, elements, PDF/HTML options, RDLC options
+- [llms-full.txt](https://mathiasgonzalez.github.io/FluentReport/llms-full.txt) — the whole API and usage guide in one file, for AI coding assistants ([llms.txt](https://github.com/MathiasGonzalez/FluentReport/blob/main/llms.txt) is the index)
+- [RDLC support and limitations](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/rdlc-limitations.md)
+- [Migration to 2.0](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/migration-2.0.md)
+- [Migration to 3.0](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/migration-3.0.md)
+- [Security](https://github.com/MathiasGonzalez/FluentReport/blob/main/SECURITY.md) — reporting vulnerabilities and rendering untrusted reports
+- [UY fiscal document samples](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/uy-fiscal-samples.md) — salary slip, delivery note, payment receipt
+- Package READMEs: [PDF](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport/README.md) · [Core](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Core/README.md) · [Html](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Html/README.md) · [Excel](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Excel/README.md) · [Rdlc](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Rdlc/README.md)
+
+## Dependencies
+
+- [SkiaSharp](https://www.nuget.org/packages/SkiaSharp) 4.154.0 — PDF rendering
+- [DejaVu Sans](https://dejavu-fonts.github.io/) 2.37 — fallback font bundled in `FluentReport` ([license](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport/Fonts/LICENSE-DejaVu.txt))
+- [ClosedXML](https://www.nuget.org/packages/ClosedXML) 0.105.1 — Excel rendering
+
+
+---
+
+<!-- Source: docs/api.md -->
+
+# FluentReport — API Reference
+
+> **Required namespaces**
+> ```csharp
+> using FluentReport;           // Document, GeneratePdf (FluentReport package)
+> using FluentReport.Core;      // PageSizes, DocumentSettings
+> using FluentReport.Elements;  // ChartType
+> using FluentReport.Styling;   // ReportColor, TextStyle
+> using FluentReport.Html;      // GenerateHtml (FluentReport.Html package)
+> using FluentReport.Excel;     // GenerateExcel (FluentReport.Excel package)
+> using FluentReport.Rdlc;      // Document.FromRdlc (FluentReport.Rdlc package)
+> ```
+
+---
+
+## Document
+
+| Member | Description |
+|--------|-------------|
+| `Document.Create(Action<DocumentBuilder>)` | Builds a document with the fluent API. At least one page is required. |
+| `Document.FromSettings(DocumentSettings)` | Wraps a model built by hand or by an importer. At least one page is required. |
+| `.Settings` | The document model (`DocumentSettings` → pages → elements). |
+| `.GeneratePdf(path\|stream\|—, options?)` | PDF *(FluentReport)* — see [PDF output](#pdf-output). |
+| `.GenerateImages(scale = 1, options?)` | One PNG per page *(FluentReport)*. |
+| `.GetPdfPageCount(options?)` | Number of PDF pages *(FluentReport)*. |
+| `.GenerateHtml(path\|stream\|—, options?)` | Full HTML document *(FluentReport.Html)*. |
+| `.GenerateHtmlFragment(options?)` | HTML fragment for an email body *(FluentReport.Html)*. |
+| `.GenerateExcel(path\|stream\|—)` | `.xlsx` workbook *(FluentReport.Excel)*. |
+| `Document.FromRdlc(path, …)` / `FromRdlcStream` / `FromRdlcXml` | RDLC import *(FluentReport.Rdlc)* — see [RDLC import](#rdlc-import). |
+
+---
+
+## DocumentBuilder
+
+| Method | Description |
+|--------|-------------|
+| `.Page(Action<PageBuilder>)` | Adds a page section. In PDF its content flows over as many pages as needed with the header and footer repeated; in HTML each section is a block separated by a divider; in Excel a worksheet. |
+
+## PageBuilder
+
+| Method | Description |
+|--------|-------------|
+| `.Size(PageSize)` / `.Size(float width, float height)` | Page size in points (1 pt = 1/72 in). |
+| `.Landscape()` | Swaps width and height. |
+| `.MarginAll(float)` / `.Margin(top, right, bottom, left)` / `.MarginHorizontal(float)` / `.MarginVertical(float)` | Margins in points; in HTML they become cell padding. |
+| `.Header()` / `.Content()` / `.Footer()` | Return the `ContainerBuilder` of each region. |
+
+```csharp
+container.Page(page =>
+{
+    page.Size(PageSizes.A4);
+    page.MarginAll(40);
+
+    page.Header().Text("My Report").FontSize(16).Bold().AlignCenter();
+    page.Content().Column(col => { col.Spacing(8); col.Item().Text("..."); });
+    page.Footer().AlignCenter().Text(x =>
+    {
+        x.Span("Page "); x.CurrentPageNumber(); x.Span(" of "); x.TotalPages();
+    });
+});
+```
+
+`CurrentPageNumber()` / `TotalPages()` resolve to the document page and the page count (in Excel: the worksheet's page).
+
+---
+
+## ContainerBuilder
+
+Every region, column/row item and table cell is a `ContainerBuilder`. It holds **one** content element; calling a second content method throws `InvalidOperationException` — use `Column()` or `Row()` to place several elements.
+
+### Content
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `.Text(string)` | `TextBuilder` | Text. |
+| `.Text(Action<DynamicTextBuilder>)` | `TextBuilder` | Text made of spans (mixed styles, page numbers). |
+| `.Column(Action<ColumnBuilder>)` | `ContainerBuilder` | Vertical stack. |
+| `.Row(Action<RowBuilder>)` | `ContainerBuilder` | Horizontal stack. |
+| `.Table(Action<TableBuilder>)` | `ContainerBuilder` | Table. |
+| `.List<T>(items, template, spacing = 0)` | `ContainerBuilder` | One item per element of `items`, stacked vertically. |
+| `.Image(string path)` / `.Image(byte[])` | `ContainerBuilder` | PNG, JPEG, GIF, WebP or BMP. `Image(path)` throws if the file does not exist. HTML embeds it as a data URI; Excel skips images. Size: natural size (1 px = 1 pt) capped to the width; a single fixed side keeps the aspect ratio. |
+| `.Spacer(float height = 0)` | `ContainerBuilder` | Empty vertical space. |
+| `.Line(float thickness = 1, string? colorHex = null)` | `ContainerBuilder` | Horizontal rule. |
+| `.PageBreak()` | `ContainerBuilder` | New page in PDF (at any depth); a divider in HTML; a new worksheet in Excel (top level of `Content()`). |
+| `.Chart()` | `ChartBuilder` | Bar or line chart (PDF; HTML/Excel render its fallback). |
+| `.Subreport(Document)` | `ContainerBuilder` | Inserts the content of another document's pages (headers/footers not repeated). |
+| `.Canvas(width, height, (SKCanvas, SKRect) => …)` | `ContainerBuilder` | Custom vector drawing, PDF only *(FluentReport)*. |
+| `.Element(IElement)` | `ContainerBuilder` | Custom element (the renderer must know it). |
+
+### Decorators
+
+Order-independent; they can be called before or after the content method.
+
+| Method | Description |
+|--------|-------------|
+| `.Padding(float)`, `.PaddingHorizontal/Vertical(float)`, `.PaddingTop/Bottom/Left/Right(float)` | Padding. |
+| `.Background(string hex)` / `.Background(ReportColor)` | Background color. |
+| `.Border(float width = 1, string? colorHex = null)` | Border. |
+| `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` | Horizontal alignment of the content. |
+
+```csharp
+col.Item()
+   .Background("#E8F4FD")
+   .Border(1, "#2196F3")
+   .Padding(8)
+   .AlignCenter()
+   .Text("Highlighted").Bold();
+```
+
+---
+
+## TextBuilder
+
+| Method | Description |
+|--------|-------------|
+| `.FontSize(float)` | Size in points (HTML uses the same number in px). |
+| `.FontFamily(string)` | Font family. |
+| `.Bold()` / `.Italic()` / `.Underline()` | Weight and decoration. |
+| `.Color(string hex)` / `.Color(ReportColor)` | Text color. |
+| `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` / `.AlignJustify()` | Text alignment (inside a table cell it aligns the cell). |
+| `.LineSpacing(float)` | Line height multiplier (default `1.2`). |
+| `.Rotate(float degrees)` | Rotation, counter-clockwise. PDF only; layout uses the unrotated box. |
+
+The style applies to every span of `Text(x => …)` as well; a span's own settings win:
+
+```csharp
+page.Footer().Text(x =>
+{
+    x.Span("Page ");
+    x.CurrentPageNumber(s => s.Bold = true);
+}).FontSize(8).Color("#666666");   // both spans are 8 pt grey; the number is also bold
+```
+
+## DynamicTextBuilder
+
+| Method | Description |
+|--------|-------------|
+| `.Span(string, Action<TextStyle>? = null)` | Text span. |
+| `.CurrentPageNumber(Action<TextStyle>? = null)` | Current page number. |
+| `.TotalPages(Action<TextStyle>? = null)` | Page count. |
+
+---
+
+## ColumnBuilder / RowBuilder
+
+| Method | Description |
+|--------|-------------|
+| `ColumnBuilder.Spacing(float)` / `.Item()` | Gap between items; adds an item. |
+| `RowBuilder.Spacing(float)` | Gap between items. |
+| `RowBuilder.RelativeItem(float weight = 1)` / `.Item()` | Proportional width. |
+| `RowBuilder.FixedItem(float width)` | Fixed width in points. |
+
+---
+
+## TableBuilder
+
+| Method | Description |
+|--------|-------------|
+| `.ColumnsDefinition(c => c.RelativeColumn(w) / c.ConstantColumn(pt))` | Columns and their widths. |
+| `.Header(h => h.Cell(colSpan))` | Header rows (`<thead>`, bold in Excel). |
+| `.Cell(int colSpan = 1)` | Data cell. |
+| `.Footer(f => f.Cell(colSpan))` | Rows after the data (totals, notes): `<tfoot>` in HTML. |
+| `.BorderEachCell(float width = 1, string? colorHex = null)` | Border on every cell. |
+
+Cells are listed left-to-right, top-to-bottom and wrap into rows automatically, respecting `colSpan`.
+
+```csharp
+col.Item().Table(table =>
+{
+    table.ColumnsDefinition(cols => { cols.RelativeColumn(3); cols.ConstantColumn(80); });
+    table.Header(h =>
+    {
+        h.Cell().Background("#4472C4").Padding(5).Text("Product").Bold().Color("#FFFFFF");
+        h.Cell().Background("#4472C4").Padding(5).Text("Price").Bold().Color("#FFFFFF");
+    });
+    foreach (var item in products)
+    {
+        table.Cell().Padding(4).Text(item.Name);
+        table.Cell().Padding(4).Text(item.Price.ToString("N2")).AlignRight();
+    }
+    table.Footer(f =>
+    {
+        f.Cell().Padding(4).Text("Total").Bold();
+        f.Cell().Padding(4).Text(total.ToString("N2")).Bold().AlignRight();
+    });
+    table.BorderEachCell(0.5f, "#CCCCCC");
+});
+```
+
+---
+
+## ChartBuilder
+
+| Method | Description |
+|--------|-------------|
+| `.Type(ChartType.Bar \| ChartType.Line)` | Chart type. |
+| `.Title(string)` / `.Height(float)` | Title; height in points (default 200). |
+| `.Categories(IEnumerable<string>)` | X-axis labels. |
+| `.AddSeries(label, values, colorHex?)` | Data series; color defaults to a palette. Bars grow from zero, so negative values point down. |
+| `.Fallback(string)` | Text HTML and Excel show instead of the chart. |
+
+---
+
+## Styling
+
+`ReportColor` (in `FluentReport.Styling`): `new ReportColor(r, g, b[, a])`, `ReportColor.FromHex("#RRGGBB" | "#RRGGBBAA")`, constants `Black`, `White`, `Gray`, `LightGray`, `Transparent`.
+
+`TextStyle` properties: `FontSize` (12), `FontFamily` ("sans-serif" → the HTML font option), `Bold`, `Italic`, `Underline`, `Color`, `Alignment`, `LineSpacing` (1.2), `Rotation` (PDF only), and the optional `BoldResolver`, `ItalicResolver`, `ColorResolver` delegates that override the static value when the document is rendered.
+
+`PageSizes`: `A3`, `A4`, `A5`, `Letter`, `Legal`.
+
+---
+
+## PDF output
+
+Content flows across pages: columns split between items (also nested or inside padding/background/border), text between lines, and tables between rows, repeating header rows and keeping footer rows on the last page. Rows, images, charts and canvases move to the next page whole; one taller than a page is cut at the footer.
+
+`PdfOptions`:
+
+| Option | Description |
+|--------|-------------|
+| `FontResolver` | `Func<TextStyle, SKTypeface?>` — e.g. embedded fonts. Return `null` for the system font. Typefaces are cached per render and never disposed. |
+| `Title` / `Author` | PDF metadata. |
+| `MaxImagePixels` | Largest image decoded, in pixels (default 100 MP). Larger images throw `InvalidOperationException` before they are decoded, so a small compressed file cannot use gigabytes of memory. `null` removes the limit. |
+
+Fonts are embedded whole (SkiaSharp does not subset), adding a few hundred KB per face.
+
+When neither the resolver nor the system provides a usable font (typical on Linux and in containers without fonts), FluentReport uses its bundled DejaVu Sans (regular and bold; italic is synthesized). Use `FontResolver` for the same output on every machine.
+
+---
+
+## Renderer options
+
+`HtmlRendererOptions`: `MaxWidth` (600 px, `null` = 100 %), `FontFamily` (default font stack), `PageDividerStyle`, `OutlookCompatible`.
+
+Numbers in the generated CSS always use `.` as decimal separator, whatever the machine culture.
+
+A custom `IElement` that a renderer does not know throws `NotSupportedException` instead of being dropped; an `IRendererSpecificElement` (charts, canvases) renders its `Fallback` in renderers that cannot draw it.
+
+---
+
+## RDLC import
+
+```csharp
+using FluentReport.Rdlc;
+
+var doc = Document.FromRdlc(
+    "reports/catalog.rdlc",
+    datasets: new Dictionary<string, IEnumerable<object>> { ["Products"] = products.Cast<object>() },
+    parameters: new Dictionary<string, object> { ["Company"] = "Acme Corp." },
+    options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") });
+
+doc.GeneratePdf("catalog.pdf");
+```
+
+| Entry point | Source |
+|-------------|--------|
+| `Document.FromRdlc(path, datasets?, parameters?, globals?, options?)` | File |
+| `Document.FromRdlcStream(stream, …)` | Stream |
+| `Document.FromRdlcXml(xml, …)` | XML string |
+| `new RdlcDocumentFactory(…).ParseFromFile/Stream/Xml(…)` | Same, plus `factory.Warnings` |
+
+Rows can be POCOs or dictionaries; field names are case-insensitive.
+
+Tablix row groups render a header and subtotal per group, with their sort expressions and filters. Aggregates without a scope argument cover the current detail row, group or table, as in SSRS; name a group, table or dataset to aggregate over it. `Globals!PageNumber` / `TotalPages` become page-number spans, so page headers and footers show real page numbers.
+
+`RdlcImportOptions`:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `Culture` | report `<Language>`, else invariant | Formats values and reads numbers/dates given as text. Never the machine culture. |
+| `LoadExternalImages` | `true` | Load `<Image Source="External">`. |
+| `ExternalImageDirectory` | the `.rdlc` folder (file import only) | External images are read only from inside this directory. |
+| `StrictExpressions` | `false` | Throw instead of rendering empty text for unsupported expressions. |
+
+Supported report items, expressions and known limitations: [rdlc-limitations.md](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/rdlc-limitations.md).
+
+
+---
+
+<!-- Source: docs/rdlc-limitations.md -->
+
+# FluentReport.Rdlc — Supported features and limitations
+
+`FluentReport.Rdlc` turns an `.rdlc` (SSRS 2005 / 2008+) definition and its data into a `Document` that renders to PDF, HTML and Excel. Anything it cannot import is listed (once) in `RdlcDocumentFactory.Warnings`; with `RdlcImportOptions.StrictExpressions` unsupported expressions throw instead.
+
+## Report items
+
+| RDLC item | Imported as | Notes |
+|-----------|-------------|-------|
+| `<Textbox>` | `TextElement` | Value or `<Paragraphs>/<TextRuns>` (one span per run). FontSize, FontFamily, FontWeight, FontStyle, TextDecoration, Color, TextAlign (textbox or paragraph), BackgroundColor, Padding, borders, `Format`. Style values can be expressions. |
+| `<Rectangle>` | `ColumnElement` in a border/background | Its items are laid out like the body; the designed height is kept when it is taller than the content. |
+| `<Line>` | `LineElement` | Color and width (`Border` or legacy `BorderWidth`). |
+| `<Image>` | `ImageElement` | `Embedded`, `Database` (bytes or base64) and `External` (local file inside `ExternalImageDirectory`; URLs are not fetched). Only PNG, JPEG, GIF, WebP and BMP are rendered. `Sizing`: `Fit` stretches to the item's box, `FitProportional` fits inside it keeping the aspect ratio, `AutoSize` (the default) uses the natural size from the pixels and resolution (96 dpi when the file has none), `Clip` uses the natural size scaled down to the box (it is not cropped). |
+| `<Tablix>` (table, list) | `TableElement` | Row groups, details, sorting, filters, hidden rows/columns, `ColSpan`, `NoRowsMessage`. See below. |
+| `<PageHeader>` / `<PageFooter>` | page header / footer | `Globals!PageNumber` / `TotalPages` render the real page numbers. |
+| `<Page>` | page size and margins | |
+| `<Chart>`, `<Subreport>`, gauges, maps | — | Skipped and reported in `Warnings`. |
+
+Absolute positions are approximated: items whose `Top` is within 2 pt are placed side by side in a row (horizontal gaps kept), and vertical gaps of 6 pt or more become spacers. `PageBreak` with `Start` / `End` / `StartAndEnd` on a body item adds a page break.
+
+### Styles
+
+- **Format**: the `Format` style property (on the text run, else the textbox) is applied to numbers and dates with the import culture, e.g. `N2`, `C`, `#,0.00`, `dd/MM/yyyy`. Text values are left as they are.
+- **Borders**: `Border` plus `TopBorder` / `RightBorder` / `BottomBorder` / `LeftBorder` (RDL 2008+) and `BorderStyle` / `BorderColor` / `BorderWidth` (RDL 2005). Every style other than `None` is drawn solid. In tables, cell borders line up into a grid.
+- **Visibility**: `<Visibility><Hidden>` (literal or expression) on report items, tablix row members and tablix column members. Hidden items take no space. Toggles (`ToggleItem`, drill-down) keep their initial state, as in an exported report.
+- Not imported: `VerticalAlign`, `LineHeight`, `WritingMode`, `CanGrow`/`CanShrink` (text always grows), border styles (dotted, dashed, double), `ToolTip`, actions (hyperlinks, drillthrough, bookmarks).
+- **Fonts**: `FontFamily` is resolved from the fonts installed on the machine; a missing font (e.g. Calibri or Poppins on a Linux server) falls back to the default font, which changes text widths. Supply the font files with `PdfOptions.FontResolver`. Carlito is a free font metrically compatible with Calibri.
+
+## Tablix
+
+The row hierarchy is walked the way SSRS does:
+
+- Static rows before the first group are the table header, repeated on every page. Static rows after the last group are the footer (grand totals), shown once at the end.
+- A group with `<GroupExpressions>` renders once per distinct value, in first-appearance order or by its `<SortExpressions>`. Its static child rows (group header, subtotal) render once per group. Aggregates in them cover that group's rows.
+- A details group (`<Group>` without expressions) renders once per row. `SortExpressions` on the member or on the tablix order the rows.
+- `<Filters>` on the dataset, the tablix and groups: `Equal`, `NotEqual`, `GreaterThan(OrEqual)`, `LessThan(OrEqual)`, `In` (multi-value parameters included), `Between`, `Like`. `TopN`/`BottomN`/`TopPercent`/`BottomPercent` are reported and ignored.
+- A tablix nested inside a group cell (e.g. a list with an inner table) shows the rows of that group when it uses the same dataset.
+
+Not supported: column groups (matrix) — the columns are rendered once and a warning is reported; `RowSpan`; page breaks between group instances; `RepeatOnNewPage`/`KeepWithGroup` (the header always repeats).
+
+## Expressions
+
+Values keep their type (number, date, boolean, text) while an expression is evaluated; they become text at the end, formatted with the import culture (`RdlcImportOptions.Culture`, else the report `<Language>`, else invariant — never the machine's regional settings). Text comparisons and sorting use the same culture's collation.
+
+| Kind | Supported |
+|------|-----------|
+| References | `Fields!X.Value` (through the field's `DataField`, or its `Value` for calculated fields), `Parameters!X.Value` / `.Label`, `Globals!X(.Value)` |
+| Literals | strings, numbers, `True`, `False`, `Nothing` |
+| Operators | `^ * / \ Mod + - &`, `= <> < > <= >=`, `Is` / `IsNot` (e.g. `Fields!X.Value Is Nothing`), `Not And AndAlso Or OrElse Xor` |
+| Conditionals | `IIF`, `Switch`, `Choose` |
+| Formatting | `Format` (.NET and VB named formats such as `"Currency"`, `"Short Date"`), `FormatNumber`, `FormatCurrency`, `FormatPercent` |
+| Conversion / text | `CStr`, `CInt`, `CLng`, `CDec`, `CDbl`, `CBool`, `CDate`, `Len`, `Trim`, `LTrim`, `RTrim`, `UCase`, `LCase`, `Left`, `Right`, `Mid`, `Replace`, `IsNothing`, `Now`, `Today` |
+| Aggregates | `Sum`, `Count`, `CountDistinct`, `CountRows`, `Avg`/`Average`, `Min`, `Max`, `First`, `Last` |
+| Row functions | `RowNumber`, `RunningValue(expr, Sum, scope)`, `Previous` |
+
+`Is Nothing` and `IsNothing(...)` are true only for a missing value (`null`, `DBNull`), not for an empty string, as in VB.
+
+Aggregate scope follows SSRS: without a scope argument an aggregate covers the current scope — the row in a detail row, the group in a group header or footer, the tablix in its header or footer, the only dataset outside a tablix. A scope argument may name a group, a tablix or a dataset. `RowNumber` and `RunningValue` count rows in the order they are displayed.
+
+Globals: `PageNumber`, `TotalPages` (and `Overall…`) become page-number spans resolved at render time. `ExecutionTime` defaults to the import time and `ReportName` to the file name. Other globals come from the `globals` dictionary, which also overrides these defaults.
+
+Not supported (reported as warnings): `Lookup`, `LookupSet`, `MultiLookup`, `ReportItems!`, `User!`, custom code (`Code.`), `InScope`, `Level`, and other VB functions. Page numbers used inside arithmetic or `Format` are not computed.
+
+## Other limitations
+
+- `<Body><Height>` is ignored; content height follows the content.
+- Each `<ReportSection>` becomes a page.
+- Reflection is used for POCO rows; for trimmed/AOT apps use dictionary rows.
+- The HTML renderer does not draw borders on table cells (PDF does).
+
+## Limits for untrusted reports
+
+- DTDs are rejected (`XmlException`): RDLC never uses them, and they are how XXE and entity-expansion attacks work.
+- Documents nested more than 256 elements deep are rejected (`InvalidOperationException`). A tablix inside a rectangle is about 30 levels.
+- Expressions with more than 100 nested parentheses, function calls, `Not` or signs, or more than 500 chained operators, evaluate to empty with a warning (or throw with `StrictExpressions`).
+- External images that go through a symbolic link are not loaded.
+
+See [SECURITY.md](https://github.com/MathiasGonzalez/FluentReport/blob/main/SECURITY.md) for the full list.
+
+
+---
+
+<!-- Source: SECURITY.md -->
+
+# Security
+
+## Reporting a vulnerability
+
+Report vulnerabilities privately through [GitHub security advisories](https://github.com/MathiasGonzalez/FluentReport/security/advisories/new). Do not open a public issue. Include the package, version and a minimal input that reproduces the problem.
+
+Fixes are released for the latest major version.
+
+## Processing untrusted input
+
+FluentReport can render report definitions (`.rdlc`) and images that come from users. The packages are built so that hostile input fails with a catchable exception or a warning, instead of reading files, running code or taking the process down:
+
+| Input | Protection |
+|-------|------------|
+| RDLC XML | DTDs are rejected, so external entities (XXE) and entity expansion never run. Documents nested more than 256 elements deep are rejected. |
+| RDLC `<Code>` blocks and custom assemblies | Never executed. Expressions can call only the built-in functions and read public properties of the data rows. |
+| RDLC expressions | More than 100 nested parentheses/calls or more than 500 chained operators produce a warning (an exception with `StrictExpressions`). |
+| RDLC `Like` filters | Evaluated in linear time. |
+| External images in RDLC | Only local files inside `ExternalImageDirectory` (by default the `.rdlc` folder, and none for streams and strings). URLs, paths outside the directory and symbolic links are ignored with a warning. Set `LoadExternalImages = false` to disable them. |
+| Images in PDF | Images above `PdfOptions.MaxImagePixels` (100 megapixels by default) throw before they are decoded. |
+| Very deep element trees | Building and rendering throw `InsufficientExecutionStackException` instead of overflowing the stack. |
+| Text in HTML output | HTML-encoded; font names are filtered and colours are emitted as hex. |
+| Text in Excel output | Written as text values, never as formulas. |
+
+Rendering still takes time and memory proportional to the data. When the input is untrusted, run it with a timeout and limit the size of uploaded files and datasets.

@@ -127,6 +127,7 @@ See the generated files in [`samples/FluentReport.Samples/output`](samples/Fluen
 ## Documentation
 
 - [API reference](docs/api.md) — builders, elements, PDF/HTML options, RDLC options
+- [llms-full.txt](https://mathiasgonzalez.github.io/FluentReport/llms-full.txt) — the whole API and usage guide in one file, for AI coding assistants ([llms.txt](llms.txt) is the index)
 - [RDLC support and limitations](docs/rdlc-limitations.md)
 - [Migration to 2.0](docs/migration-2.0.md)
 - [Migration to 3.0](docs/migration-3.0.md)
