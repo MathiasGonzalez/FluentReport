@@ -82,6 +82,8 @@ public sealed class RdlcDocumentFactory
         var root = xdoc.Root ?? throw new InvalidOperationException("RDLC XML has no root element.");
         var culture = _options.Culture ?? ReportCulture(root);
 
+        _fieldDefinitions = ParseFieldDefinitions(root);
+
         // Dataset <Filters> are applied first; every aggregate then sees the filtered rows.
         _effectiveDatasets = _datasets;
         _evaluator = CreateEvaluator(culture, reportName);
@@ -113,8 +115,35 @@ public sealed class RdlcDocumentFactory
         var evaluator = new RdlcExpressionEvaluator(
             _parameters, _effectiveDatasets, _globals, culture, Warn, _options.StrictExpressions);
         evaluator.DefaultGlobals["ExecutionTime"] = DateTime.Now;
+        foreach (var (name, definition) in _fieldDefinitions)
+            evaluator.FieldDefinitions[name] = definition;
         if (reportName != null) evaluator.DefaultGlobals["ReportName"] = reportName;
         return evaluator;
+    }
+
+    private Dictionary<string, List<(string? DataField, string? Expression)>> _fieldDefinitions = new();
+
+    /// <summary>
+    /// <c>&lt;Field Name="X"&gt;</c> → its <c>&lt;DataField&gt;</c> (the member to read, which the designer may
+    /// name differently) or <c>&lt;Value&gt;</c> (a calculated field).
+    /// </summary>
+    private Dictionary<string, List<(string? DataField, string? Expression)>> ParseFieldDefinitions(XElement root)
+    {
+        var result = new Dictionary<string, List<(string?, string?)>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var field in root.Elements(_ns + "DataSets").Elements(_ns + "DataSet")
+                     .Elements(_ns + "Fields").Elements(_ns + "Field"))
+        {
+            var name = field.Attribute("Name")?.Value;
+            if (string.IsNullOrEmpty(name)) continue;
+            var dataField = field.Element(_ns + "DataField")?.Value.Trim();
+            var expression = field.Element(_ns + "Value")?.Value.Trim();
+            if (string.IsNullOrEmpty(expression) && (string.IsNullOrEmpty(dataField) || dataField.Equals(name, StringComparison.OrdinalIgnoreCase)))
+                continue; // reads the member named like the field: the default
+            if (!result.TryGetValue(name, out var list))
+                result[name] = list = new List<(string?, string?)>();
+            list.Add((string.IsNullOrEmpty(expression) ? dataField : null, string.IsNullOrEmpty(expression) ? null : expression));
+        }
+        return result;
     }
 
     private IDictionary<string, IEnumerable<object>>? ApplyDataSetFilters(XElement root)
@@ -650,12 +679,48 @@ public sealed class RdlcDocumentFactory
         if (img.SourceBytes.Length > 0 && img.MimeType == null)
             Warn($"Image '{el.Attribute("Name")?.Value}' is not a recognized image format and will not be rendered.");
 
-        var fixedW = ParseUnit(el.Element(_ns + "Width")?.Value);
-        var fixedH = ParseUnit(el.Element(_ns + "Height")?.Value);
-        if (fixedW > 0) img.FixedWidth = fixedW;
-        if (fixedH > 0) img.FixedHeight = fixedH;
-
+        ApplySizing(img, el);
         return img;
+    }
+
+    /// <summary>
+    /// Sizes an image like SSRS: <c>Fit</c> stretches it to the item's box, <c>FitProportional</c> scales it
+    /// to fit inside the box keeping its aspect ratio, <c>AutoSize</c> (the default) uses its natural size
+    /// from its pixels and resolution, and <c>Clip</c> uses its natural size scaled down to fit the box
+    /// (it cannot be cropped). Images whose size cannot be read fill the box.
+    /// </summary>
+    private void ApplySizing(ImageElement img, XElement el)
+    {
+        float boxW = ParseUnit(el.Element(_ns + "Width")?.Value);
+        float boxH = ParseUnit(el.Element(_ns + "Height")?.Value);
+        var sizing = el.Element(_ns + "Sizing")?.Value.Trim() ?? "AutoSize";
+        var natural = img.MimeType == null ? null : ImageDimensions.SizeInPoints(img.SourceBytes);
+
+        float width, height;
+        if (natural is not { } n || sizing.Equals("Fit", StringComparison.OrdinalIgnoreCase))
+        {
+            (width, height) = (boxW, boxH);
+        }
+        else if (sizing.Equals("FitProportional", StringComparison.OrdinalIgnoreCase))
+        {
+            float scale = boxW > 0 && boxH > 0 ? Math.Min(boxW / n.Width, boxH / n.Height)
+                        : boxW > 0 ? boxW / n.Width
+                        : boxH > 0 ? boxH / n.Height
+                        : 1f;
+            (width, height) = (n.Width * scale, n.Height * scale);
+        }
+        else if (sizing.Equals("Clip", StringComparison.OrdinalIgnoreCase))
+        {
+            float scale = Math.Min(1f, Math.Min(boxW > 0 ? boxW / n.Width : 1f, boxH > 0 ? boxH / n.Height : 1f));
+            (width, height) = (n.Width * scale, n.Height * scale);
+        }
+        else
+        {
+            (width, height) = n; // AutoSize: the item grows to the image
+        }
+
+        if (width > 0) img.FixedWidth = width;
+        if (height > 0) img.FixedHeight = height;
     }
 
     private ImageElement MissingImage(string reason)

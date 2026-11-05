@@ -20,8 +20,8 @@ namespace FluentReport.Rdlc;
 /// group, data region) unless the expression names one, else the only dataset.
 /// </para>
 /// <para>
-/// Supported: literals, <c>Fields!X.Value</c>, <c>Parameters!X.Value</c>/<c>.Label</c>,
-/// <c>Globals!X(.Value)</c>, operators <c>^ * / \ Mod + - &amp; = &lt;&gt; &lt; &gt; &lt;= &gt;= Not And AndAlso Or OrElse Xor</c>,
+/// Supported: literals, <c>Fields!X.Value</c> (through the report's field definitions), <c>Parameters!X.Value</c>/<c>.Label</c>,
+/// <c>Globals!X(.Value)</c>, operators <c>^ * / \ Mod + - &amp; = &lt;&gt; &lt; &gt; &lt;= &gt;= Is IsNot Not And AndAlso Or OrElse Xor</c>,
 /// and the functions listed in <see cref="CallFunction"/>. Anything else is reported through the
 /// warning callback (or thrown in strict mode) and evaluates to an empty value.
 /// </para>
@@ -37,6 +37,13 @@ internal sealed class RdlcExpressionEvaluator
     private readonly IDictionary<string, IEnumerable<object>>? _datasets;
     private readonly IDictionary<string, object>? _globals;
     private readonly Action<string>? _warn;
+    private int _calculatedFieldDepth;
+
+    /// <summary>
+    /// The report's <c>&lt;Field&gt;</c> definitions by field name: the member each one reads
+    /// (<c>&lt;DataField&gt;</c>, which may differ from the name) or its expression (calculated field).
+    /// </summary>
+    internal Dictionary<string, List<(string? DataField, string? Expression)>> FieldDefinitions { get; } = new(StringComparer.OrdinalIgnoreCase);
     private readonly bool _strict;
     private readonly Dictionary<string, Node> _parsed = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<object>> _materialized = new(StringComparer.OrdinalIgnoreCase);
@@ -245,22 +252,52 @@ internal sealed class RdlcExpressionEvaluator
 
     // ── Data access ──────────────────────────────────────────────────────────
 
-    private static object? ResolveField(string name, object? row)
+    /// <summary>
+    /// Value of <c>Fields!name</c> for <paramref name="row"/>: through the field's <c>&lt;DataField&gt;</c>
+    /// or calculated <c>&lt;Value&gt;</c> when the report declares one, else the member named like the field.
+    /// </summary>
+    private object? FieldValue(string name, object? row)
     {
+        if (row == null) return null;
+
+        if (FieldDefinitions.TryGetValue(name, out var definitions))
+        {
+            foreach (var (dataField, expression) in definitions)
+            {
+                if (expression != null)
+                {
+                    if (++_calculatedFieldDepth > 32)
+                        throw new RdlcExpressionException($"calculated field '{name}' refers to itself");
+                    try { return EvaluateValue(expression, row); }
+                    finally { _calculatedFieldDepth--; }
+                }
+                if (dataField != null && TryResolveMember(dataField, row, out var mapped))
+                    return mapped is DBNull ? null : mapped;
+            }
+        }
+
+        return TryResolveMember(name, row, out var value) && value is not DBNull ? value : null;
+    }
+
+    private static bool TryResolveMember(string name, object row, out object? value)
+    {
+        value = null;
         switch (row)
         {
-            case null:
-                return null;
             case IDictionary<string, object?> dict:
-                if (dict.TryGetValue(name, out var exact)) return exact;
-                return dict.FirstOrDefault(kv => string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase)).Value;
+                if (dict.TryGetValue(name, out value)) return true;
+                foreach (var kv in dict)
+                    if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase)) { value = kv.Value; return true; }
+                return false;
             case IReadOnlyDictionary<string, object?> ro:
-                if (ro.TryGetValue(name, out var roExact)) return roExact;
-                return ro.FirstOrDefault(kv => string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase)).Value;
+                if (ro.TryGetValue(name, out value)) return true;
+                foreach (var kv in ro)
+                    if (string.Equals(kv.Key, name, StringComparison.OrdinalIgnoreCase)) { value = kv.Value; return true; }
+                return false;
             case IDictionary raw:
                 foreach (DictionaryEntry e in raw)
-                    if (e.Key is string k && string.Equals(k, name, StringComparison.OrdinalIgnoreCase)) return e.Value;
-                return null;
+                    if (e.Key is string k && string.Equals(k, name, StringComparison.OrdinalIgnoreCase)) { value = e.Value; return true; }
+                return false;
         }
 
         var getter = MemberCache.GetOrAdd((row.GetType(), name), static key =>
@@ -270,7 +307,9 @@ internal sealed class RdlcExpressionEvaluator
             if (key.Item1.GetField(key.Item2, flags) is { } f) return f.GetValue;
             return null;
         });
-        return getter?.Invoke(row);
+        if (getter == null) return false;
+        value = getter(row);
+        return true;
     }
 
     private List<object>? GetDataset(string? name)
@@ -345,7 +384,7 @@ internal sealed class RdlcExpressionEvaluator
                 return s.Substring(start, len);
             }
             case "REPLACE": return Str(0).Replace(Str(1), Str(2), StringComparison.Ordinal);
-            case "ISNOTHING": return Arg(0) is null or "";
+            case "ISNOTHING": return Arg(0) is null; // VB: "" is not Nothing
             case "NOW": return DateTime.Now;
             case "TODAY": return DateTime.Today;
 
@@ -511,7 +550,7 @@ internal sealed class RdlcExpressionEvaluator
             switch (Collection.ToUpperInvariant())
             {
                 case "FIELDS":
-                    return ResolveField(Name, row);
+                    return ev.FieldValue(Name, row);
                 case "PARAMETERS":
                     if (ev._parameters != null && ev._parameters.TryGetValue(Name, out var p)) return p;
                     ev._warn?.Invoke($"Parameter '{Name}' was not supplied.");
@@ -567,6 +606,8 @@ internal sealed class RdlcExpressionEvaluator
                 case "&": return ev.ToDisplay(l) + ev.ToDisplay(r);
                 case "=": return ev.AreEqual(l, r);
                 case "<>": return !ev.AreEqual(l, r);
+                case "IS": return ReferenceEquals(l, r); // `x Is Nothing` is true only for a missing value, not ""
+                case "ISNOT": return !ReferenceEquals(l, r);
                 case "<": return ev.Compare(l, r) < 0;
                 case ">": return ev.Compare(l, r) > 0;
                 case "<=": return ev.Compare(l, r) <= 0;
@@ -674,9 +715,15 @@ internal sealed class RdlcExpressionEvaluator
         private Node ParseComparison()
         {
             var left = ParseConcat();
-            while (Peek.Kind == TokenKind.Operator && ComparisonOps.Contains(Peek.Text))
-                left = new Binary(Next().Text, left, ParseConcat());
-            return left;
+            while (true)
+            {
+                if (Peek.Kind == TokenKind.Operator && ComparisonOps.Contains(Peek.Text))
+                    left = new Binary(Next().Text, left, ParseConcat());
+                else if (IsKeyword("Is") || IsKeyword("IsNot"))
+                    left = new Binary(Next().Text.ToUpperInvariant(), left, ParseConcat()); // VB reference comparison
+                else
+                    return left;
+            }
         }
 
         private Node ParseConcat()
