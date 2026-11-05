@@ -83,6 +83,8 @@ doc.GeneratePdf("report.pdf", new PdfOptions
 
 Fonts are embedded whole (SkiaSharp does not subset them), which adds a few hundred KB per font face to each PDF.
 
+Without a `FontResolver`, text uses the requested system font. When the system has no usable font (common on Linux and in containers without fonts installed), the package falls back to its bundled **DejaVu Sans** (regular and bold; italic is synthesized), so text is never rendered empty. For consistent output on every server, pass your own fonts with `FontResolver`. DejaVu Sans is distributed under its own permissive license, included in the package as `LICENSE-DejaVu.txt`.
+
 ## Ecosystem packages
 
 | Package | Purpose |

@@ -224,6 +224,8 @@ Content flows across pages: columns split between items (also nested or inside p
 
 Fonts are embedded whole (SkiaSharp does not subset), adding a few hundred KB per face.
 
+When neither the resolver nor the system provides a usable font (typical on Linux and in containers without fonts), FluentReport uses its bundled DejaVu Sans (regular and bold; italic is synthesized). Use `FontResolver` for the same output on every machine.
+
 ---
 
 ## Renderer options

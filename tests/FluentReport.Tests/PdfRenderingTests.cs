@@ -118,6 +118,48 @@ public class PdfRenderingTests
         Assert.DoesNotContain((ushort)0, glyphs);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void NoSystemFonts_UsesBundledFont(bool bold, bool italic)
+    {
+        // What SkiaSharp 4 returns on Linux when it finds no fonts: an empty typeface.
+        using var fonts = new FontCache(null, (_, _) => SKTypeface.Empty);
+        var font = fonts.Font(new TextStyle { Bold = bold, Italic = italic });
+
+        Assert.Same(BundledFonts.For(bold), font.Typeface);
+        Assert.DoesNotContain((ushort)0, font.GetGlyphs("Hola ñandú 123"));
+        Assert.False(font.Embolden);
+        Assert.Equal(italic, font.SkewX != 0);
+    }
+
+    [Fact]
+    public void NoSystemFonts_PdfStillHasText()
+    {
+        using var fonts = new FontCache(null, (_, _) => SKTypeface.Empty);
+        using var stream = new MemoryStream();
+        using (var pdf = SKDocument.CreatePdf(stream))
+        {
+            var canvas = pdf.BeginPage(200, 100);
+            using var paint = new SKPaint { Color = SKColors.Black };
+            canvas.DrawText("Hola", 10, 50, SKTextAlign.Left, fonts.Font(new TextStyle()), paint);
+            pdf.EndPage();
+        }
+
+        Assert.Contains("DejaVuSans", Encoding.Latin1.GetString(stream.ToArray()));
+    }
+
+    [Fact]
+    public void BundledFonts_DoNotOutliveRender()
+    {
+        // Bundled typefaces are shared by the process: disposing a cache must leave them usable.
+        using (var fonts = new FontCache(null, (_, _) => SKTypeface.Empty))
+            fonts.Font(new TextStyle());
+
+        Assert.True(BundledFonts.HasGlyphs(BundledFonts.Regular));
+    }
+
     // ── Images ───────────────────────────────────────────────────────────────
 
     [Fact]
