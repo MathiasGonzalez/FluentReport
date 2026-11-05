@@ -4,6 +4,8 @@
 
 **Excel (.xlsx)** renderer for FluentReport. Generates Excel workbooks from the same document used for HTML, using **ClosedXML** as the writing engine.
 
+> Using an AI coding assistant? Point it to [llms-full.txt](https://mathiasgonzalez.github.io/FluentReport/llms-full.txt): the whole API and usage guide in one file.
+
 ## Installation
 
 ```shell

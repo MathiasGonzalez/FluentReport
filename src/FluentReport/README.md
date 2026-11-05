@@ -4,6 +4,8 @@
 
 **PDF** renderer for FluentReport: build reports with a fluent C# API and render them to PDF (or PNG) with SkiaSharp. Works on Windows, macOS and Linux.
 
+> Using an AI coding assistant? Point it to [llms-full.txt](https://mathiasgonzalez.github.io/FluentReport/llms-full.txt): the whole API and usage guide in one file.
+
 ## Installation
 
 ```shell

@@ -4,6 +4,8 @@
 
 Document model and fluent API for **FluentReport**. You normally install a renderer (`FluentReport` for PDF, `FluentReport.Html`, `FluentReport.Excel`) or the importer (`FluentReport.Rdlc`), which bring this package along. Install it directly to build documents in a project that does not render them, or to write your own renderer.
 
+> Using an AI coding assistant? Point it to [llms-full.txt](https://mathiasgonzalez.github.io/FluentReport/llms-full.txt): the whole API and usage guide in one file.
+
 ## Installation
 
 ```shell

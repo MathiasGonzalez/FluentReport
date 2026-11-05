@@ -7,6 +7,8 @@ on:
       - '.github/workflows/landing-pages.yml'
       - 'README.md'
       - 'logo.png'
+      - 'llms.txt'
+      - 'llms-full.txt'
   workflow_dispatch:
 
 permissions:
@@ -34,6 +36,8 @@ jobs:
         run: |
           mkdir -p _site
           cp logo.png _site/logo.png
+          # Documentation for AI coding assistants (https://llmstxt.org).
+          cp llms.txt llms-full.txt _site/
           cat > _site/index.html << 'EOF'
           <!DOCTYPE html>
           <html lang="en">
