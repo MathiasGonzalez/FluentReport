@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>FluentReport.Core</PackageId>
-    <Description>Document model and fluent API for FluentReport: elements, builders and styling, shared by the HTML and Excel renderers and the RDLC importer.</Description>
-    <PackageTags>report;fluent;html;excel</PackageTags>
+    <Description>Document model and fluent API for FluentReport: elements, builders and styling, shared by the PDF, HTML and Excel renderers and the RDLC importer. Has no dependencies.</Description>
+    <PackageTags>report;fluent;pdf;html;excel;rdlc</PackageTags>
   </PropertyGroup>
 </Project>

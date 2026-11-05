@@ -90,6 +90,11 @@ Common options:
 | `PageDividerStyle` | dashed separator CSS | Inline CSS used between pages in multi-page output. |
 | `OutlookCompatible` | `false` | Enables Outlook desktop compatibility tweaks (`role="presentation"`, `bgcolor` fallback, OfficeDocumentSettings in full document mode). |
 
+## Limitations
+
+- Borders set on individual table cells (for example by an imported RDLC report) are not drawn; use `table.BorderEachCell(...)` for a grid. Borders on other elements are rendered.
+- Charts, canvases and rotated text render their fallback.
+
 ## Ecosystem packages
 
 | Package | Purpose |

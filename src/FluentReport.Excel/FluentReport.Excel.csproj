@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>FluentReport.Excel</PackageId>
-    <Description>Excel (.xlsx) renderer for FluentReport, built on ClosedXML.</Description>
+    <Description>Excel (.xlsx) renderer for FluentReport: renders the same documents as the PDF and HTML renderers to worksheets, built on ClosedXML.</Description>
     <PackageTags>excel;xlsx;report;fluent;closedxml</PackageTags>
   </PropertyGroup>
   <ItemGroup>

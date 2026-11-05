@@ -60,6 +60,15 @@ foreach (var warning in factory.Warnings)
 
 Textboxes (with paragraphs and runs, `Format`, borders), rectangles, lines, images (embedded, database, external), tablix tables and lists (row groups with group headers and subtotals, sorting, filters, hidden rows/columns, column spans), visibility, page header/footer with page numbers, page size and margins. Expressions support field/parameter/global references, VB operators, `IIF`/`Switch`, `Format`, common conversion and text functions, aggregates scoped to groups, `RowNumber`, `RunningValue` and `Previous`.
 
+Aggregates follow SSRS scoping: without a scope argument, `Sum(...)` covers the current detail row, group or table; pass a group, table or dataset name (`Sum(Fields!Total.Value, "Lines")`) to aggregate over it. `Globals!PageNumber` and `TotalPages` render the real page numbers.
+
+### Changes in 2.1
+
+- Row groups render a header and subtotal per group instead of repeating them per row.
+- An aggregate without a scope in a detail row now covers that row (it used to cover the whole dataset). Name the dataset to keep a grand total.
+- `First(x, "Dataset")` reads the named dataset instead of the current row.
+- `Rectangle`, `Format`, borders, `Hidden`, filters and `RowNumber` / `RunningValue` / `Previous` are imported; they used to be skipped or reported as unsupported.
+
 Full list and limitations: [rdlc-limitations.md](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/rdlc-limitations.md).
 
 ## Ecosystem packages
