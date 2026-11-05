@@ -115,16 +115,16 @@ public class RdlcRegressionTests
     public void UnsupportedExpression_IsReportedAsWarning()
     {
         var factory = new RdlcDocumentFactory();
-        factory.ParseFromXml(Report(Textbox("=RowNumber(Nothing)")));
+        factory.ParseFromXml(Report(Textbox("=InStr(\"abc\", \"b\")")));
 
-        Assert.Contains(factory.Warnings, w => w.Contains("RowNumber"));
+        Assert.Contains(factory.Warnings, w => w.Contains("InStr"));
     }
 
     [Fact]
     public void UnsupportedExpression_ThrowsInStrictMode()
     {
         var factory = new RdlcDocumentFactory(options: new RdlcImportOptions { StrictExpressions = true });
-        Assert.Throws<NotSupportedException>(() => factory.ParseFromXml(Report(Textbox("=RowNumber(Nothing)"))));
+        Assert.Throws<NotSupportedException>(() => factory.ParseFromXml(Report(Textbox("=InStr(\"abc\", \"b\")"))));
     }
 
     // ── Layout and styles ────────────────────────────────────────────────────
@@ -235,9 +235,9 @@ public class RdlcRegressionTests
     public void UnsupportedReportItems_AreReported()
     {
         var factory = new RdlcDocumentFactory();
-        factory.ParseFromXml(Report("<Rectangle Name=\"Box\"><Top>0in</Top></Rectangle>" + Textbox("x")));
+        factory.ParseFromXml(Report("<Subreport Name=\"Box\"><Top>0in</Top></Subreport>" + Textbox("x")));
 
-        Assert.Contains(factory.Warnings, w => w.Contains("Rectangle") && w.Contains("Box"));
+        Assert.Contains(factory.Warnings, w => w.Contains("Subreport") && w.Contains("Box"));
     }
 
     // ── External images ──────────────────────────────────────────────────────

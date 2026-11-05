@@ -691,9 +691,9 @@ public class RdlcTests
         var evaluator = new RdlcExpressionEvaluator(datasets: datasets);
         var row = new { Name = "FromRow" };
 
-        // When a row is available, First() should prefer the current row
-        var result = evaluator.Evaluate(@"=First(Fields!Name.Value, ""ds"")", row);
-        Assert.Equal("FromRow", result);
+        // Without a scope, First() reads the current row; a named scope reads that dataset.
+        Assert.Equal("FromRow", evaluator.Evaluate("=First(Fields!Name.Value)", row));
+        Assert.Equal("FromDataset", evaluator.Evaluate(@"=First(Fields!Name.Value, ""ds"")", row));
     }
 
     [Fact]
@@ -1310,7 +1310,7 @@ public class RdlcTests
     public void Evaluate_Globals_MissingKey_ReturnsEmpty()
     {
         var evaluator = new RdlcExpressionEvaluator();
-        Assert.Equal(string.Empty, evaluator.Evaluate("=Globals!PageNumber.Value"));
+        Assert.Equal(string.Empty, evaluator.Evaluate("=Globals!UserID.Value"));
     }
 
     [Fact]
