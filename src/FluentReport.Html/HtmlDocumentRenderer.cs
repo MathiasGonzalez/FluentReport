@@ -3,6 +3,7 @@ using FluentReport.Elements;
 using FluentReport.Styling;
 using System.Globalization;
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Text;
 
 namespace FluentReport.Html;
@@ -135,6 +136,8 @@ public class HtmlDocumentRenderer
 
     private string RenderElement(IElement element)
     {
+        // Recurses once per nesting level; failing here is catchable, a stack overflow is not.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         return element switch
         {
             ColumnElement col     => RenderColumn(col),

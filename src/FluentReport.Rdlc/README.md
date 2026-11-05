@@ -69,6 +69,8 @@ Aggregates follow SSRS scoping: without a scope argument, `Sum(...)` covers the 
 - `First(x, "Dataset")` reads the named dataset instead of the current row.
 - `Rectangle`, `Format`, borders, `Hidden`, filters and `RowNumber` / `RunningValue` / `Previous` are imported; they used to be skipped or reported as unsupported.
 
+Report definitions from users can be rendered safely: DTDs and `<Code>` are never processed, external images stay inside `ExternalImageDirectory`, and very deep or long expressions fail with a warning instead of crashing. See [SECURITY.md](https://github.com/MathiasGonzalez/FluentReport/blob/main/SECURITY.md).
+
 Full list and limitations: [rdlc-limitations.md](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/rdlc-limitations.md).
 
 ## Ecosystem packages

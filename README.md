@@ -130,6 +130,7 @@ See the generated files in [`samples/FluentReport.Samples/output`](samples/Fluen
 - [RDLC support and limitations](docs/rdlc-limitations.md)
 - [Migration to 2.0](docs/migration-2.0.md)
 - [Migration to 3.0](docs/migration-3.0.md)
+- [Security](SECURITY.md) — reporting vulnerabilities and rendering untrusted reports
 - [UY fiscal document samples](docs/uy-fiscal-samples.md) — salary slip, delivery note, payment receipt
 - Package READMEs: [PDF](src/FluentReport/README.md) · [Core](src/FluentReport.Core/README.md) · [Html](src/FluentReport.Html/README.md) · [Excel](src/FluentReport.Excel/README.md) · [Rdlc](src/FluentReport.Rdlc/README.md)
 

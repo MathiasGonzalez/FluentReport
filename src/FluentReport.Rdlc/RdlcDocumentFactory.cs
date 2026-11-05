@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Xml;
 using System.Xml.Linq;
 using FluentReport.Core;
 using FluentReport.Elements;
@@ -61,16 +62,63 @@ public sealed class RdlcDocumentFactory
     {
         var fullPath = Path.GetFullPath(path);
         using var stream = File.OpenRead(fullPath);
-        return Parse(XDocument.Load(stream), Path.GetDirectoryName(fullPath), Path.GetFileNameWithoutExtension(fullPath));
+        return Parse(LoadXml(stream), Path.GetDirectoryName(fullPath), Path.GetFileNameWithoutExtension(fullPath));
     }
 
     /// <summary>Parses RDLC XML from a stream.</summary>
     public Document ParseFromStream(Stream stream)
-        => Parse(XDocument.Load(stream), reportDirectory: null, reportName: null);
+        => Parse(LoadXml(stream), reportDirectory: null, reportName: null);
 
     /// <summary>Parses RDLC XML from a string.</summary>
     public Document ParseFromXml(string xml)
-        => Parse(XDocument.Parse(xml), reportDirectory: null, reportName: null);
+    {
+        using var reader = new StringReader(xml);
+        return Parse(LoadXml(reader), reportDirectory: null, reportName: null);
+    }
+
+    /// <summary>
+    /// Deepest element nesting accepted. Real reports stay well below it (a tablix inside a rectangle
+    /// is about 30 levels); a deeper document is rejected because building it recurses once per level
+    /// and running out of stack ends the process.
+    /// </summary>
+    internal const int MaxXmlDepth = 256;
+
+    // RDLC never declares a DTD: prohibiting it rules out entity expansion and external entities
+    // regardless of the runtime's defaults.
+    private static XmlReaderSettings XmlSettings() => new()
+    {
+        DtdProcessing = DtdProcessing.Prohibit,
+        XmlResolver = null,
+        IgnoreComments = true,
+    };
+
+    private static XDocument LoadXml(Stream stream)
+    {
+        using var reader = XmlReader.Create(stream, XmlSettings());
+        return CheckDepth(XDocument.Load(reader));
+    }
+
+    private static XDocument LoadXml(TextReader text)
+    {
+        using var reader = XmlReader.Create(text, XmlSettings());
+        return CheckDepth(XDocument.Load(reader));
+    }
+
+    private static XDocument CheckDepth(XDocument xdoc)
+    {
+        if (xdoc.Root == null) return xdoc;
+        var pending = new Stack<(XElement Element, int Depth)>();
+        pending.Push((xdoc.Root, 1));
+        while (pending.Count > 0)
+        {
+            var (element, depth) = pending.Pop();
+            if (depth > MaxXmlDepth)
+                throw new InvalidOperationException($"RDLC XML is nested more than {MaxXmlDepth} elements deep.");
+            foreach (var child in element.Elements())
+                pending.Push((child, depth + 1));
+        }
+        return xdoc;
+    }
 
     // ── Core parse pipeline ──────────────────────────────────────────────────
 
@@ -759,8 +807,21 @@ public sealed class RdlcDocumentFactory
             return MissingImage($"external image '{path}' is outside the allowed directory");
         if (!File.Exists(fullPath))
             return MissingImage($"external image '{path}' was not found");
+        if (PassesThroughLink(fullPath, root))
+            return MissingImage($"external image '{path}' goes through a symbolic link; links could point outside the allowed directory");
 
         return new ImageElement(File.ReadAllBytes(fullPath));
+    }
+
+    /// <summary>True when <paramref name="fullPath"/> or a directory between it and <paramref name="root"/> is a link.</summary>
+    private static bool PassesThroughLink(string fullPath, string root)
+    {
+        for (var path = fullPath; path.Length > root.Length; path = Path.GetDirectoryName(path)!)
+        {
+            FileSystemInfo info = path == fullPath ? new FileInfo(path) : new DirectoryInfo(path);
+            if (info.LinkTarget != null) return true;
+        }
+        return false;
     }
 
     private IElement BuildRectangle(XElement el, object? row)
@@ -1133,10 +1194,12 @@ public sealed class RdlcDocumentFactory
             case "Between":
                 return targets.Count >= 2 && _evaluator.Compare(value, targets[0]) >= 0 && _evaluator.Compare(value, targets[1]) <= 0;
             case "Like":
+                // NonBacktracking runs in linear time: a pattern such as "*a*a*a*a*b" cannot stall the render.
                 var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(_evaluator.ToDisplay(First()))
                     .Replace("\\*", ".*").Replace("\\?", ".") + "$";
                 return System.Text.RegularExpressions.Regex.IsMatch(_evaluator.ToDisplay(value), pattern,
-                    System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+                    System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline
+                    | System.Text.RegularExpressions.RegexOptions.NonBacktracking);
             default:
                 Warn($"Filter operator '{op}' is not supported; the filter was ignored.");
                 return true;

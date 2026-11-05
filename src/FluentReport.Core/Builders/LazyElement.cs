@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using FluentReport.Elements;
 
 namespace FluentReport.Builders;
@@ -17,6 +18,8 @@ internal static class ElementTree
     /// <summary>Returns <paramref name="element"/> with every <see cref="LazyElement"/> in its subtree built.</summary>
     public static IElement Resolve(IElement element)
     {
+        // Recurses once per nesting level; failing here is catchable, a stack overflow is not.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var resolved = element is LazyElement lazy ? lazy.Build() : element;
         switch (resolved)
         {

@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using ClosedXML.Excel;
 using FluentReport.Core;
 using FluentReport.Elements;
@@ -98,6 +99,8 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
         int endCol,
         StyleInfo? style)
     {
+        // Recurses once per nesting level; failing here is catchable, a stack overflow is not.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         switch (element)
         {
             case ColumnElement col:

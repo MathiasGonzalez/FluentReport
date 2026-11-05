@@ -69,7 +69,7 @@ Rows, images, charts and canvases are not split: they move to the next page, and
 | `.GetPdfPageCount(options?)` | Number of pages |
 | `container.Canvas(width, height, (SKCanvas canvas, SKRect rect) => …)` | Custom vector drawing (PDF only) |
 
-`PdfOptions`: `FontResolver` (e.g. embedded fonts; returned typefaces are cached and never disposed), `Title`, `Author`.
+`PdfOptions`: `FontResolver` (e.g. embedded fonts; returned typefaces are cached and never disposed), `Title`, `Author`, `MaxImagePixels` (largest image decoded, 100 MP by default; larger images throw instead of exhausting memory).
 
 ```csharp
 var regular = SKTypeface.FromFile("fonts/Inter-Regular.ttf");

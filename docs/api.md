@@ -221,6 +221,7 @@ Content flows across pages: columns split between items (also nested or inside p
 |--------|-------------|
 | `FontResolver` | `Func<TextStyle, SKTypeface?>` — e.g. embedded fonts. Return `null` for the system font. Typefaces are cached per render and never disposed. |
 | `Title` / `Author` | PDF metadata. |
+| `MaxImagePixels` | Largest image decoded, in pixels (default 100 MP). Larger images throw `InvalidOperationException` before they are decoded, so a small compressed file cannot use gigabytes of memory. `null` removes the limit. |
 
 Fonts are embedded whole (SkiaSharp does not subset), adding a few hundred KB per face.
 
