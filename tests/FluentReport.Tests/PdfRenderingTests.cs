@@ -173,6 +173,89 @@ public class PdfRenderingTests
     }
 
     [Fact]
+    public void ImageAboveThePixelLimit_ThrowsBeforeDecoding()
+    {
+        // 389 KB on disk, 10,000 x 11,000 pixels once decoded.
+        var bomb = BlankPng(10_000, 11_000);
+        var doc = Document.Create(c => c.Page(p => p.Content().Image(bomb)));
+
+        var ex = Assert.Throws<InvalidOperationException>(() => doc.GeneratePdf(TestFonts.Options));
+        Assert.Contains("MaxImagePixels", ex.Message);
+        Assert.Throws<InvalidOperationException>(() => doc.GeneratePdf());
+    }
+
+    [Fact]
+    public void MaxImagePixels_IsConfigurable()
+    {
+        using var bitmap = Noise(200, 200, 3);
+        var doc = Document.Create(c => c.Page(p => p.Content().Image(Encode(bitmap, SKEncodedImageFormat.Png))));
+
+        Assert.Throws<InvalidOperationException>(() => doc.GeneratePdf(new PdfOptions { FontResolver = TestFonts.Resolve, MaxImagePixels = 10_000 }));
+        Assert.True(doc.GeneratePdf(new PdfOptions { FontResolver = TestFonts.Resolve, MaxImagePixels = null }).Length > 0);
+    }
+
+    [Fact]
+    public void DeepElementTree_ThrowsInsteadOfOverflowingTheStack()
+    {
+        IElement deep = new TextElement("x");
+        for (int i = 0; i < 100_000; i++) deep = new PaddingElement { Child = deep };
+
+        // The fluent API resolves the tree first...
+        Assert.Throws<InsufficientExecutionStackException>(() => Document.Create(c => c.Page(p => p.Content().Element(deep))));
+
+        // ...and translation layers that build settings directly reach the renderers.
+        var settings = new DocumentSettings();
+        settings.Pages.Add(new PageSettings { ContentElement = deep });
+        var doc = Document.FromSettings(settings);
+        Assert.Throws<InsufficientExecutionStackException>(() => doc.GeneratePdf(TestFonts.Options));
+        Assert.Throws<InsufficientExecutionStackException>(() => doc.GenerateHtml());
+    }
+
+    /// <summary>A grayscale PNG of zeros: tiny compressed, huge decoded.</summary>
+    private static byte[] BlankPng(int width, int height)
+    {
+        static void Chunk(Stream output, string type, byte[] data)
+        {
+            var typeBytes = Encoding.ASCII.GetBytes(type);
+            output.Write(BitConverter.GetBytes(System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(data.Length)));
+            output.Write(typeBytes);
+            output.Write(data);
+            var crc = Crc32([.. typeBytes, .. data]);
+            output.Write(BitConverter.GetBytes(System.Buffers.Binary.BinaryPrimitives.ReverseEndianness(crc)));
+        }
+
+        var header = new byte[13];
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header, width);
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32BigEndian(header.AsSpan(4), height);
+        header[8] = 8; // 8-bit grayscale
+
+        using var pixels = new MemoryStream();
+        using (var zlib = new System.IO.Compression.ZLibStream(pixels, System.IO.Compression.CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            var row = new byte[width + 1];
+            for (int y = 0; y < height; y++) zlib.Write(row);
+        }
+
+        static uint Crc32(byte[] bytes)
+        {
+            uint crc = 0xFFFFFFFF;
+            foreach (var b in bytes)
+            {
+                crc ^= b;
+                for (int k = 0; k < 8; k++) crc = (crc & 1) != 0 ? 0xEDB88320 ^ (crc >> 1) : crc >> 1;
+            }
+            return ~crc;
+        }
+
+        using var png = new MemoryStream();
+        png.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+        Chunk(png, "IHDR", header);
+        Chunk(png, "IDAT", pixels.ToArray());
+        Chunk(png, "IEND", []);
+        return png.ToArray();
+    }
+
+    [Fact]
     public void ImageRepeatedOnEveryPage_IsEmbeddedOnce()
     {
         using var logo = Noise(200, 200, 2);

@@ -17,4 +17,14 @@ public sealed class PdfOptions
 
     /// <summary>PDF document author metadata.</summary>
     public string? Author { get; init; }
+
+    /// <summary>Default for <see cref="MaxImagePixels"/>: 100 megapixels (about 400 MB once decoded).</summary>
+    public const long DefaultMaxImagePixels = 100_000_000;
+
+    /// <summary>
+    /// Largest image, in pixels (width × height), that is decoded. A small compressed file can expand to
+    /// gigabytes, so larger images throw <see cref="InvalidOperationException"/> instead of exhausting
+    /// memory. <c>null</c> removes the limit. Default <see cref="DefaultMaxImagePixels"/>.
+    /// </summary>
+    public long? MaxImagePixels { get; init; } = DefaultMaxImagePixels;
 }

@@ -660,5 +660,15 @@ public class ExcelRenderingTests
             if (sheet.Cell(1, c).GetString().Length > 0) lastCol = c;
         Assert.True(lastCol <= 10, $"Content spilled past column 10 (lastCol={lastCol})");
     }
-}
 
+    [Fact]
+    public void DeepElementTree_ThrowsInsteadOfOverflowingTheStack()
+    {
+        FluentReport.Elements.IElement deep = new FluentReport.Elements.TextElement("x");
+        for (int i = 0; i < 100_000; i++) deep = new FluentReport.Elements.PaddingElement { Child = deep };
+        var settings = new DocumentSettings();
+        settings.Pages.Add(new PageSettings { ContentElement = deep });
+
+        Assert.Throws<InsufficientExecutionStackException>(() => Document.FromSettings(settings).GenerateExcel());
+    }
+}

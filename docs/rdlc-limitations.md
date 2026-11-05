@@ -66,3 +66,12 @@ Not supported (reported as warnings): `Lookup`, `LookupSet`, `MultiLookup`, `Rep
 - Each `<ReportSection>` becomes a page.
 - Reflection is used for POCO rows; for trimmed/AOT apps use dictionary rows.
 - The HTML renderer does not draw borders on table cells (PDF does).
+
+## Limits for untrusted reports
+
+- DTDs are rejected (`XmlException`): RDLC never uses them, and they are how XXE and entity-expansion attacks work.
+- Documents nested more than 256 elements deep are rejected (`InvalidOperationException`). A tablix inside a rectangle is about 30 levels.
+- Expressions with more than 100 nested parentheses, function calls, `Not` or signs, or more than 500 chained operators, evaluate to empty with a warning (or throw with `StrictExpressions`).
+- External images that go through a symbolic link are not loaded.
+
+See [SECURITY.md](../SECURITY.md) for the full list.

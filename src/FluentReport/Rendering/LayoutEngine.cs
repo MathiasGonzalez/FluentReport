@@ -33,7 +33,13 @@ internal sealed class LayoutEngine : IDisposable
     private readonly ConditionalWeakTable<IElement, Dictionary<float, float>> _heights = new();
     private readonly ConditionalWeakTable<TextElement, Dictionary<float, TextBlock>> _textBlocks = new();
 
-    public LayoutEngine(PdfOptions? options) => _fonts = new FontCache(options?.FontResolver);
+    private readonly long? _maxImagePixels;
+
+    public LayoutEngine(PdfOptions? options)
+    {
+        _fonts = new FontCache(options?.FontResolver);
+        _maxImagePixels = options == null ? PdfOptions.DefaultMaxImagePixels : options.MaxImagePixels;
+    }
 
     /// <summary>1-based page being drawn; read by page-number spans.</summary>
     public int CurrentPage { get; set; } = 1;
@@ -44,6 +50,8 @@ internal sealed class LayoutEngine : IDisposable
 
     public float Measure(IElement element, float width)
     {
+        // Every pass below recurses once per nesting level; failing here is catchable, a stack overflow is not.
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         var cache = _heights.GetOrCreateValue(element);
         if (cache.TryGetValue(width, out var cached)) return cached;
         return cache[width] = MeasureCore(element, width);
@@ -114,6 +122,7 @@ internal sealed class LayoutEngine : IDisposable
     /// </summary>
     public SplitResult Split(IElement element, float width, float available, bool pageIsEmpty)
     {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         switch (element)
         {
             case ColumnElement column:
@@ -326,6 +335,7 @@ internal sealed class LayoutEngine : IDisposable
     /// <summary>Draws <paramref name="element"/> in the box (x, y, width, height); height may exceed the measured height.</summary>
     public void Draw(IElement element, SKCanvas canvas, float x, float y, float width, float height, TextAlignment? alignOverride = null)
     {
+        RuntimeHelpers.EnsureSufficientExecutionStack();
         switch (element)
         {
             case TextElement text:
@@ -557,7 +567,19 @@ internal sealed class LayoutEngine : IDisposable
     {
         if (element.MimeType == null) return null;
         if (!_images.TryGetValue(element.SourceBytes, out var image))
-            _images[element.SourceBytes] = image = SKImage.FromEncodedData(element.SourceBytes);
+        {
+            // Decoding is lazy: the size comes from the header, before any pixel memory is allocated.
+            image = SKImage.FromEncodedData(element.SourceBytes);
+            if (image != null && (long)image.Width * image.Height > _maxImagePixels)
+            {
+                var size = $"{image.Width}x{image.Height} px";
+                image.Dispose();
+                throw new InvalidOperationException(
+                    $"Image of {size} exceeds PdfOptions.MaxImagePixels ({_maxImagePixels:N0} pixels). " +
+                    "Resize the image, or raise the limit if the source is trusted.");
+            }
+            _images[element.SourceBytes] = image;
+        }
         return image;
     }
 

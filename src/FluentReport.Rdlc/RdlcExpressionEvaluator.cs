@@ -2,6 +2,7 @@ using System.Collections;
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -166,13 +167,22 @@ internal sealed class RdlcExpressionEvaluator
                 _parsed[expression] = node = new Parser(expression[1..]).ParseAll();
             return node.Eval(this, row);
         }
+        catch (InsufficientExecutionStackException)
+        {
+            return ExpressionFailed(expression, new RdlcExpressionException("the expression is nested too deeply"));
+        }
         catch (RdlcExpressionException ex)
         {
-            if (_strict)
-                throw new NotSupportedException($"RDLC expression '{expression}' could not be evaluated: {ex.Message}", ex);
-            _warn?.Invoke($"Expression '{expression}' evaluated to empty: {ex.Message}");
-            return null;
+            return ExpressionFailed(expression, ex);
         }
+    }
+
+    private object? ExpressionFailed(string expression, RdlcExpressionException ex)
+    {
+        if (_strict)
+            throw new NotSupportedException($"RDLC expression '{expression}' could not be evaluated: {ex.Message}", ex);
+        _warn?.Invoke($"Expression '{expression}' evaluated to empty: {ex.Message}");
+        return null;
     }
 
     /// <summary><c>true</c> for <c>=Fields!X.Value…</c> and <c>=First(Fields!X.Value…)</c> expressions.</summary>
@@ -535,6 +545,9 @@ internal sealed class RdlcExpressionEvaluator
 
     private abstract record Node
     {
+        /// <summary>Height of the tree below this node, bounded by <see cref="Parser.MaxTreeDepth"/>.</summary>
+        public virtual int Depth => 1;
+
         public abstract object? Eval(RdlcExpressionEvaluator ev, object? row);
     }
 
@@ -574,8 +587,11 @@ internal sealed class RdlcExpressionEvaluator
 
     private sealed record Unary(string Op, Node Operand) : Node
     {
+        public override int Depth { get; } = Operand.Depth + 1;
+
         public override object? Eval(RdlcExpressionEvaluator ev, object? row)
         {
+            RuntimeHelpers.EnsureSufficientExecutionStack();
             var v = Operand.Eval(ev, row);
             return Op switch
             {
@@ -588,8 +604,11 @@ internal sealed class RdlcExpressionEvaluator
 
     private sealed record Binary(string Op, Node Left, Node Right) : Node
     {
+        public override int Depth { get; } = Math.Max(Left.Depth, Right.Depth) + 1;
+
         public override object? Eval(RdlcExpressionEvaluator ev, object? row)
         {
+            RuntimeHelpers.EnsureSufficientExecutionStack();
             switch (Op)
             {
                 case "ANDALSO": return ev.ToBool(Left.Eval(ev, row)) && ev.ToBool(Right.Eval(ev, row));
@@ -652,7 +671,13 @@ internal sealed class RdlcExpressionEvaluator
 
     private sealed record Call(string Name, IReadOnlyList<Node> Args) : Node
     {
-        public override object? Eval(RdlcExpressionEvaluator ev, object? row) => ev.CallFunction(Name, Args, row);
+        public override int Depth { get; } = Args.Count == 0 ? 1 : Args.Max(a => a.Depth) + 1;
+
+        public override object? Eval(RdlcExpressionEvaluator ev, object? row)
+        {
+            RuntimeHelpers.EnsureSufficientExecutionStack();
+            return ev.CallFunction(Name, Args, row);
+        }
     }
 
     // ── Parser ───────────────────────────────────────────────────────────────
@@ -664,8 +689,18 @@ internal sealed class RdlcExpressionEvaluator
     /// <summary>Recursive-descent parser following VB.NET operator precedence.</summary>
     private sealed class Parser
     {
+        /// <summary>Parentheses, function calls, <c>Not</c> and signs nested deeper than this are rejected.</summary>
+        public const int MaxNesting = 100;
+
+        /// <summary>
+        /// Longest operator chain accepted (e.g. <c>a &amp; b &amp; c …</c>). Evaluation recurses once per
+        /// level, so both limits keep a hostile report from exhausting the stack, which ends the process.
+        /// </summary>
+        public const int MaxTreeDepth = 500;
+
         private readonly List<Token> _tokens;
         private int _pos;
+        private int _nesting;
 
         public Parser(string text) => _tokens = Tokenize(text);
 
@@ -674,7 +709,17 @@ internal sealed class RdlcExpressionEvaluator
             var node = ParseOr();
             if (Peek.Kind != TokenKind.End)
                 throw new RdlcExpressionException($"unexpected '{Peek.Text}'");
+            if (node.Depth > MaxTreeDepth)
+                throw new RdlcExpressionException($"the expression has more than {MaxTreeDepth} chained operations");
             return node;
+        }
+
+        private T Nested<T>(Func<T> parse)
+        {
+            if (++_nesting > MaxNesting)
+                throw new RdlcExpressionException($"the expression is nested more than {MaxNesting} levels deep");
+            try { return parse(); }
+            finally { _nesting--; }
         }
 
         private Token Peek => _tokens[_pos];
@@ -706,7 +751,7 @@ internal sealed class RdlcExpressionEvaluator
 
         private Node ParseNot()
         {
-            if (IsKeyword("Not")) { _pos++; return new Unary("NOT", ParseNot()); }
+            if (IsKeyword("Not")) { _pos++; return new Unary("NOT", Nested(ParseNot)); }
             return ParseComparison();
         }
 
@@ -777,8 +822,8 @@ internal sealed class RdlcExpressionEvaluator
 
         private Node ParseUnary()
         {
-            if (IsOperator("-")) { _pos++; return new Unary("-", ParseUnary()); }
-            if (IsOperator("+")) { _pos++; return ParseUnary(); }
+            if (IsOperator("-")) { _pos++; return new Unary("-", Nested(ParseUnary)); }
+            if (IsOperator("+")) { _pos++; return Nested(ParseUnary); }
             return ParsePower();
         }
 
@@ -803,7 +848,7 @@ internal sealed class RdlcExpressionEvaluator
                 case TokenKind.String:
                     return new Literal(token.Text);
                 case TokenKind.Operator when token.Text == "(":
-                    var inner = ParseOr();
+                    var inner = Nested(ParseOr);
                     Expect(")");
                     return inner;
                 case TokenKind.Identifier:
@@ -846,7 +891,7 @@ internal sealed class RdlcExpressionEvaluator
                 var args = new List<Node>();
                 if (!IsOperator(")"))
                 {
-                    do { args.Add(ParseOr()); }
+                    do { args.Add(Nested(ParseOr)); }
                     while (TryConsume(","));
                 }
                 Expect(")");
