@@ -8,6 +8,12 @@
     <PackageReference Include="SkiaSharp" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" />
   </ItemGroup>
+  <!-- DejaVu Sans: fallback when the system has no usable font (e.g. Linux containers without fonts). -->
+  <ItemGroup>
+    <EmbeddedResource Include="Fonts\DejaVuSans.ttf" LogicalName="FluentReport.Fonts.DejaVuSans.ttf" />
+    <EmbeddedResource Include="Fonts\DejaVuSans-Bold.ttf" LogicalName="FluentReport.Fonts.DejaVuSans-Bold.ttf" />
+    <None Include="Fonts\LICENSE-DejaVu.txt" Pack="true" PackagePath="" />
+  </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="FluentReport.Tests" />
   </ItemGroup>

@@ -153,4 +153,5 @@ Bump `<Version>` in [Directory.Build.props](Directory.Build.props) and merge to 
 ## Dependencies
 
 - [SkiaSharp](https://www.nuget.org/packages/SkiaSharp) 4.154.0 — PDF rendering
+- [DejaVu Sans](https://dejavu-fonts.github.io/) 2.37 — fallback font bundled in `FluentReport` ([license](src/FluentReport/Fonts/LICENSE-DejaVu.txt))
 - [ClosedXML](https://www.nuget.org/packages/ClosedXML) 0.105.1 — Excel rendering
