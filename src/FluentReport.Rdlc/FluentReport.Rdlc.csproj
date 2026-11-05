@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <PackageId>FluentReport.Rdlc</PackageId>
-    <Description>RDLC / SSRS importer for FluentReport: turns .rdlc report definitions into documents for the HTML and Excel renderers.</Description>
-    <PackageTags>rdlc;ssrs;report;fluent</PackageTags>
+    <Description>RDLC / SSRS importer for FluentReport: turns .rdlc report definitions and their data into documents that render to PDF, HTML and Excel, without ReportViewer. Supports row groups with subtotals, sorting, filters, Format, borders, visibility, rectangles, page numbers and VB expressions.</Description>
+    <PackageTags>rdlc;ssrs;reportviewer;report;pdf;fluent</PackageTags>
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="FluentReport.Rdlc.Tests" />

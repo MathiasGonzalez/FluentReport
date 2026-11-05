@@ -259,6 +259,8 @@ doc.GeneratePdf("catalog.pdf");
 
 Rows can be POCOs or dictionaries; field names are case-insensitive.
 
+Tablix row groups render a header and subtotal per group, with their sort expressions and filters. Aggregates without a scope argument cover the current detail row, group or table, as in SSRS; name a group, table or dataset to aggregate over it. `Globals!PageNumber` / `TotalPages` become page-number spans, so page headers and footers show real page numbers.
+
 `RdlcImportOptions`:
 
 | Option | Default | Description |
