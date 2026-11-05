@@ -129,6 +129,7 @@ See the generated files in [`samples/FluentReport.Samples/output`](samples/Fluen
 - [API reference](docs/api.md) — builders, elements, PDF/HTML options, RDLC options
 - [RDLC support and limitations](docs/rdlc-limitations.md)
 - [Migration to 2.0](docs/migration-2.0.md)
+- [Migration to 3.0](docs/migration-3.0.md)
 - [UY fiscal document samples](docs/uy-fiscal-samples.md) — salary slip, delivery note, payment receipt
 - Package READMEs: [PDF](src/FluentReport/README.md) · [Core](src/FluentReport.Core/README.md) · [Html](src/FluentReport.Html/README.md) · [Excel](src/FluentReport.Excel/README.md) · [Rdlc](src/FluentReport.Rdlc/README.md)
 
