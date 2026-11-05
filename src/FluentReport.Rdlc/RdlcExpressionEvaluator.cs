@@ -58,8 +58,11 @@ internal sealed class RdlcExpressionEvaluator
     /// A set of rows aggregates can run over: the rows of a data region, a group instance or a
     /// detail row. Scopes nest; aggregates without an explicit scope use the innermost one.
     /// </summary>
-    private sealed class Scope(IReadOnlyCollection<string> names, IReadOnlyList<object> rows)
+    private sealed class Scope(IReadOnlyCollection<string> names, IReadOnlyList<object> rows, bool isRegion)
     {
+        /// <summary>A data region (tablix); <c>RowNumber(Nothing)</c> and friends count in the innermost one.</summary>
+        public bool IsRegion { get; } = isRegion;
+
         private Dictionary<object, int>? _index;
 
         public IReadOnlyCollection<string> Names { get; } = names;
@@ -83,8 +86,15 @@ internal sealed class RdlcExpressionEvaluator
     /// <paramref name="names"/> are the names expressions can refer to it by (group, data region, dataset).
     /// </summary>
     internal IDisposable PushScope(IReadOnlyList<object> rows, params string?[] names)
+        => Push(rows, isRegion: false, names);
+
+    /// <summary>Like <see cref="PushScope"/>, for a data region: the default scope of RowNumber, RunningValue and Previous.</summary>
+    internal IDisposable PushRegionScope(IReadOnlyList<object> rows, params string?[] names)
+        => Push(rows, isRegion: true, names);
+
+    private IDisposable Push(IReadOnlyList<object> rows, bool isRegion, string?[] names)
     {
-        var scope = new Scope(names.Where(n => !string.IsNullOrEmpty(n)).Select(n => n!).ToList(), rows);
+        var scope = new Scope(names.Where(n => !string.IsNullOrEmpty(n)).Select(n => n!).ToList(), rows, isRegion);
         _scopes.Add(scope);
         return new PopScope(this, scope);
     }
@@ -92,6 +102,14 @@ internal sealed class RdlcExpressionEvaluator
     private sealed class PopScope(RdlcExpressionEvaluator owner, Scope scope) : IDisposable
     {
         public void Dispose() => owner._scopes.Remove(scope);
+    }
+
+    /// <summary>The innermost data region scope (the scope <c>Nothing</c> means for row functions).</summary>
+    private Scope? RegionScope()
+    {
+        for (int i = _scopes.Count - 1; i >= 0; i--)
+            if (_scopes[i].IsRegion) return _scopes[i];
+        return _scopes.Count > 0 ? _scopes[0] : null;
     }
 
     /// <summary>Rows of the innermost scope, or <c>null</c> outside any data region.</summary>
@@ -337,9 +355,9 @@ internal sealed class RdlcExpressionEvaluator
 
             case "ROWNUMBER":
             {
-                // RowNumber(Nothing) counts in the outermost scope (the data region).
+                // RowNumber(Nothing) counts in the innermost data region.
                 var scopeName = args.Count > 0 ? Arg(0) : null;
-                var scope = scopeName is null ? (_scopes.Count > 0 ? _scopes[0] : null) : FindScope(ToDisplay(scopeName));
+                var scope = scopeName is null ? RegionScope() : FindScope(ToDisplay(scopeName));
                 if (scope == null || row == null) return null;
                 int position = scope.IndexOf(row);
                 return position < 0 ? null : (decimal)(position + 1);
@@ -351,7 +369,7 @@ internal sealed class RdlcExpressionEvaluator
                 if (args[1] is not FunctionName { Name: var fn })
                     throw new RdlcExpressionException("RunningValue() expects an aggregate function name");
                 var scopeName = args.Count > 2 ? args[2].Eval(this, row) : null;
-                var scope = scopeName is null ? (_scopes.Count > 0 ? _scopes[0] : null) : FindScope(ToDisplay(scopeName));
+                var scope = scopeName is null ? RegionScope() : FindScope(ToDisplay(scopeName));
                 if (scope == null || row == null) return null;
                 int position = scope.IndexOf(row);
                 if (position < 0) return null;
@@ -360,7 +378,7 @@ internal sealed class RdlcExpressionEvaluator
             case "PREVIOUS":
             {
                 if (args.Count == 0) throw new RdlcExpressionException("Previous() expects an argument");
-                var scope = args.Count > 1 ? FindScope(Str(1)) : (_scopes.Count > 0 ? _scopes[0] : null);
+                var scope = args.Count > 1 ? FindScope(Str(1)) : RegionScope();
                 if (scope == null || row == null) return null;
                 int position = scope.IndexOf(row);
                 return position > 0 ? args[0].Eval(this, scope.Rows[position - 1]) : null;
@@ -456,7 +474,14 @@ internal sealed class RdlcExpressionEvaluator
             if (value is DateTime or DateTimeOffset or DateOnly)
                 return ToDate(value)!.Value.ToString(format, Culture);
             if (ToNumber(value) is { } n)
+            {
+                // "D" (zero padding) and "X" (hex) only exist for integers, as in VB.
+                if (format.Length > 0 && format[0] is 'D' or 'd' or 'X' or 'x'
+                    && format.Skip(1).All(char.IsAsciiDigit) && n == decimal.Truncate(n)
+                    && n >= long.MinValue && n <= long.MaxValue)
+                    return ((long)n).ToString(format, Culture);
                 return n.ToString(format, Culture);
+            }
             if (ToDate(value) is { } d)
                 return d.ToString(format, Culture);
         }

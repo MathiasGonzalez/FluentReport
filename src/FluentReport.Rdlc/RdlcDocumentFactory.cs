@@ -780,7 +780,7 @@ public sealed class RdlcDocumentFactory
             foreach (var r in displayed) order.TryAdd(r, order.Count);
             _displayOrder = order;
 
-            using var region = _evaluator.PushScope(InDisplayOrder(dataRows), tablixName, dataSetName);
+            using var region = _evaluator.PushRegionScope(InDisplayOrder(dataRows), tablixName, dataSetName);
 
             int firstDynamic = rowMembers.FindIndex(ContainsGroup);
             int lastDynamic  = rowMembers.FindLastIndex(ContainsGroup);
@@ -916,7 +916,7 @@ public sealed class RdlcDocumentFactory
     private void BuildTablixWithoutHierarchy(TableElement table, List<XElement> tblRows, List<object> dataRows,
                                              bool[] hiddenColumns, string? tablixName, string dataSetName)
     {
-        using var region = _evaluator.PushScope(dataRows, tablixName, dataSetName);
+        using var region = _evaluator.PushRegionScope(dataRows, tablixName, dataSetName);
         bool seenDetail = false;
         foreach (var tblRow in tblRows)
         {
