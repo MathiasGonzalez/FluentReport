@@ -9,7 +9,7 @@
 | `<Textbox>` | `TextElement` | Value or `<Paragraphs>/<TextRuns>` (one span per run). FontSize, FontFamily, FontWeight, FontStyle, TextDecoration, Color, TextAlign (textbox or paragraph), BackgroundColor, Padding, borders, `Format`. Style values can be expressions. |
 | `<Rectangle>` | `ColumnElement` in a border/background | Its items are laid out like the body; the designed height is kept when it is taller than the content. |
 | `<Line>` | `LineElement` | Color and width (`Border` or legacy `BorderWidth`). |
-| `<Image>` | `ImageElement` | `Embedded`, `Database` (bytes or base64) and `External` (local file inside `ExternalImageDirectory`; URLs are not fetched). Only PNG, JPEG, GIF, WebP and BMP are rendered. |
+| `<Image>` | `ImageElement` | `Embedded`, `Database` (bytes or base64) and `External` (local file inside `ExternalImageDirectory`; URLs are not fetched). Only PNG, JPEG, GIF, WebP and BMP are rendered. `Sizing`: `Fit` stretches to the item's box, `FitProportional` fits inside it keeping the aspect ratio, `AutoSize` (the default) uses the natural size from the pixels and resolution (96 dpi when the file has none), `Clip` uses the natural size scaled down to the box (it is not cropped). |
 | `<Tablix>` (table, list) | `TableElement` | Row groups, details, sorting, filters, hidden rows/columns, `ColSpan`, `NoRowsMessage`. See below. |
 | `<PageHeader>` / `<PageFooter>` | page header / footer | `Globals!PageNumber` / `TotalPages` render the real page numbers. |
 | `<Page>` | page size and margins | |
@@ -21,8 +21,9 @@ Absolute positions are approximated: items whose `Top` is within 2 pt are placed
 
 - **Format**: the `Format` style property (on the text run, else the textbox) is applied to numbers and dates with the import culture, e.g. `N2`, `C`, `#,0.00`, `dd/MM/yyyy`. Text values are left as they are.
 - **Borders**: `Border` plus `TopBorder` / `RightBorder` / `BottomBorder` / `LeftBorder` (RDL 2008+) and `BorderStyle` / `BorderColor` / `BorderWidth` (RDL 2005). Every style other than `None` is drawn solid. In tables, cell borders line up into a grid.
-- **Visibility**: `<Visibility><Hidden>` (literal or expression) on report items, tablix row members and tablix column members. Hidden items take no space. Toggles (drill-down) keep their initial state.
-- Not imported: `VerticalAlign`, `LineHeight`, `WritingMode`, `CanGrow`/`CanShrink` (text always grows), border styles (dotted, dashed, double).
+- **Visibility**: `<Visibility><Hidden>` (literal or expression) on report items, tablix row members and tablix column members. Hidden items take no space. Toggles (`ToggleItem`, drill-down) keep their initial state, as in an exported report.
+- Not imported: `VerticalAlign`, `LineHeight`, `WritingMode`, `CanGrow`/`CanShrink` (text always grows), border styles (dotted, dashed, double), `ToolTip`, actions (hyperlinks, drillthrough, bookmarks).
+- **Fonts**: `FontFamily` is resolved from the fonts installed on the machine; a missing font (e.g. Calibri or Poppins on a Linux server) falls back to the default font, which changes text widths. Supply the font files with `PdfOptions.FontResolver`. Carlito is a free font metrically compatible with Calibri.
 
 ## Tablix
 
@@ -42,14 +43,16 @@ Values keep their type (number, date, boolean, text) while an expression is eval
 
 | Kind | Supported |
 |------|-----------|
-| References | `Fields!X.Value`, `Parameters!X.Value` / `.Label`, `Globals!X(.Value)` |
+| References | `Fields!X.Value` (through the field's `DataField`, or its `Value` for calculated fields), `Parameters!X.Value` / `.Label`, `Globals!X(.Value)` |
 | Literals | strings, numbers, `True`, `False`, `Nothing` |
-| Operators | `^ * / \ Mod + - &`, `= <> < > <= >=`, `Not And AndAlso Or OrElse Xor` |
+| Operators | `^ * / \ Mod + - &`, `= <> < > <= >=`, `Is` / `IsNot` (e.g. `Fields!X.Value Is Nothing`), `Not And AndAlso Or OrElse Xor` |
 | Conditionals | `IIF`, `Switch`, `Choose` |
 | Formatting | `Format` (.NET and VB named formats such as `"Currency"`, `"Short Date"`), `FormatNumber`, `FormatCurrency`, `FormatPercent` |
 | Conversion / text | `CStr`, `CInt`, `CLng`, `CDec`, `CDbl`, `CBool`, `CDate`, `Len`, `Trim`, `LTrim`, `RTrim`, `UCase`, `LCase`, `Left`, `Right`, `Mid`, `Replace`, `IsNothing`, `Now`, `Today` |
 | Aggregates | `Sum`, `Count`, `CountDistinct`, `CountRows`, `Avg`/`Average`, `Min`, `Max`, `First`, `Last` |
 | Row functions | `RowNumber`, `RunningValue(expr, Sum, scope)`, `Previous` |
+
+`Is Nothing` and `IsNothing(...)` are true only for a missing value (`null`, `DBNull`), not for an empty string, as in VB.
 
 Aggregate scope follows SSRS: without a scope argument an aggregate covers the current scope — the row in a detail row, the group in a group header or footer, the tablix in its header or footer, the only dataset outside a tablix. A scope argument may name a group, a tablix or a dataset. `RowNumber` and `RunningValue` count rows in the order they are displayed.
 
