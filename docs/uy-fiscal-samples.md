@@ -9,7 +9,9 @@ dotnet run --project samples/FluentReport.Samples
 dotnet run --project samples/FluentReport.Samples -- /path/to/output
 ```
 
-Output: `10-recibo-sueldo.pdf`, `11-remito-entrega.pdf`, `12-recibo-pago.pdf`
+Output: `10-recibo-sueldo.pdf`, `11-remito-entrega.pdf`, `12-recibo-pago.pdf`, in `output/` under the current directory by default. The committed copies are in [`samples/FluentReport.Samples/output`](../samples/FluentReport.Samples/output).
+
+**To adapt a document**, copy its sample file (`Samples/Sample10ReciboSueldo.cs`, `Sample11RemitoEntrega.cs` or `Sample12ReciboPago.cs`) into your project, along with `FacturaUY.cs`. Then fill its data record with your own values. The records and the static `Data` field are `internal` to the samples project, and `Generate(outputDir)` renders the hard-coded `Data`. In your copy, make `Generate` take the record as a parameter.
 
 ---
 
@@ -19,7 +21,7 @@ All three documents (plus the e-invoice sample) share constants from `FacturaUY.
 
 | Constant | Value | Usage |
 |----------|-------|-------|
-| `FontPrimary` | `"Liberation Sans"` | Main font (Arial-compatible, Linux/CI safe) |
+| `FontPrimary` | `"Liberation Sans"` | Main font (Arial-compatible). If it is not installed, the system default font is used, or the bundled DejaVu Sans where the system has none (Linux without fontconfig, containers, CI). Pass `PdfOptions.FontResolver` for identical output everywhere. |
 | `FontSizeTitle` | `13f` | Section titles |
 | `FontSizeSubtitle` | `11f` | Subtitles and highlighted values |
 | `FontSizeBody` | `9f` | Body text |
@@ -58,11 +60,22 @@ Monthly payslip required by Uruguayan law (MTSS). Includes employer, employee, p
 
 ```csharp
 var data = new ReciboSueldoData(
-    EmpNombre: "My Company S.A.",   EmpRut: "2XXXXXXX-X",
-    TrabNombre: "John Doe",         TrabCargo: "Developer",
-    PeriodoDesc: "June 2026",       FechaPago: "05/07/2026",
-    SueldoNominal: 60_000m,         HorasExtra: 0m,   Viaticos: 0m,
-    Irpf: CalculateIrpf(60_000m)    // your own logic
+    EmpNombre:     "My Company S.A.",
+    EmpRut:        "2XXXXXXX-X",
+    EmpDomicilio:  "Av. 18 de Julio 1234, Montevideo",
+    TrabNombre:    "John Doe",
+    TrabCi:        "1.234.567-8",
+    TrabCargo:     "Developer",
+    TrabLegajo:    "00042",
+    TrabBps:       "1234567-1",
+    PeriodoDesc:   "June 2026",
+    PeriodoFrom:   "01/06/2026",
+    PeriodoTo:     "30/06/2026",
+    FechaPago:     "05/07/2026",
+    SueldoNominal: 60_000m,
+    HorasExtra:    0m,
+    Viaticos:      0m,
+    Irpf:          CalculateIrpf(60_000m)   // your own logic
 );
 // BPS fields, totals, and net are calculated automatically.
 ```
@@ -89,16 +102,22 @@ Required by DGI for goods in transit (Resolución DGI Nº 2.530/991).
 
 ```csharp
 var data = new RemitoData(
-    Numero: "R 00000001",
-    Fecha: "01/06/2026",   Hora: "09:00",
-    RemitenteNombre: "My Company S.A.",   RemitenteRut: "2XXXXXXX-X",
-    DestinatarioNombre: "Client S.R.L.", DestinatarioRut: "2XXXXXXX-X",
-    Transportista: "Carrier S.A. – Plate ABC 1234",
-    Items: new[]
-    {
+    Numero:                "R 00000001",
+    Fecha:                 "01/06/2026",
+    Hora:                  "09:00",
+    RemitenteNombre:       "My Company S.A.",
+    RemitenteRut:          "2XXXXXXX-X",
+    RemitenteDireccion:    "Av. 18 de Julio 1234, Montevideo",
+    DestinatarioNombre:    "Client S.R.L.",
+    DestinatarioRut:       "2XXXXXXX-X",
+    DestinatarioDireccion: "Gral. Flores 3456, Montevideo",
+    LugarEntrega:          "Gral. Flores 3456 – Main warehouse",
+    Transportista:         "Carrier S.A. – Plate ABC 1234",
+    Items:
+    [
         new RemitoItem(5, "unit", "Product A", ""),
         new RemitoItem(2, "box",  "Product B", "Fragile"),
-    }
+    ]
 );
 ```
 
@@ -126,16 +145,19 @@ Proof of payment issued by the payee (Código de Comercio, Ley 16.060).
 
 ```csharp
 var data = new ReciboPagoData(
-    Numero: "RP-2026-00001",
-    Fecha: "01/06/2026",
-    PagadorNombre: "Paying Company S.A.",   PagadorRut: "2XXXXXXX-X",
-    BenefNombre: "My Company S.A.",         BenefRut: "2XXXXXXX-X",
-    Concepto: "Payment for invoice A 00000001",
-    Monto: 44_000m,
-    Moneda: "Uruguayan Pesos (UYU)",
-    EnLetras: "Forty-four thousand Uruguayan pesos",
-    FormaPago: "Bank transfer",
-    Cuenta: "Account: 001-XXXXXX-X – BROU"
+    Numero:         "RP-2026-00001",
+    Fecha:          "01/06/2026",
+    PagadorNombre:  "Paying Company S.A.",
+    PagadorRut:     "2XXXXXXX-X",
+    BenefNombre:    "My Company S.A.",
+    BenefRut:       "2XXXXXXX-X",
+    BenefDomicilio: "Av. 18 de Julio 1234, Montevideo",
+    Concepto:       "Payment for invoice A 00000001",
+    Monto:          44_000m,
+    Moneda:         "Uruguayan Pesos (UYU)",
+    EnLetras:       "Forty-four thousand Uruguayan pesos",
+    FormaPago:      "Bank transfer",
+    Cuenta:         "Account: 001-XXXXXX-X – BROU"
 );
 ```
 

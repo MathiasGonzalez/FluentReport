@@ -151,7 +151,7 @@ docs/
 
 ## Releasing
 
-Bump `<Version>` in [Directory.Build.props](Directory.Build.props) and merge to `main`: the [NuGet workflow](.github/workflows/nuget.yml) builds, tests and publishes every package with that version and tags the commit (`v2.0.0`). Pushes that keep an already published version publish nothing; nuget.org never overwrites a version.
+Bump `<Version>` in [Directory.Build.props](Directory.Build.props) and merge to `main`: the [NuGet workflow](.github/workflows/nuget.yml) builds, tests and publishes every package with that version and tags the commit (`v3.1.0`). Pushes that keep an already published version publish nothing; nuget.org never overwrites a version.
 
 ## Dependencies
 

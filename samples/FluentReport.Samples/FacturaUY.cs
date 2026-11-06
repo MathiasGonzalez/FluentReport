@@ -10,9 +10,10 @@ internal static class FacturaUY
     // ── Fuentes ──────────────────────────────────────────────────────────────
     /// <summary>
     /// Fuente principal utilizada en documentos comerciales en Uruguay.
-    /// Liberation Sans es métricamente compatible con Arial y está disponible
-    /// en sistemas Linux (usada por CI). En Windows y macOS el sistema resuelve
-    /// "Arial" directamente; en Linux se mapea a Liberation Sans vía fontconfig.
+    /// Liberation Sans es métricamente compatible con Arial. Si no está instalada,
+    /// SkiaSharp usa la fuente por defecto del sistema; donde no encuentra ninguna
+    /// (Linux sin fontconfig, contenedores, CI) FluentReport usa la DejaVu Sans incluida.
+    /// Para el mismo resultado en todas las máquinas, pasar las fuentes con PdfOptions.FontResolver.
     /// </summary>
     public const string FontPrimary = "Liberation Sans";
 

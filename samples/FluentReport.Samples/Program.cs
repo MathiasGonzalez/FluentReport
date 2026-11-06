@@ -21,10 +21,6 @@ Sample10ReciboSueldo.Generate(outputDir);
 Sample11RemitoEntrega.Generate(outputDir);
 Sample12ReciboPago.Generate(outputDir);
 
-// ── RDLC samples ─────────────────────────────────────────────────────────────
-//ReportTransactionSample.Run(outputDir);
-//ReportTransactionSample.RunExcel(outputDir);
-
 // ── HTML / Email samples ──────────────────────────────────────────────────────
 Sample13HtmlEmail.Generate(outputDir);
 
