@@ -427,3 +427,7 @@ FodyWeavers.xsd
 *.msix
 *.msm
 *.msp
+
+# Sample output generated from the repository root (the committed samples live in samples/FluentReport.Samples/output)
+/output/
+/sample-files/

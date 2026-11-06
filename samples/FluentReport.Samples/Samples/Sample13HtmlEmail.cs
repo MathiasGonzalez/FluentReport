@@ -147,7 +147,7 @@ internal static class Sample13HtmlEmail
 
         // Fragment only (for embedding in external email templates)
         string fragment = doc.GenerateHtmlFragment(new HtmlRendererOptions { MaxWidth = 650 });
-        File.WriteAllText(Path.Combine(outputDir, "13-email-invoice-fragment.html"), fragment, System.Text.Encoding.UTF8);
+        File.WriteAllText(Path.Combine(outputDir, "13-email-invoice-fragment.html"), fragment);
 
         Console.WriteLine("  ✓ 13-email-invoice.html");
         Console.WriteLine("  ✓ 13-email-invoice-fragment.html");
