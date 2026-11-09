@@ -399,5 +399,149 @@ public class PdfRenderingTests
         Assert.Throws<NotSupportedException>(() => Document.FromSettings(settings).GeneratePdf(TestFonts.Options));
     }
 
+    // ── Background and alignment ─────────────────────────────────────────────
+
+    private static SKBitmap Render(Document doc)
+        => SKBitmap.Decode(doc.GenerateImages(1f, TestFonts.Options)[0]);
+
+    [Theory]
+    [InlineData("center")]
+    [InlineData("right")]
+    [InlineData("left")]
+    public void Background_FillsTheContainer_WhateverTheAlignment(string alignment)
+    {
+        var doc = Document.Create(c => c.Page(p =>
+        {
+            p.Size(200, 100);
+            p.MarginAll(0);
+            var box = p.Content().Background("#FF0000").Padding(4);
+            box = alignment switch { "center" => box.AlignCenter(), "right" => box.AlignRight(), _ => box.AlignLeft() };
+            box.Text("x").FontSize(10);
+        }));
+        using var bitmap = Render(doc);
+
+        // Both ends of the row are filled, not just the area behind the text.
+        Assert.Equal(new SKColor(255, 0, 0), bitmap.GetPixel(1, 2));
+        Assert.Equal(new SKColor(255, 0, 0), bitmap.GetPixel(198, 2));
+    }
+
+    [Fact]
+    public void TableHeaderCell_WithAlignedText_IsFilledEdgeToEdge()
+    {
+        var doc = Document.Create(c => c.Page(p =>
+        {
+            p.Size(200, 100);
+            p.MarginAll(0);
+            p.Content().Table(t =>
+            {
+                t.ColumnsDefinition(cols => { cols.RelativeColumn(); cols.RelativeColumn(); });
+                t.Header(h =>
+                {
+                    h.Cell().Background("#00FF00").Padding(4).AlignCenter().Text("a").FontSize(10);
+                    h.Cell().Background("#00FF00").Padding(4).AlignRight().Text("b").FontSize(10);
+                });
+            });
+        }));
+        using var bitmap = Render(doc);
+
+        foreach (int x in new[] { 2, 97, 103, 197 })
+            Assert.Equal(new SKColor(0, 255, 0), bitmap.GetPixel(x, 3));
+    }
+
+    [Fact]
+    public void Background_AroundAlignedContentThatIsNotText_StaysTightAroundIt()
+    {
+        using var bitmap = Noise(20, 20, 5);
+        var doc = Document.Create(c => c.Page(p =>
+        {
+            p.Size(200, 100);
+            p.MarginAll(0);
+            p.Content().AlignRight().Background("#FF0000").Padding(5).Column(col =>
+                col.Item().Element(new ImageElement(Encode(bitmap, SKEncodedImageFormat.Png)) { FixedWidth = 20, FixedHeight = 20 }));
+        }));
+        using var rendered = Render(doc);
+
+        // A 30-point box at the right edge: the rest of the row stays white.
+        Assert.Equal(new SKColor(255, 0, 0), rendered.GetPixel(172, 2));
+        Assert.Equal(new SKColor(255, 0, 0), rendered.GetPixel(198, 2));
+        Assert.Equal(SKColors.White, rendered.GetPixel(2, 2));
+        Assert.Equal(SKColors.White, rendered.GetPixel(165, 2));
+    }
+
+    // ── Continuous height ────────────────────────────────────────────────────
+
+    private static Document Receipt(int lines, bool footer = false) => Document.Create(c => c.Page(p =>
+    {
+        p.ContinuousSize(227);
+        p.MarginAll(5);
+        p.Content().Column(col =>
+        {
+            for (int i = 0; i < lines; i++) col.Item().Text($"line {i}").FontSize(8);
+        });
+        if (footer) p.Footer().Text("end").FontSize(8);
+    }));
+
+    private static PageLayout SinglePage(Document doc)
+    {
+        using var renderer = new DocumentRenderer(doc.Settings, TestFonts.Options);
+        return Assert.Single(renderer.Pages);
+    }
+
+    [Fact]
+    public void ContinuousSize_FitsThePageToItsContent()
+    {
+        using var engine = new LayoutEngine(TestFonts.Options);
+        var doc = Receipt(10);
+        float content = engine.Measure(doc.Settings.Pages[0].ContentElement!, 217);
+
+        var page = SinglePage(doc);
+        Assert.Equal(227, page.Size.Width);
+        Assert.Equal(content + 10, page.Size.Height, 0.01f);
+    }
+
+    [Fact]
+    public void ContinuousSize_NeverSplits_AndGrowsWithTheContent()
+    {
+        var shortPage = SinglePage(Receipt(5));
+        var longPage = SinglePage(Receipt(500));
+        Assert.True(longPage.Size.Height > 2000);
+        Assert.True(longPage.Size.Height > shortPage.Size.Height * 50);
+    }
+
+    [Fact]
+    public void ContinuousSize_IncludesHeaderAndFooter_AndIgnoresPageBreaks()
+    {
+        var plain = SinglePage(Receipt(5));
+        var withFooter = SinglePage(Receipt(5, footer: true));
+        Assert.True(withFooter.Size.Height > plain.Size.Height);
+
+        var broken = Document.Create(c => c.Page(p =>
+        {
+            p.ContinuousSize(227);
+            p.Content().Column(col => { col.Item().Text("a"); col.Item().PageBreak(); col.Item().Text("b"); });
+        }));
+        SinglePage(broken);
+        Assert.Equal(1, broken.GetPdfPageCount(TestFonts.Options));
+    }
+
+    [Fact]
+    public void ContinuousSize_RendersToPdfAndPng()
+    {
+        var doc = Receipt(20, footer: true);
+        Assert.Equal("%PDF", Encoding.ASCII.GetString(doc.GeneratePdf(TestFonts.Options), 0, 4));
+        using var bitmap = Render(doc);
+        Assert.Equal(227, bitmap.Width);
+        Assert.Equal((int)Math.Ceiling(SinglePage(doc).Size.Height), bitmap.Height);
+    }
+
+    [Fact]
+    public void ContinuousSize_RejectsNonPositiveWidth_AndSizeTurnsItOff()
+    {
+        Assert.Throws<ArgumentOutOfRangeException>(() => Document.Create(c => c.Page(p => p.ContinuousSize(0))));
+        var doc = Document.Create(c => c.Page(p => { p.ContinuousSize(227); p.Size(PageSizes.A4); }));
+        Assert.False(doc.Settings.Pages[0].ContinuousHeight);
+        Assert.Equal(PageSizes.A4, doc.Settings.Pages[0].Size);
+    }
+
     private sealed class CustomElement : IElement;
 }

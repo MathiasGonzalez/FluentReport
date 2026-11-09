@@ -6,5 +6,6 @@ namespace FluentReport.Elements;
 /// </summary>
 public interface IRendererSpecificElement : IElement
 {
+    /// <summary>What renderers that cannot draw this element render instead; <c>null</c> renders nothing.</summary>
     IElement? Fallback { get; }
 }

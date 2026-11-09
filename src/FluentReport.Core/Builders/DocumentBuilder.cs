@@ -2,10 +2,12 @@ using FluentReport.Core;
 
 namespace FluentReport.Builders;
 
+/// <summary>Adds pages to a document. Received by <see cref="Document.Create"/>.</summary>
 public class DocumentBuilder
 {
     private readonly DocumentSettings _settings = new();
 
+    /// <summary>Adds a page definition: size, margins, header, content and footer.</summary>
     public DocumentBuilder Page(Action<PageBuilder> configure)
     {
         var page = new PageSettings();

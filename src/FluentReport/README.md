@@ -62,6 +62,8 @@ Content flows across as many pages as it needs, with the header and footer repea
 
 Rows, images, charts and canvases are not split: they move to the next page, and one taller than a whole page is cut at the footer.
 
+`page.ContinuousSize(227)` (80 mm) makes a single page as tall as its content, for receipts on roll paper.
+
 ## API
 
 | Method | Description |
@@ -71,7 +73,7 @@ Rows, images, charts and canvases are not split: they move to the next page, and
 | `.GetPdfPageCount(options?)` | Number of pages |
 | `container.Canvas(width, height, (SKCanvas canvas, SKRect rect) => …)` | Custom vector drawing (PDF only) |
 
-`PdfOptions`: `FontResolver` (e.g. embedded fonts; returned typefaces are cached and never disposed), `Title`, `Author`, `MaxImagePixels` (largest image decoded, 100 MP by default; larger images throw instead of exhausting memory).
+`PdfOptions`: `FontResolver` (e.g. embedded fonts; returned typefaces are cached and never disposed), `SubsetFonts` (embed only the glyphs used; `true` by default), `Title`, `Author`, `MaxImagePixels` (largest image decoded, 100 MP by default; larger images throw instead of exhausting memory).
 
 ```csharp
 var regular = SKTypeface.FromFile("fonts/Inter-Regular.ttf");
@@ -83,7 +85,7 @@ doc.GeneratePdf("report.pdf", new PdfOptions
 });
 ```
 
-Fonts are embedded whole (SkiaSharp does not subset them), which adds a few hundred KB per font face to each PDF.
+Fonts are subset: each PDF embeds only the glyphs it uses, a few tens of KB per font face instead of several hundred. Fonts with CFF outlines and variable fonts are embedded whole; `PdfOptions.SubsetFonts = false` embeds every font whole.
 
 Without a `FontResolver`, text uses the requested system font. When the system has no usable font (common on Linux and in containers without fonts installed), the package falls back to its bundled **DejaVu Sans** (regular and bold; italic is synthesized), so text is never rendered empty. For consistent output on every server, pass your own fonts with `FontResolver`. DejaVu Sans is distributed under its own permissive license, included in the package as `LICENSE-DejaVu.txt`.
 

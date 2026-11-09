@@ -10,15 +10,20 @@ namespace FluentReport.Elements
     /// </summary>
     public sealed class CanvasElement(float width, float height, Action<SKCanvas, SKRect> draw) : IRendererSpecificElement
     {
+        /// <summary>Width of the drawing area, in points.</summary>
         public float Width { get; } = width;
+        /// <summary>Height of the drawing area, in points.</summary>
         public float Height { get; } = height;
+        /// <summary>Draws inside the given rectangle; the canvas is clipped to it. Called once per render.</summary>
         public Action<SKCanvas, SKRect> Draw { get; } = draw ?? throw new ArgumentNullException(nameof(draw));
+        /// <summary>What the HTML and Excel renderers render instead; <c>null</c> renders nothing.</summary>
         public IElement? Fallback { get; init; }
     }
 }
 
 namespace FluentReport
 {
+    /// <summary>Adds custom SkiaSharp drawing to a container.</summary>
     public static class ContainerCanvasExtensions
     {
         /// <summary>

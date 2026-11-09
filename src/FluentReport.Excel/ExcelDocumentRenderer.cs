@@ -26,6 +26,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
     /// <summary>1-based number of the document page being written.</summary>
     private int _currentPage = 1;
 
+    /// <summary>Writes the document as an .xlsx workbook to <paramref name="stream"/>.</summary>
     public void RenderToStream(Stream stream)
     {
         using var workbook = new XLWorkbook();
