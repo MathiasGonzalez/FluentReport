@@ -9,9 +9,8 @@ namespace FluentReport.Samples;
 /// </summary>
 internal static class Sample06ThermalInvoice
 {
-    // 80 mm ≈ 227 points; height chosen generously to fit all content
+    // 80 mm ≈ 227 points; the page grows to the height of the receipt
     private const float PageWidth  = 227f;
-    private const float PageHeight = 700f;
 
     public static void Generate(string outputDir)
     {
@@ -23,7 +22,7 @@ internal static class Sample06ThermalInvoice
             {
                 c.Page(page =>
                 {
-                    page.Size(PageWidth, PageHeight);
+                    page.ContinuousSize(PageWidth); // as tall as the receipt
                     page.MarginAll(5);
 
                     page.Content().Column(col =>

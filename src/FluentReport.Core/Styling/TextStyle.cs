@@ -1,14 +1,23 @@
 namespace FluentReport.Styling;
 
+/// <summary>Font, color, alignment and spacing of a text.</summary>
 public class TextStyle
 {
+    /// <summary>Font size in points. Default 12.</summary>
     public float FontSize { get; set; } = 12;
+    /// <summary>Font family name. Default <c>sans-serif</c>.</summary>
     public string FontFamily { get; set; } = "sans-serif";
+    /// <summary>Bold text.</summary>
     public bool Bold { get; set; } = false;
+    /// <summary>Italic text.</summary>
     public bool Italic { get; set; } = false;
+    /// <summary>Underlined text.</summary>
     public bool Underline { get; set; } = false;
+    /// <summary>Text color. Default black.</summary>
     public ReportColor Color { get; set; } = ReportColor.Black;
+    /// <summary>Alignment of the lines inside the text's width. Default left.</summary>
     public TextAlignment Alignment { get; set; } = TextAlignment.Left;
+    /// <summary>Line height as a multiple of the font size. Default 1.2.</summary>
     public float LineSpacing { get; set; } = 1.2f;
 
     /// <summary>Rotation in degrees, counter-clockwise. Drawn by the PDF renderer only; layout uses the unrotated box.</summary>
@@ -42,6 +51,7 @@ public class TextStyle
     /// <summary>Effective color, respecting <see cref="ColorResolver"/> when set.</summary>
     public ReportColor EffectiveColor => ColorResolver?.Invoke() ?? Color;
 
+    /// <summary>A copy with the same values and resolvers.</summary>
     public TextStyle Clone() => new()
     {
         FontSize = FontSize,
@@ -59,4 +69,15 @@ public class TextStyle
     };
 }
 
-public enum TextAlignment { Left, Center, Right, Justify }
+/// <summary>Alignment of the lines of a text inside its width.</summary>
+public enum TextAlignment
+{
+    /// <summary>Lines start at the left edge.</summary>
+    Left,
+    /// <summary>Lines are centered.</summary>
+    Center,
+    /// <summary>Lines end at the right edge.</summary>
+    Right,
+    /// <summary>Lines fill the width, except the last of each paragraph.</summary>
+    Justify
+}

@@ -23,7 +23,7 @@ concurrency:
 jobs:
   build:
     name: Build landing page
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -132,7 +132,7 @@ jobs:
 
   deploy:
     name: Deploy landing page
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: build
 
     environment:

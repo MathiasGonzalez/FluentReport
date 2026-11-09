@@ -20,15 +20,65 @@ internal sealed class FontCache(
     private readonly Dictionary<(SKTypeface, float, bool, bool), SKFont> _fonts = new();
     private readonly List<SKTypeface> _owned = new();
 
-    public SKFont Font(TextStyle style)
+    // Font subsetting: glyphs drawn while collecting, then one reduced typeface per original.
+    private Dictionary<SKTypeface, HashSet<ushort>>? _usedGlyphs;
+    private readonly Dictionary<SKTypeface, SKTypeface> _subsets = new();
+
+    /// <summary>The font to measure with: always the full typeface.</summary>
+    public SKFont Font(TextStyle style) => Font(style, Typeface(style), null);
+
+    /// <summary>
+    /// The font to draw <paramref name="text"/> with. While glyphs are being collected it records the
+    /// ones <paramref name="text"/> needs; afterwards it returns the subset typeface when there is one.
+    /// </summary>
+    public SKFont DrawFont(TextStyle style, string text)
     {
         var typeface = Typeface(style);
-        var key = (typeface, style.FontSize, style.EffectiveBold, style.EffectiveItalic);
+        if (_usedGlyphs != null)
+        {
+            if (!_usedGlyphs.TryGetValue(typeface, out var used))
+                _usedGlyphs[typeface] = used = new();
+            used.UnionWith(typeface.GetGlyphs(text));
+        }
+        return Font(style, typeface, _subsets.GetValueOrDefault(typeface));
+    }
+
+    /// <summary>Starts recording the glyphs passed to <see cref="DrawFont"/>.</summary>
+    public void BeginGlyphCollection() => _usedGlyphs = new();
+
+    /// <summary>
+    /// Stops recording and builds a subset of every typeface drawn with, so a PDF embeds only the
+    /// glyphs it uses. Typefaces that cannot be subset keep being drawn whole.
+    /// </summary>
+    public void EndGlyphCollection()
+    {
+        if (_usedGlyphs == null) return;
+        foreach (var (typeface, glyphs) in _usedGlyphs)
+        {
+            if (_subsets.ContainsKey(typeface) || FontSubsetter.Subset(typeface, glyphs) is not { } file) continue;
+            using var data = SKData.CreateCopy(file);
+            var subset = SKTypeface.FromData(data);
+            if (subset == null) continue;
+            // A subset that does not load as the same font would draw other glyphs: keep the full one.
+            if (subset.GlyphCount != typeface.GlyphCount || subset.UnitsPerEm != typeface.UnitsPerEm)
+            {
+                subset.Dispose();
+                continue;
+            }
+            _subsets[typeface] = subset;
+            _owned.Add(subset);
+        }
+        _usedGlyphs = null;
+    }
+
+    private SKFont Font(TextStyle style, SKTypeface typeface, SKTypeface? subset)
+    {
+        var key = (subset ?? typeface, style.FontSize, style.EffectiveBold, style.EffectiveItalic);
         if (!_fonts.TryGetValue(key, out var font))
         {
             // Grayscale anti-aliasing and whole-pixel glyph origins keep raster output identical across platforms.
             // When no bold or italic face exists, Skia synthesizes it instead of silently dropping the style.
-            _fonts[key] = font = new SKFont(typeface, style.FontSize)
+            _fonts[key] = font = new SKFont(subset ?? typeface, style.FontSize)
             {
                 Edging = SKFontEdging.Antialias,
                 Subpixel = false,
@@ -95,6 +145,7 @@ internal sealed class FontCache(
         foreach (var typeface in _owned) typeface.Dispose();
         _fonts.Clear();
         _typefaces.Clear();
+        _subsets.Clear();
         _owned.Clear();
     }
 }

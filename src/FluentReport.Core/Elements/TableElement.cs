@@ -2,15 +2,21 @@ using FluentReport.Styling;
 
 namespace FluentReport.Elements;
 
+/// <summary>The width of one table column.</summary>
 public class TableColumnDefinition
 {
+    /// <summary>Width in points; <c>null</c> makes the column relative.</summary>
     public float? FixedWidth { get; set; }
+    /// <summary>Share of the width left by the fixed columns, relative to the other relative columns. Default 1.</summary>
     public float RelativeWidth { get; set; } = 1;
+    /// <summary>True when the column has no fixed width.</summary>
     public bool IsRelative => !FixedWidth.HasValue;
 }
 
+/// <summary>One cell of a table.</summary>
 public class TableCell
 {
+    /// <summary>The cell's content.</summary>
     public IElement? Content { get; set; }
 
     /// <summary>Number of columns this cell spans. Default is 1.</summary>
@@ -24,13 +30,18 @@ public class TableCell
 /// </summary>
 public class TableElement : IElement
 {
+    /// <summary>The columns, left to right.</summary>
     public List<TableColumnDefinition> Columns { get; } = new();
+    /// <summary>Cells of the header rows, repeated on every page the table continues on.</summary>
     public List<TableCell> HeaderCells { get; } = new();
+    /// <summary>Cells of the data rows.</summary>
     public List<TableCell> DataCells { get; } = new();
 
     /// <summary>Rows rendered after the data rows (totals, notes).</summary>
     public List<TableCell> FooterCells { get; } = new();
+    /// <summary>Width of the border drawn around every cell; 0 draws none.</summary>
     public float BorderWidth { get; set; }
+    /// <summary>Color of the cell borders. Default black.</summary>
     public ReportColor BorderColor { get; set; } = ReportColor.Black;
 
     /// <summary>

@@ -1,8 +1,11 @@
 namespace FluentReport.Elements;
 
+/// <summary>An image. Without a fixed size it scales down to the available width, keeping its proportions.</summary>
 public class ImageElement : IElement
 {
+    /// <summary>Width in points; with no <see cref="FixedHeight"/> the height keeps the proportions.</summary>
     public float? FixedWidth { get; set; }
+    /// <summary>Height in points; with no <see cref="FixedWidth"/> the width keeps the proportions.</summary>
     public float? FixedHeight { get; set; }
 
     /// <summary>Encoded image bytes (PNG, JPEG, GIF, WebP, BMP). May be empty when no image is available.</summary>
@@ -17,6 +20,7 @@ public class ImageElement : IElement
     /// <summary>Reads the image from <paramref name="path"/>. Throws when the file does not exist.</summary>
     public ImageElement(string path) : this(File.ReadAllBytes(path)) { }
 
+    /// <summary>Uses encoded image bytes (PNG, JPEG, GIF, WebP, BMP).</summary>
     public ImageElement(byte[] imageBytes)
     {
         ArgumentNullException.ThrowIfNull(imageBytes);

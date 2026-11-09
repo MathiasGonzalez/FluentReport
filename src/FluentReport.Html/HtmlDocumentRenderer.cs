@@ -18,6 +18,7 @@ public class HtmlDocumentRenderer
     private readonly DocumentSettings _settings;
     private readonly HtmlRendererOptions _options;
 
+    /// <summary>Creates a renderer for <paramref name="settings"/> with optional rendering options.</summary>
     public HtmlDocumentRenderer(DocumentSettings settings, HtmlRendererOptions? options = null)
     {
         _settings = settings;

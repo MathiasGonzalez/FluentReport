@@ -30,6 +30,7 @@ public sealed class RdlcDocumentFactory
     private Dictionary<string, byte[]> _embeddedImages = new(StringComparer.OrdinalIgnoreCase);
     private string? _externalImageRoot;
 
+    /// <summary>Creates a factory with the data the report reads: datasets by name, report parameters and globals.</summary>
     public RdlcDocumentFactory(
         IDictionary<string, IEnumerable<object>>? datasets = null,
         IDictionary<string, object>? parameters = null,

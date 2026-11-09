@@ -46,6 +46,25 @@ internal sealed class LayoutEngine : IDisposable
 
     public int TotalPages { get; set; } = 1;
 
+    /// <summary>
+    /// Runs <paramref name="drawEverything"/> once only to learn which glyphs the document draws, then
+    /// switches text drawing to fonts reduced to those glyphs. Images and custom canvases are skipped
+    /// during that pass: they draw no document text and custom code must run once.
+    /// </summary>
+    public void SubsetFonts(Action drawEverything)
+    {
+        _fonts.BeginGlyphCollection();
+        _collectingGlyphs = true;
+        try { drawEverything(); }
+        finally
+        {
+            _collectingGlyphs = false;
+            _fonts.EndGlyphCollection();
+        }
+    }
+
+    private bool _collectingGlyphs;
+
     // ── Measuring ────────────────────────────────────────────────────────────
 
     public float Measure(IElement element, float width)
@@ -390,10 +409,12 @@ internal sealed class LayoutEngine : IDisposable
                     canvas.DrawLine(x, y + line.Thickness / 2, x + width, y + line.Thickness / 2, paint);
                 break;
             case ImageElement image:
-                DrawImage(image, canvas, x, y, width);
+                if (!_collectingGlyphs) DrawImage(image, canvas, x, y, width);
                 break;
             case ChartElement chart:
                 DrawChart(chart, canvas, x, y, width, chart.FixedHeight);
+                break;
+            case CanvasElement when _collectingGlyphs:
                 break;
             case CanvasElement custom:
             {
@@ -438,8 +459,9 @@ internal sealed class LayoutEngine : IDisposable
     {
         if (align.Child is not { } child) return;
 
-        // Text (optionally inside padding) is aligned line by line with its real width, which keeps
-        // page numbers correct; other content is shrink-wrapped and offset.
+        // Text (optionally inside padding, a background or a border) is aligned line by line with its
+        // real width, which keeps page numbers correct and lets the background and border fill the
+        // container; other content is shrink-wrapped and offset.
         if (IsPaddedText(child))
         {
             var textAlign = align.Alignment switch
@@ -466,6 +488,7 @@ internal sealed class LayoutEngine : IDisposable
     {
         TextElement or TextBlock => true,
         PaddingElement { Child: { } c } => IsPaddedText(c),
+        BorderElement { Child: { } c } => IsPaddedText(c),
         _ => false
     };
 
@@ -510,7 +533,7 @@ internal sealed class LayoutEngine : IDisposable
     private void DrawRun(SKCanvas canvas, string text, float x, float baseline, float width, TextStyle style)
     {
         if (text.Length == 0) return;
-        var font = _fonts.Font(style);
+        var font = _fonts.DrawFont(style, text);
         using var paint = new SKPaint { Color = ToSk(style.EffectiveColor), IsAntialias = true };
 
         bool rotated = style.Rotation != 0;

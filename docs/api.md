@@ -41,6 +41,7 @@
 | Method | Description |
 |--------|-------------|
 | `.Size(PageSize)` / `.Size(float width, float height)` | Page size in points (1 pt = 1/72 in). |
+| `.ContinuousSize(float width)` | A page that grows to the height of its content: everything on one page, with no blank space below. For receipts on roll paper (80 mm ≈ 227 pt). Page breaks are ignored. PDF and PNG. |
 | `.Landscape()` | Swaps width and height. |
 | `.MarginAll(float)` / `.Margin(top, right, bottom, left)` / `.MarginHorizontal(float)` / `.MarginVertical(float)` | Margins in points; in HTML they become cell padding. |
 | `.Header()` / `.Content()` / `.Footer()` | Return the `ContainerBuilder` of each region. |
@@ -89,14 +90,14 @@ Every region, column/row item and table cell is a `ContainerBuilder`. It holds *
 
 ### Decorators
 
-Order-independent; they can be called before or after the content method.
+Order-independent; they can be called before or after the content method, and in any order. They always nest the same way: padding around the content, background and border around the padding, alignment outermost. Aligned text keeps a background and border as wide as its container, so `.Background(..).Padding(4).AlignCenter().Text(..)` shades the whole table cell; other aligned content (an image, a column) is shrunk to its own width together with its background and border.
 
 | Method | Description |
 |--------|-------------|
 | `.Padding(float)`, `.PaddingHorizontal/Vertical(float)`, `.PaddingTop/Bottom/Left/Right(float)` | Padding. |
-| `.Background(string hex)` / `.Background(ReportColor)` | Background color. |
-| `.Border(float width = 1, string? colorHex = null)` | Border. |
-| `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` | Horizontal alignment of the content. |
+| `.Background(string hex)` / `.Background(ReportColor)` | Background color (padding included). |
+| `.Border(float width = 1, string? colorHex = null)` | Border (padding included). |
+| `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` | Horizontal position of the content. Text is aligned line by line; other content is shrunk to its width and moved. |
 
 ```csharp
 col.Item()
@@ -220,10 +221,11 @@ Content flows across pages: columns split between items (also nested or inside p
 | Option | Description |
 |--------|-------------|
 | `FontResolver` | `Func<TextStyle, SKTypeface?>` — e.g. embedded fonts. Return `null` for the system font. Typefaces are cached per render and never disposed. |
+| `SubsetFonts` | Embed only the glyphs the document uses instead of whole font files (default `true`). Applies to TrueType fonts; others are embedded whole. |
 | `Title` / `Author` | PDF metadata. |
 | `MaxImagePixels` | Largest image decoded, in pixels (default 100 MP). Larger images throw `InvalidOperationException` before they are decoded, so a small compressed file cannot use gigabytes of memory. `null` removes the limit. |
 
-Fonts are embedded whole (SkiaSharp does not subset), adding a few hundred KB per face.
+Fonts are subset: a PDF carries only the glyphs it uses, a few tens of KB per face instead of several hundred. Fonts with CFF outlines and variable fonts are embedded whole.
 
 When neither the resolver nor the system provides a usable font (typical on Linux and in containers without fonts), FluentReport uses its bundled DejaVu Sans (regular and bold; italic is synthesized). Use `FontResolver` for the same output on every machine.
 

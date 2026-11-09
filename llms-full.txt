@@ -8,10 +8,11 @@ Facts to get right when writing code with FluentReport:
 - Namespaces: `FluentReport` (`Document`, `GeneratePdf`, `PdfOptions`), `FluentReport.Core` (`PageSizes`), `FluentReport.Styling` (`ReportColor`, `TextStyle`), `FluentReport.Elements` (`ChartType`, element types), `FluentReport.Html` (`GenerateHtml`, `GenerateHtmlFragment`), `FluentReport.Excel` (`GenerateExcel`), `FluentReport.Rdlc` (`Document.FromRdlc`, `RdlcImportOptions`).
 - Entry point: `Document.Create(container => container.Page(page => { page.Header()…; page.Content()…; page.Footer()…; }))`. Output: `doc.GeneratePdf(path | stream)` or `byte[] doc.GeneratePdf()`, `doc.GenerateHtml(...)`, `doc.GenerateHtmlFragment()`, `doc.GenerateExcel(...)`.
 - Every container holds exactly one content element (`Text`, `Column`, `Row`, `Table`, `Image`, `List`, `Line`, `Spacer`, `Chart`, …); a second one throws `InvalidOperationException`. Use `Column(col => { col.Item()…; col.Item()…; })` or `Row(row => { row.RelativeItem()…; row.FixedItem(80)…; })` for several.
-- Container decorators (`Padding`, `Background`, `Border`, `AlignCenter`) go before the content: `.Padding(5).Background("#EEEEEE").Text("x")`. After `.Text(...)` the chain is a `TextBuilder`: `.FontSize()`, `.Bold()`, `.Italic()`, `.Color()`, `.AlignRight()` style the text.
+- Container decorators (`Padding`, `Background`, `Border`, `AlignCenter`) go before the content: `.Padding(5).Background("#EEEEEE").Text("x")`. Their order does not matter. Aligned text keeps its background and border as wide as the container (a shaded table header cell stays fully shaded); other aligned content shrinks to its width. After `.Text(...)` the chain is a `TextBuilder`: `.FontSize()`, `.Bold()`, `.Italic()`, `.Color()`, `.AlignRight()` style the text.
 - Units are points (1/72 inch). Colors are `"#RRGGBB"` or `"#RRGGBBAA"` strings (the 3-digit `"#EEE"` form throws) or `ReportColor`.
 - Tables: `ColumnsDefinition(c => { c.RelativeColumn(2); c.ConstantColumn(80); })`, then `Header(h => h.Cell()…)`, `table.Cell()` per data cell (cells wrap into rows by column count), optional `Footer(...)` and `BorderEachCell()`. In PDF, tables split across pages and repeat the header.
 - Page numbers: `page.Footer().Text(x => { x.Span("Page "); x.CurrentPageNumber(); x.Span(" of "); x.TotalPages(); })`.
+- Receipts on roll paper: `page.ContinuousSize(227)` (80 mm) makes one page as tall as its content instead of a fixed height.
 - Fonts in PDF: the system font by default, the bundled DejaVu Sans when the system has none. For identical output everywhere pass `new PdfOptions { FontResolver = style => style.EffectiveBold ? boldTypeface : regularTypeface }` with `SKTypeface.FromFile(...)`.
 - RDLC: `Document.FromRdlc(path, datasets: new Dictionary<string, IEnumerable<object>> { ["DataSetName"] = rows.Cast<object>() }, parameters: …, options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") })`, then any `Generate*` method. Rows can be POCOs or dictionaries. Use `new RdlcDocumentFactory(...)` and its `Warnings` to see what was not supported.
 - Excel skips images; charts, canvases and rotated text render a text fallback in HTML and Excel.
@@ -218,6 +219,7 @@ See the generated files in [`samples/FluentReport.Samples/output`](https://githu
 | Method | Description |
 |--------|-------------|
 | `.Size(PageSize)` / `.Size(float width, float height)` | Page size in points (1 pt = 1/72 in). |
+| `.ContinuousSize(float width)` | A page that grows to the height of its content: everything on one page, with no blank space below. For receipts on roll paper (80 mm ≈ 227 pt). Page breaks are ignored. PDF and PNG. |
 | `.Landscape()` | Swaps width and height. |
 | `.MarginAll(float)` / `.Margin(top, right, bottom, left)` / `.MarginHorizontal(float)` / `.MarginVertical(float)` | Margins in points; in HTML they become cell padding. |
 | `.Header()` / `.Content()` / `.Footer()` | Return the `ContainerBuilder` of each region. |
@@ -266,14 +268,14 @@ Every region, column/row item and table cell is a `ContainerBuilder`. It holds *
 
 ### Decorators
 
-Order-independent; they can be called before or after the content method.
+Order-independent; they can be called before or after the content method, and in any order. They always nest the same way: padding around the content, background and border around the padding, alignment outermost. Aligned text keeps a background and border as wide as its container, so `.Background(..).Padding(4).AlignCenter().Text(..)` shades the whole table cell; other aligned content (an image, a column) is shrunk to its own width together with its background and border.
 
 | Method | Description |
 |--------|-------------|
 | `.Padding(float)`, `.PaddingHorizontal/Vertical(float)`, `.PaddingTop/Bottom/Left/Right(float)` | Padding. |
-| `.Background(string hex)` / `.Background(ReportColor)` | Background color. |
-| `.Border(float width = 1, string? colorHex = null)` | Border. |
-| `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` | Horizontal alignment of the content. |
+| `.Background(string hex)` / `.Background(ReportColor)` | Background color (padding included). |
+| `.Border(float width = 1, string? colorHex = null)` | Border (padding included). |
+| `.AlignLeft()` / `.AlignCenter()` / `.AlignRight()` | Horizontal position of the content. Text is aligned line by line; other content is shrunk to its width and moved. |
 
 ```csharp
 col.Item()
@@ -397,10 +399,11 @@ Content flows across pages: columns split between items (also nested or inside p
 | Option | Description |
 |--------|-------------|
 | `FontResolver` | `Func<TextStyle, SKTypeface?>` — e.g. embedded fonts. Return `null` for the system font. Typefaces are cached per render and never disposed. |
+| `SubsetFonts` | Embed only the glyphs the document uses instead of whole font files (default `true`). Applies to TrueType fonts; others are embedded whole. |
 | `Title` / `Author` | PDF metadata. |
 | `MaxImagePixels` | Largest image decoded, in pixels (default 100 MP). Larger images throw `InvalidOperationException` before they are decoded, so a small compressed file cannot use gigabytes of memory. `null` removes the limit. |
 
-Fonts are embedded whole (SkiaSharp does not subset), adding a few hundred KB per face.
+Fonts are subset: a PDF carries only the glyphs it uses, a few tens of KB per face instead of several hundred. Fonts with CFF outlines and variable fonts are embedded whole.
 
 When neither the resolver nor the system provides a usable font (typical on Linux and in containers without fonts), FluentReport uses its bundled DejaVu Sans (regular and bold; italic is synthesized). Use `FontResolver` for the same output on every machine.
 

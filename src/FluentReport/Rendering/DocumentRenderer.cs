@@ -5,7 +5,11 @@ using SkiaSharp;
 namespace FluentReport.Rendering;
 
 /// <summary>One output page: the page settings it uses and the content fragment that fits on it.</summary>
-internal sealed record PageLayout(PageSettings Settings, IElement? Content, float HeaderHeight, float FooterHeight);
+internal sealed record PageLayout(PageSettings Settings, IElement? Content, float HeaderHeight, float FooterHeight, PageSize Size)
+{
+    /// <summary>Height left for the content between the header and the footer.</summary>
+    public float ContentArea => Math.Max(0, Size.Height - Settings.MarginTop - Settings.MarginBottom - HeaderHeight - FooterHeight);
+}
 
 /// <summary>Paginates a document once and draws the pages to PDF or PNG.</summary>
 internal sealed class DocumentRenderer : IDisposable
@@ -32,19 +36,28 @@ internal sealed class DocumentRenderer : IDisposable
             float width = page.ContentWidth;
             float header = page.HeaderElement is { } h ? _engine.Measure(h, width) : 0;
             float footer = page.FooterElement is { } f ? _engine.Measure(f, width) : 0;
-            float area = Math.Max(0, page.ContentHeight - header - footer);
-
             var remaining = page.ContentElement;
+
+            if (page.ContinuousHeight)
+            {
+                // One page as tall as its content: nothing is split and page breaks measure zero.
+                float content = remaining is { } c ? _engine.Measure(c, width) : 0;
+                float height = page.MarginTop + header + content + footer + page.MarginBottom;
+                pages.Add(new PageLayout(page, remaining, header, footer, new PageSize(page.Size.Width, Math.Max(1, height))));
+                continue;
+            }
+
+            float area = Math.Max(0, page.ContentHeight - header - footer);
             if (remaining == null)
             {
-                pages.Add(new PageLayout(page, null, header, footer));
+                pages.Add(new PageLayout(page, null, header, footer, page.Size));
                 continue;
             }
 
             while (remaining != null)
             {
                 var (head, tail) = _engine.Split(remaining, width, area, pageIsEmpty: true);
-                pages.Add(new PageLayout(page, head, header, footer));
+                pages.Add(new PageLayout(page, head, header, footer, page.Size));
                 remaining = IsEmpty(tail) ? null : tail;
             }
         }
@@ -76,7 +89,7 @@ internal sealed class DocumentRenderer : IDisposable
         if (page.Content is { } content)
         {
             float contentTop = top + page.HeaderHeight;
-            float area = Math.Max(0, s.ContentHeight - page.HeaderHeight - page.FooterHeight);
+            float area = page.ContentArea;
             canvas.Save();
             // Content taller than an empty page (an oversized row or image) is cut at the footer.
             canvas.ClipRect(SKRect.Create(s.MarginLeft, contentTop, width, area));
@@ -85,7 +98,7 @@ internal sealed class DocumentRenderer : IDisposable
         }
 
         if (s.FooterElement is { } footer)
-            _engine.Draw(footer, canvas, s.MarginLeft, s.Size.Height - s.MarginBottom - page.FooterHeight, width, page.FooterHeight);
+            _engine.Draw(footer, canvas, s.MarginLeft, page.Size.Height - s.MarginBottom - page.FooterHeight, width, page.FooterHeight);
     }
 
     public void RenderPdf(Stream stream)
@@ -95,11 +108,24 @@ internal sealed class DocumentRenderer : IDisposable
         metadata.Author = _options?.Author;
         metadata.Producer = "FluentReport";
 
+        if (_options?.SubsetFonts ?? true)
+        {
+            _engine.SubsetFonts(() =>
+            {
+                for (int i = 0; i < Pages.Count; i++)
+                {
+                    var size = Pages[i].Size;
+                    using var dryRun = new SKNoDrawCanvas((int)Math.Ceiling(size.Width), (int)Math.Ceiling(size.Height));
+                    DrawPage(dryRun, i);
+                }
+            });
+        }
+
         using var document = SKDocument.CreatePdf(stream, metadata)
             ?? throw new InvalidOperationException("SkiaSharp could not create a PDF document.");
         for (int i = 0; i < Pages.Count; i++)
         {
-            var size = Pages[i].Settings.Size;
+            var size = Pages[i].Size;
             var canvas = document.BeginPage(size.Width, size.Height);
             DrawPage(canvas, i);
             document.EndPage();
@@ -112,7 +138,7 @@ internal sealed class DocumentRenderer : IDisposable
         var result = new List<byte[]>(Pages.Count);
         for (int i = 0; i < Pages.Count; i++)
         {
-            var size = Pages[i].Settings.Size;
+            var size = Pages[i].Size;
             var info = new SKImageInfo((int)Math.Ceiling(size.Width * scale), (int)Math.Ceiling(size.Height * scale),
                 SKColorType.Rgba8888, SKAlphaType.Premul);
             // Unknown pixel geometry disables LCD anti-aliasing, which depends on the display and the OS.

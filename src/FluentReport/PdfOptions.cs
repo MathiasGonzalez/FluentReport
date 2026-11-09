@@ -12,6 +12,13 @@ public sealed class PdfOptions
     /// </summary>
     public Func<TextStyle, SKTypeface?>? FontResolver { get; init; }
 
+    /// <summary>
+    /// Embeds in the PDF only the glyphs the document uses instead of whole font files, which makes a
+    /// short document several hundred KB smaller. Applies to TrueType fonts; others are embedded whole.
+    /// Text looks, measures and extracts the same. Default <c>true</c>.
+    /// </summary>
+    public bool SubsetFonts { get; init; } = true;
+
     /// <summary>PDF document title metadata.</summary>
     public string? Title { get; init; }
 

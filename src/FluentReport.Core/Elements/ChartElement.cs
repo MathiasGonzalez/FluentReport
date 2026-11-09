@@ -15,14 +15,25 @@ public class ChartSeries
     public ReportColor? Color { get; set; }
 }
 
-public enum ChartType { Bar, Line }
+/// <summary>How a <see cref="ChartElement"/> draws its series.</summary>
+public enum ChartType
+{
+    /// <summary>Vertical bars, grouped by category.</summary>
+    Bar,
+    /// <summary>One line per series.</summary>
+    Line
+}
 
 /// <summary>A bar or line chart. Drawn by the PDF renderer; HTML and Excel render <see cref="Fallback"/>.</summary>
 public class ChartElement : IRendererSpecificElement
 {
+    /// <summary>Bar or line. Default bar.</summary>
     public ChartType Type { get; set; } = ChartType.Bar;
+    /// <summary>Title drawn above the chart.</summary>
     public string? Title { get; set; }
+    /// <summary>Labels of the X axis, one per category.</summary>
     public List<string> CategoryLabels { get; } = new();
+    /// <summary>The data series.</summary>
     public List<ChartSeries> Series { get; } = new();
 
     /// <summary>Height of the chart area in points. Default 200.</summary>
