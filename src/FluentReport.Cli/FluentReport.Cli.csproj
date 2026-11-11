@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PackageId>FluentReport.Cli</PackageId>
+    <Description>Command-line tool for FluentReport: renders RDLC / SSRS reports with JSON data to PDF, PNG, HTML or Excel, without ReportViewer. Run it without installing with `dnx FluentReport.Cli render report.rdlc --data rows.json -o report.pdf`.</Description>
+    <PackageTags>rdlc;ssrs;reportviewer;report;pdf;cli;dotnet-tool</PackageTags>
+    <!-- A .NET tool: `dnx FluentReport.Cli ...` runs it without installing, `dotnet tool install -g FluentReport.Cli` installs it. -->
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>fluentreport</ToolCommandName>
+    <!-- Runs on newer runtimes too, not only on .NET 10. -->
+    <RollForward>Major</RollForward>
+    <!-- No earlier version of this package exists to validate against. Set it once one is published. -->
+    <PackageValidationBaselineVersion></PackageValidationBaselineVersion>
+    <RootNamespace>FluentReport.Cli</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="FluentReport.Cli.Tests" />
+  </ItemGroup>
+
+  <!-- The tool package carries SkiaSharp's native library for each platform. Left as is it weighs
+       ~160 MB, mostly native debug symbols (~100 MB of libSkiaSharp.pdb per Windows platform) and
+       platforms a command-line tool does not run on (Android, LoongArch, RISC-V, 32-bit x86 Linux).
+       Only the tool's package is trimmed: the libraries keep every platform SkiaSharp supports. -->
+  <PropertyGroup>
+    <ToolRuntimesPattern>^runtimes[\\/](win-x64|win-arm64|win-x86|osx|linux-x64|linux-arm64|linux-arm|linux-musl-x64|linux-musl-arm64)[\\/]</ToolRuntimesPattern>
+  </PropertyGroup>
+  <Target Name="TrimToolRuntimeAssets" AfterTargets="ComputeResolvedFilesToPublishList">
+    <ItemGroup>
+      <_ToolRuntimeAssetToDrop Include="@(ResolvedFileToPublish)"
+        Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(ResolvedFileToPublish.RelativePath)', '^runtimes[\\/]'))
+                   and ('%(ResolvedFileToPublish.Extension)' == '.pdb'
+                        or !$([System.Text.RegularExpressions.Regex]::IsMatch('%(ResolvedFileToPublish.RelativePath)', '$(ToolRuntimesPattern)')))" />
+      <ResolvedFileToPublish Remove="@(_ToolRuntimeAssetToDrop)" />
+    </ItemGroup>
+  </Target>
+  <ItemGroup>
+    <ProjectReference Include="..\FluentReport.Rdlc\FluentReport.Rdlc.csproj" />
+    <ProjectReference Include="..\FluentReport\FluentReport.csproj" />
+    <ProjectReference Include="..\FluentReport.Html\FluentReport.Html.csproj" />
+    <ProjectReference Include="..\FluentReport.Excel\FluentReport.Excel.csproj" />
+  </ItemGroup>
+</Project>

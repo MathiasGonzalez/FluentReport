@@ -8,6 +8,7 @@
 [![NuGet FluentReport.Html](https://img.shields.io/nuget/v/FluentReport.Html.svg?label=FluentReport.Html)](https://www.nuget.org/packages/FluentReport.Html)
 [![NuGet FluentReport.Excel](https://img.shields.io/nuget/v/FluentReport.Excel.svg?label=FluentReport.Excel)](https://www.nuget.org/packages/FluentReport.Excel)
 [![NuGet FluentReport.Rdlc](https://img.shields.io/nuget/v/FluentReport.Rdlc.svg?label=FluentReport.Rdlc)](https://www.nuget.org/packages/FluentReport.Rdlc)
+[![NuGet FluentReport.Cli](https://img.shields.io/nuget/v/FluentReport.Cli.svg?label=FluentReport.Cli)](https://www.nuget.org/packages/FluentReport.Cli)
 
 .NET 10 library for generating **PDF** reports with a fluent C# API, with the same document also rendering to **HTML / email** and **Excel**, and an importer for **RDLC / SSRS** report definitions. Linux compatible.
 
@@ -20,6 +21,7 @@
 | [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel (.xlsx) renderer (ClosedXML) |
 | [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
 | [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API, brought in by the packages above |
+| [`FluentReport.Cli`](https://www.nuget.org/packages/FluentReport.Cli) | Command-line tool: renders RDLC reports with JSON data, no project needed |
 
 ```shell
 dotnet add package FluentReport          # PDF
@@ -103,6 +105,20 @@ var invoice = Document.FromRdlc(
 invoice.GeneratePdf("invoice.pdf");
 ```
 
+### Command line
+
+`FluentReport.Cli` renders an RDLC report with JSON data from the terminal, with no project to
+create. With the .NET 10 SDK, `dnx` runs it without installing it:
+
+```shell
+dnx FluentReport.Cli render invoice.rdlc --data Lines=lines.json --culture es-UY -o invoice.pdf
+```
+
+The extension of `-o` picks the format (`.pdf`, `.png`, `.html`, `.xlsx`). Each dataset takes an
+array of JSON objects, one per row; `-p Name=value` sets report parameters. To call it as
+`fluentreport`, install it once with `dotnet tool install -g FluentReport.Cli`. Every option is in
+[its README](src/FluentReport.Cli/README.md).
+
 ## Renderer support
 
 | Feature | PDF | HTML | Excel |
@@ -133,7 +149,7 @@ See the generated files in [`samples/FluentReport.Samples/output`](samples/Fluen
 - [Migration to 3.0](docs/migration-3.0.md)
 - [Security](SECURITY.md) — reporting vulnerabilities and rendering untrusted reports
 - [UY fiscal document samples](docs/uy-fiscal-samples.md) — salary slip, delivery note, payment receipt
-- Package READMEs: [PDF](src/FluentReport/README.md) · [Core](src/FluentReport.Core/README.md) · [Html](src/FluentReport.Html/README.md) · [Excel](src/FluentReport.Excel/README.md) · [Rdlc](src/FluentReport.Rdlc/README.md)
+- Package READMEs: [PDF](src/FluentReport/README.md) · [Core](src/FluentReport.Core/README.md) · [Html](src/FluentReport.Html/README.md) · [Excel](src/FluentReport.Excel/README.md) · [Rdlc](src/FluentReport.Rdlc/README.md) · [Cli](src/FluentReport.Cli/README.md)
 
 ## Project structure
 
@@ -143,7 +159,8 @@ src/
 ├── FluentReport.Core/     # Document model and fluent API
 ├── FluentReport.Html/     # HTML / email renderer
 ├── FluentReport.Excel/    # Excel renderer (ClosedXML)
-└── FluentReport.Rdlc/     # RDLC importer
+├── FluentReport.Rdlc/     # RDLC importer
+└── FluentReport.Cli/      # Command-line tool (dnx FluentReport.Cli)
 tests/                     # xUnit v3 test projects, one per package
 samples/FluentReport.Samples/
 docs/

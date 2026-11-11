@@ -15,6 +15,7 @@ Facts to get right when writing code with FluentReport:
 - Receipts on roll paper: `page.ContinuousSize(227)` (80 mm) makes one page as tall as its content instead of a fixed height.
 - Fonts in PDF: the system font by default, the bundled DejaVu Sans when the system has none. For identical output everywhere pass `new PdfOptions { FontResolver = style => style.EffectiveBold ? boldTypeface : regularTypeface }` with `SKTypeface.FromFile(...)`.
 - RDLC: `Document.FromRdlc(path, datasets: new Dictionary<string, IEnumerable<object>> { ["DataSetName"] = rows.Cast<object>() }, parameters: …, options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") })`, then any `Generate*` method. Rows can be POCOs or dictionaries. Use `new RdlcDocumentFactory(...)` and its `Warnings` to see what was not supported.
+- Command line, no project: `dnx FluentReport.Cli render report.rdlc --data DataSetName=rows.json -o out.pdf` (.NET 10 SDK; `-o` extension picks pdf, png, html or xlsx; `-p Name=value` for parameters; `--culture es-UY`). Rows are JSON arrays of objects.
 - Excel skips images; charts, canvases and rotated text render a text fallback in HTML and Excel.
 
 ## Docs
