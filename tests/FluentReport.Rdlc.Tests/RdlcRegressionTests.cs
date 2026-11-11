@@ -398,14 +398,12 @@ public class RdlcRegressionTests
     [InlineData("=Mid(\"abc\", -99999999999)", "abc")]
     [InlineData("=Mid(\"abc\", 99999999999)", "")]
     [InlineData("=Choose(99999999999, \"a\", \"b\")", "")]
-    [InlineData("=FormatNumber(1.5, 99999999999).Length", null)]
     [InlineData("=FormatNumber(1.5, -1)", "1.50")]
     [InlineData("=FormatNumber(1.5, 3)", "1.500")]
     [InlineData("=2 ^ -1", "0.5")]
     [InlineData("=-2 ^ 2", "-4")]
-    public void OutOfRangeArguments_Saturate(string expression, string? expected)
+    public void OutOfRangeArguments_Saturate(string expression, string expected)
     {
-        if (expected == null) return; // covered by HugeDecimalPlaces_AreCapped
         Assert.Equal(expected, new RdlcExpressionEvaluator().Evaluate(expression));
     }
 
