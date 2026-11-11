@@ -1,8 +1,8 @@
 # Changelog
 
-Notable changes to the FluentReport packages. All five packages share one version.
+Notable changes to the FluentReport packages. All six packages share one version.
 
-## Unreleased
+## 3.2.1
 
 ### Added
 
