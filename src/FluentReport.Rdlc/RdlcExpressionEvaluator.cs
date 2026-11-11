@@ -175,6 +175,11 @@ internal sealed class RdlcExpressionEvaluator
         {
             return ExpressionFailed(expression, ex);
         }
+        catch (Exception ex) when (ex is OverflowException or FormatException or ArgumentException or InvalidCastException)
+        {
+            // Safety net: a value the evaluator did not expect fails this expression, not the whole import.
+            return ExpressionFailed(expression, new RdlcExpressionException(ex.Message));
+        }
     }
 
     private object? ExpressionFailed(string expression, RdlcExpressionException ex)
@@ -312,9 +317,17 @@ internal sealed class RdlcExpressionEvaluator
 
         var getter = MemberCache.GetOrAdd((row.GetType(), name), static key =>
         {
-            const BindingFlags flags = BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase;
-            if (key.Item1.GetProperty(key.Item2, flags) is { } p) return p.GetValue;
-            if (key.Item1.GetField(key.Item2, flags) is { } f) return f.GetValue;
+            // An exact name wins over a match that differs in case. Picking from the list, rather than
+            // GetProperty(name, IgnoreCase), cannot throw AmbiguousMatchException for members like Total/total.
+            const BindingFlags flags = BindingFlags.Public | BindingFlags.Instance;
+            static T? Pick<T>(IEnumerable<T> members, string name) where T : MemberInfo
+            {
+                var list = members.ToList();
+                return list.FirstOrDefault(m => m.Name == name)
+                    ?? list.FirstOrDefault(m => string.Equals(m.Name, name, StringComparison.OrdinalIgnoreCase));
+            }
+            if (Pick(key.Item1.GetProperties(flags).Where(p => p.CanRead && p.GetIndexParameters().Length == 0), key.Item2) is { } p) return p.GetValue;
+            if (Pick(key.Item1.GetFields(flags), key.Item2) is { } f) return f.GetValue;
             return null;
         });
         if (getter == null) return false;
@@ -348,6 +361,10 @@ internal sealed class RdlcExpressionEvaluator
         object? Arg(int i) => i < args.Count ? args[i].Eval(this, row) : throw new RdlcExpressionException($"{name}() expects more arguments");
         string Str(int i) => ToDisplay(Arg(i));
         decimal Num(int i) => ToNumber(Arg(i)) ?? throw new RdlcExpressionException($"{name}(): '{Str(i)}' is not a number");
+        // Counts and positions: out-of-range values saturate instead of overflowing the cast.
+        int Int(int i) => (int)Math.Clamp(decimal.Truncate(Num(i)), int.MinValue, int.MaxValue);
+        // Decimal places for FormatNumber and friends: 2 by default and for negative values (VB uses -1 for "default"), 99 at most.
+        int Digits() => args.Count > 1 && Int(1) is >= 0 and var d ? Math.Min(d, 99) : 2;
 
         switch (name.ToUpperInvariant())
         {
@@ -358,21 +375,27 @@ internal sealed class RdlcExpressionEvaluator
                     if (ToBool(Arg(i))) return Arg(i + 1);
                 return null;
             case "CHOOSE":
-                var index = (int)Num(0);
+                var index = Int(0);
                 return index >= 1 && index < args.Count ? Arg(index) : null;
 
             case "FORMAT":
                 return Format(Arg(0), args.Count > 1 ? Str(1) : null);
             case "FORMATNUMBER":
-                return ToNumber(Arg(0))?.ToString("N" + (args.Count > 1 ? (int)Num(1) : 2), Culture);
+                return ToNumber(Arg(0))?.ToString("N" + Digits(), Culture);
             case "FORMATCURRENCY":
-                return ToNumber(Arg(0))?.ToString("C" + (args.Count > 1 ? (int)Num(1) : 2), Culture);
+                return ToNumber(Arg(0))?.ToString("C" + Digits(), Culture);
             case "FORMATPERCENT":
-                return ToNumber(Arg(0))?.ToString("P" + (args.Count > 1 ? (int)Num(1) : 2), Culture);
+                return ToNumber(Arg(0))?.ToString("P" + Digits(), Culture);
 
             case "CSTR": return Str(0);
             case "CINT":
-            case "CLNG": return (long)Math.Round(Num(0), MidpointRounding.ToEven);
+            case "CLNG":
+            {
+                var rounded = Math.Round(Num(0), MidpointRounding.ToEven);
+                return rounded >= long.MinValue && rounded <= long.MaxValue
+                    ? (long)rounded
+                    : throw new RdlcExpressionException($"{name}(): '{Str(0)}' is out of range");
+            }
             case "CDEC":
             case "CDBL": return Num(0);
             case "CBOOL": return ToBool(Arg(0));
@@ -384,13 +407,13 @@ internal sealed class RdlcExpressionEvaluator
             case "RTRIM": return Str(0).TrimEnd();
             case "UCASE": return Str(0).ToUpper(Culture);
             case "LCASE": return Str(0).ToLower(Culture);
-            case "LEFT": { var s = Str(0); return s[..Math.Clamp((int)Num(1), 0, s.Length)]; }
-            case "RIGHT": { var s = Str(0); var n = Math.Clamp((int)Num(1), 0, s.Length); return s[^n..]; }
+            case "LEFT": { var s = Str(0); return s[..Math.Clamp(Int(1), 0, s.Length)]; }
+            case "RIGHT": { var s = Str(0); var n = Math.Clamp(Int(1), 0, s.Length); return s[^n..]; }
             case "MID":
             {
                 var s = Str(0);
-                var start = Math.Clamp((int)Num(1) - 1, 0, s.Length);
-                var len = args.Count > 2 ? Math.Clamp((int)Num(2), 0, s.Length - start) : s.Length - start;
+                var start = (int)Math.Clamp(Int(1) - 1L, 0, s.Length);
+                var len = args.Count > 2 ? Math.Clamp(Int(2), 0, s.Length - start) : s.Length - start;
                 return s.Substring(start, len);
             }
             case "REPLACE": return Str(0).Replace(Str(1), Str(2), StringComparison.Ordinal);
@@ -833,9 +856,17 @@ internal sealed class RdlcExpressionEvaluator
             while (IsOperator("^"))
             {
                 _pos++;
-                left = new Binary("^", left, ParsePrimary());
+                left = new Binary("^", left, ParseExponent());
             }
             return left;
+        }
+
+        /// <summary>The right side of <c>^</c>, which may carry its own sign: <c>2 ^ -1</c>.</summary>
+        private Node ParseExponent()
+        {
+            if (IsOperator("-")) { _pos++; return new Unary("-", Nested(ParseExponent)); }
+            if (IsOperator("+")) { _pos++; return Nested(ParseExponent); }
+            return ParsePrimary();
         }
 
         private Node ParsePrimary()
@@ -844,7 +875,9 @@ internal sealed class RdlcExpressionEvaluator
             switch (token.Kind)
             {
                 case TokenKind.Number:
-                    return new Literal(decimal.Parse(token.Text, NumberStyles.Float, CultureInfo.InvariantCulture));
+                    return decimal.TryParse(token.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var number)
+                        ? new Literal(number)
+                        : throw new RdlcExpressionException($"'{token.Text}' is not a valid number");
                 case TokenKind.String:
                     return new Literal(token.Text);
                 case TokenKind.Operator when token.Text == "(":

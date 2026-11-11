@@ -275,7 +275,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
 
                 var bg = ExtractBackgroundColor(cell.Content);
                 if (bg.HasValue)
-                    xlCell.Style.Fill.BackgroundColor = ToXLColor(bg.Value);
+                    ApplyFill(xlCell, bg.Value);
 
                 if (table.BorderWidth > 0)
                 {
@@ -318,8 +318,8 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
                         : XLFontUnderlineValues.None)
                     .SetFontSize(span.Style.FontSize)
                     .SetFontColor(ToXLColor(span.Style.EffectiveColor));
-                if (!string.IsNullOrEmpty(span.Style.FontFamily))
-                    rich.SetFontName(span.Style.FontFamily);
+                if (ExcelFontName(span.Style) is { } fontName)
+                    rich.SetFontName(fontName);
             }
             cell.Style.Alignment.Horizontal = MapTextAlignment(text.Style.Alignment);
             cell.Style.Alignment.WrapText = true;
@@ -336,7 +336,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
         // Apply wrapper style overrides (work for both rich text and plain text)
         if (style?.Bold == true) cell.Style.Font.Bold = true;
         if (style?.BackgroundColor.HasValue == true)
-            cell.Style.Fill.BackgroundColor = ToXLColor(style.BackgroundColor.Value);
+            ApplyFill(cell, style.BackgroundColor.Value);
         if (style?.Border != null && style.Border.Width > 0)
             ApplyBorder(cell, style.Border);
         if (style?.Alignment.HasValue == true)
@@ -453,6 +453,7 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
             : XLFontUnderlineValues.None;
         cell.Style.Font.FontSize = style.FontSize;
         cell.Style.Font.FontColor = ToXLColor(style.EffectiveColor);
+        if (ExcelFontName(style) is { } fontName) cell.Style.Font.FontName = fontName;
         cell.Style.Alignment.Horizontal = MapTextAlignment(style.Alignment);
         cell.Style.Alignment.WrapText = true;
     }
@@ -471,8 +472,25 @@ public class ExcelDocumentRenderer(DocumentSettings settings)
         { cell.Style.Border.RightBorder = thin; cell.Style.Border.RightBorderColor = color; }
     }
 
-    private static XLColor ToXLColor(ReportColor c) =>
-        XLColor.FromArgb(c.A, c.R, c.G, c.B);
+    /// <summary>
+    /// Excel colors have no alpha, and a stored alpha of 0 shows as solid black. A translucent color
+    /// is written as it looks on a white sheet; a fully transparent one becomes white.
+    /// </summary>
+    private static XLColor ToXLColor(ReportColor c)
+    {
+        static int OverWhite(byte channel, byte alpha) => (channel * alpha + 255 * (255 - alpha) + 127) / 255;
+        return XLColor.FromArgb(255, OverWhite(c.R, c.A), OverWhite(c.G, c.A), OverWhite(c.B, c.A));
+    }
+
+    /// <summary>Fills a cell, or leaves it unfilled for a fully transparent color.</summary>
+    private static void ApplyFill(IXLCell cell, ReportColor color)
+    {
+        if (color.A > 0) cell.Style.Fill.BackgroundColor = ToXLColor(color);
+    }
+
+    /// <summary>The font to name in the workbook; <c>null</c> for the generic default, which is not an Excel font.</summary>
+    private static string? ExcelFontName(TextStyle style) =>
+        string.IsNullOrEmpty(style.FontFamily) || style.FontFamily == "sans-serif" ? null : style.FontFamily;
 
     private static XLAlignmentHorizontalValues MapTextAlignment(TextAlignment a) =>
         a switch

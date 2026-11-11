@@ -309,4 +309,119 @@ public class RdlcRegressionTests
         }
         finally { dir.Delete(recursive: true); }
     }
+
+    // ── Page margins ─────────────────────────────────────────────────────────
+
+    private static string ReportWithPage(string page) => $"""
+        <Report xmlns="{Ns}"><ReportSections><ReportSection>
+          <Page><PageWidth>80mm</PageWidth><PageHeight>200mm</PageHeight>{page}</Page>
+          <Body><ReportItems>{Textbox("x")}</ReportItems></Body>
+        </ReportSection></ReportSections></Report>
+        """;
+
+    [Fact]
+    public void ZeroMargins_AreApplied()
+    {
+        var page = DocumentRdlcExtensions.FromRdlcXml(ReportWithPage(
+            "<TopMargin>0in</TopMargin><BottomMargin>0cm</BottomMargin><LeftMargin>0pt</LeftMargin><RightMargin>0</RightMargin>"))
+            .Settings.Pages[0];
+
+        Assert.Equal(0, page.MarginTop);
+        Assert.Equal(0, page.MarginBottom);
+        Assert.Equal(0, page.MarginLeft);
+        Assert.Equal(0, page.MarginRight);
+    }
+
+    [Fact]
+    public void MissingOrUnreadableMargins_KeepTheDefault()
+    {
+        var defaults = new Core.PageSettings();
+        var page = DocumentRdlcExtensions.FromRdlcXml(ReportWithPage(
+            "<TopMargin>1in</TopMargin><LeftMargin>wide</LeftMargin><RightMargin>-1in</RightMargin>"))
+            .Settings.Pages[0];
+
+        Assert.Equal(72, page.MarginTop);
+        Assert.Equal(defaults.MarginBottom, page.MarginBottom);
+        Assert.Equal(defaults.MarginLeft, page.MarginLeft);
+        Assert.Equal(defaults.MarginRight, page.MarginRight);
+    }
+
+    // ── Paragraphs ───────────────────────────────────────────────────────────
+
+    private static string Paragraph(params string[] runs) =>
+        "<Paragraph><TextRuns>" + string.Concat(runs.Select(r => $"<TextRun><Value>{r}</Value></TextRun>")) + "</TextRuns></Paragraph>";
+
+    [Fact]
+    public void Paragraphs_StartOnTheirOwnLine()
+    {
+        var doc = DocumentRdlcExtensions.FromRdlcXml(Report(
+            $"<Textbox Name=\"T\"><Paragraphs>{Paragraph("A", "a")}{Paragraph()}{Paragraph("B")}</Paragraphs></Textbox>"));
+
+        Assert.Equal("Aa\n\nB", Text(doc));
+    }
+
+    [Fact]
+    public void SingleParagraph_HasNoLineBreak()
+    {
+        var doc = DocumentRdlcExtensions.FromRdlcXml(Report($"<Textbox Name=\"T\"><Paragraphs>{Paragraph("A", "B")}</Paragraphs></Textbox>"));
+        Assert.Equal("AB", Text(doc));
+    }
+
+    // ── Expressions that cannot be evaluated ─────────────────────────────────
+
+    [Theory]
+    [InlineData("=1.2.3")]
+    [InlineData("=1E+30")]
+    [InlineData("=CInt(99999999999999999999)")]
+    [InlineData("=CLng(-99999999999999999999)")]
+    public void BadNumbers_AreReportedAsWarnings_NotThrown(string expression)
+    {
+        var factory = new RdlcDocumentFactory();
+        var doc = factory.ParseFromXml(Report(Textbox(expression)));
+
+        Assert.Equal("", Text(doc));
+        Assert.Contains(factory.Warnings, w => w.Contains(expression));
+    }
+
+    [Fact]
+    public void BadNumbers_InStrictMode_ThrowNotSupported()
+    {
+        var options = new RdlcImportOptions { StrictExpressions = true };
+        Assert.Throws<NotSupportedException>(() => DocumentRdlcExtensions.FromRdlcXml(Report(Textbox("=1.2.3")), options: options));
+    }
+
+    [Theory]
+    [InlineData("=Left(\"abc\", 99999999999)", "abc")]
+    [InlineData("=Left(\"abc\", -99999999999)", "")]
+    [InlineData("=Right(\"abc\", 99999999999)", "abc")]
+    [InlineData("=Mid(\"abc\", 2, 99999999999)", "bc")]
+    [InlineData("=Mid(\"abc\", -99999999999)", "abc")]
+    [InlineData("=Mid(\"abc\", 99999999999)", "")]
+    [InlineData("=Choose(99999999999, \"a\", \"b\")", "")]
+    [InlineData("=FormatNumber(1.5, -1)", "1.50")]
+    [InlineData("=FormatNumber(1.5, 3)", "1.500")]
+    [InlineData("=2 ^ -1", "0.5")]
+    [InlineData("=-2 ^ 2", "-4")]
+    public void OutOfRangeArguments_Saturate(string expression, string expected)
+    {
+        Assert.Equal(expected, new RdlcExpressionEvaluator().Evaluate(expression));
+    }
+
+    [Fact]
+    public void HugeDecimalPlaces_AreCapped()
+        => Assert.Equal(2 + 99, new RdlcExpressionEvaluator().Evaluate("=FormatNumber(1.5, 99999999999)").Length);
+
+    private sealed class CaseTwins
+    {
+        public string Total => "upper";
+        public string total => "lower";
+        public string Other => "other";
+    }
+
+    [Theory]
+    [InlineData("=Fields!Total.Value", "upper")]
+    [InlineData("=Fields!total.Value", "lower")]
+    [InlineData("=Fields!OTHER.Value", "other")]
+    public void Members_ThatDifferOnlyInCase_ResolveToTheExactName(string expression, string expected)
+        => Assert.Equal(expected, new RdlcExpressionEvaluator().Evaluate(expression, new CaseTwins()));
 }

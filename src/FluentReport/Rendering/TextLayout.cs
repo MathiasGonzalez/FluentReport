@@ -1,3 +1,4 @@
+using System.Globalization;
 using FluentReport.Elements;
 using FluentReport.Styling;
 
@@ -80,15 +81,18 @@ internal static class TextLayout
             if (line.Runs.Count == 0 && width > maxWidth && token.Text is { Length: > 1 } longWord && maxWidth > 0)
             {
                 // A word wider than the line: break it at character level instead of overflowing.
-                var rest = longWord;
-                while (rest.Length > 0)
+                // Cuts fall between text elements, so a surrogate pair (an emoji) or a letter with its
+                // combining marks is never torn apart.
+                int[] starts = StringInfo.ParseCombiningCharacters(longWord);
+                int first = 0;
+                while (first < starts.Length)
                 {
-                    int fit = FittingPrefix(rest, token.Style, maxWidth, fonts);
-                    var chunk = rest[..fit];
-                    rest = rest[fit..];
+                    int next = first + FittingElements(longWord, starts, first, token.Style, maxWidth, fonts);
+                    var chunk = longWord[starts[first]..End(longWord, starts, next)];
+                    first = next;
                     line.Runs.Add(new TextRun(token.Span, token.Style, chunk, false));
                     x = fonts.Measure(chunk, token.Style);
-                    if (rest.Length > 0) Finish(endsParagraph: false);
+                    if (first < starts.Length) Finish(endsParagraph: false);
                 }
                 continue;
             }
@@ -101,13 +105,17 @@ internal static class TextLayout
         return new TextBlock(element, lines);
     }
 
-    private static int FittingPrefix(string text, TextStyle style, float maxWidth, FontCache fonts)
+    /// <summary>Index in <paramref name="text"/> where text element <paramref name="element"/> starts; the length for the one past the last.</summary>
+    private static int End(string text, int[] starts, int element) => element < starts.Length ? starts[element] : text.Length;
+
+    /// <summary>How many text elements from <paramref name="first"/> fit in <paramref name="maxWidth"/>; at least one, so layout always advances.</summary>
+    private static int FittingElements(string text, int[] starts, int first, TextStyle style, float maxWidth, FontCache fonts)
     {
-        int lo = 1, hi = text.Length;
+        int lo = 1, hi = starts.Length - first;
         while (lo < hi)
         {
             int mid = (lo + hi + 1) / 2;
-            if (fonts.Measure(text[..mid], style) <= maxWidth) lo = mid;
+            if (fonts.Measure(text[starts[first]..End(text, starts, first + mid)], style) <= maxWidth) lo = mid;
             else hi = mid - 1;
         }
         return lo;

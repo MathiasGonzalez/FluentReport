@@ -32,6 +32,9 @@ public class HtmlDocumentRenderer
     /// <summary>1-based number of the page being rendered; each document page is one HTML page.</summary>
     private int _currentPage = 1;
 
+    /// <summary>Alignment of the innermost aligned container being rendered; <c>null</c> outside one.</summary>
+    private HorizontalAlignment? _alignment;
+
     private string RoleAttr => _options.OutlookCompatible ? "role=\"presentation\" " : "";
 
     // ── Public render methods ─────────────────────────────────────────────────
@@ -285,10 +288,10 @@ public class HtmlDocumentRenderer
                 var style = new StringBuilder("vertical-align: top; padding: 4px;");
                 if (tag == "th") style.Append(" font-weight: bold;");
                 if (table.BorderWidth > 0)
-                    style.Append($" border: {N(table.BorderWidth)}px solid {ColorToHex(table.BorderColor)};");
+                    style.Append($" border: {N(table.BorderWidth)}px solid {CssColor(table.BorderColor)};");
 
                 var bg = ExtractBackgroundColor(cell.Content);
-                if (bg.HasValue) style.Append($" background-color: {ColorToHex(bg.Value)};");
+                if (bg.HasValue) style.Append($" background-color: {CssColor(bg.Value)};");
 
                 var align = ExtractCellAlignment(cell.Content);
                 if (align != null) style.Append($" text-align: {align};");
@@ -311,7 +314,7 @@ public class HtmlDocumentRenderer
             TextElement text          => RenderTextInline(text),
             PaddingElement pad        => pad.Child != null ? RenderCellContent(pad.Child) : "",
             BorderElement border      => border.Child != null ? RenderCellContent(border.Child) : "",
-            AlignElement align        => align.Child != null ? RenderCellContent(align.Child) : "",
+            AlignElement align        => align.Child != null ? Aligned(align.Alignment, () => RenderCellContent(align.Child)) : "",
             _                        => RenderElement(element)
         };
     }
@@ -325,14 +328,14 @@ public class HtmlDocumentRenderer
         if (text.Spans.Count == 1)
         {
             var span = text.Spans[0];
-            return $"<p style=\"margin: 0; padding: 0; {BuildTextStyle(span.Style)}\">{Encode(SpanText(span))}</p>";
+            return $"<p style=\"margin: 0; padding: 0; {BuildTextStyle(span.Style)}\">{EncodeText(SpanText(span))}</p>";
         }
 
         var sb = new StringBuilder();
         sb.Append($"<p style=\"margin: 0; padding: 0; {BuildTextStyle(text.Style)}\">");
         foreach (var span in text.Spans)
         {
-            string content = Encode(SpanText(span));
+            string content = EncodeText(SpanText(span));
             sb.Append($"<span style=\"{BuildTextStyle(span.Style)}\">{content}</span>");
         }
         sb.Append("</p>");
@@ -346,13 +349,13 @@ public class HtmlDocumentRenderer
         if (text.Spans.Count == 1)
         {
             var span = text.Spans[0];
-            return $"<span style=\"{BuildTextStyle(span.Style)}\">{Encode(SpanText(span))}</span>";
+            return $"<span style=\"{BuildTextStyle(span.Style)}\">{EncodeText(SpanText(span))}</span>";
         }
 
         var sb = new StringBuilder();
         foreach (var span in text.Spans)
         {
-            string content = Encode(SpanText(span));
+            string content = EncodeText(SpanText(span));
             sb.Append($"<span style=\"{BuildTextStyle(span.Style)}\">{content}</span>");
         }
         return sb.ToString();
@@ -369,13 +372,13 @@ public class HtmlDocumentRenderer
     {
         var style = new StringBuilder("border-collapse: collapse;");
         if (border.BackgroundColor.HasValue)
-            style.Append($" background-color: {ColorToHex(border.BackgroundColor.Value)};");
+            style.Append($" background-color: {CssColor(border.BackgroundColor.Value)};");
 
         if (border.Border.Width > 0)
         {
             var b = border.Border;
             // Build per-side border styles for maximum email client compatibility
-            string bVal = $"{N(b.Width)}px solid {ColorToHex(b.Color)}";
+            string bVal = $"{N(b.Width)}px solid {CssColor(b.Color)}";
             if (b.Sides.HasFlag(BorderSide.Top))    style.Append($" border-top: {bVal};");
             if (b.Sides.HasFlag(BorderSide.Right))  style.Append($" border-right: {bVal};");
             if (b.Sides.HasFlag(BorderSide.Bottom)) style.Append($" border-bottom: {bVal};");
@@ -417,17 +420,29 @@ public class HtmlDocumentRenderer
         sb.AppendLine($"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">");
         sb.AppendLine($"<tr><td align=\"{textAlign}\" style=\"text-align: {textAlign}; padding: 0;\">");
         if (align.Child != null)
-            sb.AppendLine(RenderElement(align.Child));
+            sb.AppendLine(Aligned(align.Alignment, () => RenderElement(align.Child)));
         sb.AppendLine("</td></tr>");
         sb.AppendLine("</table>");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Renders content inside an aligned container. Images are blocks, which <c>text-align</c> does
+    /// not move, so they read the alignment from here and position themselves with margins.
+    /// </summary>
+    private string Aligned(HorizontalAlignment alignment, Func<string> render)
+    {
+        var outer = _alignment;
+        _alignment = alignment;
+        try { return render(); }
+        finally { _alignment = outer; }
     }
 
     // ── Visual elements ───────────────────────────────────────────────────────
 
     private string RenderLine(LineElement line)
     {
-        string color = ColorToHex(line.Color);
+        string color = CssColor(line.Color);
         return $"<table {RoleAttr}width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse: collapse;\">" +
                $"<tr><td style=\"border-top: {N(line.Thickness)}px solid {color}; height: 0; font-size: 0; line-height: 0; padding: 0;\">&nbsp;</td></tr>" +
                "</table>";
@@ -441,7 +456,7 @@ public class HtmlDocumentRenderer
                "</table>";
     }
 
-    private static string RenderImage(ImageElement image)
+    private string RenderImage(ImageElement image)
     {
         if (image.MimeType is not { } mime)
             return "<!-- image not available -->";
@@ -451,6 +466,8 @@ public class HtmlDocumentRenderer
         var style = new StringBuilder("display: block; max-width: 100%; height: auto;");
         if (image.FixedWidth.HasValue)  style.Append($" width: {(int)image.FixedWidth.Value}px;");
         if (image.FixedHeight.HasValue) style.Append($" height: {(int)image.FixedHeight.Value}px;");
+        if (_alignment == HorizontalAlignment.Center) style.Append(" margin: 0 auto;");
+        else if (_alignment == HorizontalAlignment.Right) style.Append(" margin: 0 0 0 auto;");
 
         return $"<img src=\"data:{mime};base64,{base64}\" alt=\"\" style=\"{style}\">";
     }
@@ -471,7 +488,7 @@ public class HtmlDocumentRenderer
         var sb = new StringBuilder();
         sb.Append($"font-family: {SanitizeFontFamily(family)}; ");
         sb.Append($"font-size: {N(style.FontSize)}px; ");
-        sb.Append($"color: {ColorToHex(style.EffectiveColor)}; ");
+        sb.Append($"color: {CssColor(style.EffectiveColor)}; ");
         if (style.EffectiveBold)  sb.Append("font-weight: bold; ");
         if (style.EffectiveItalic) sb.Append("font-style: italic; ");
         if (style.Underline)       sb.Append("text-decoration: underline; ");
@@ -501,10 +518,22 @@ public class HtmlDocumentRenderer
     /// <summary>Formats a CSS number. CSS always uses '.' as decimal separator, whatever the current culture.</summary>
     private static string N(float value, string format = "0.##") => value.ToString(format, CultureInfo.InvariantCulture);
 
-    private static string ColorToHex(ReportColor c) =>
-        $"#{c.R:X2}{c.G:X2}{c.B:X2}";
+    /// <summary>
+    /// CSS value for a color: <c>#RRGGBB</c> when opaque, <c>transparent</c> when fully transparent
+    /// and <c>rgba()</c> in between, so the alpha channel is never dropped.
+    /// </summary>
+    private static string CssColor(ReportColor c) => c.A switch
+    {
+        255 => $"#{c.R:X2}{c.G:X2}{c.B:X2}",
+        0 => "transparent",
+        _ => $"rgba({c.R}, {c.G}, {c.B}, {N(c.A / 255f, "0.###")})"
+    };
 
     private static string Encode(string s) => WebUtility.HtmlEncode(s);
+
+    /// <summary>Encodes span text. Line breaks become <c>&lt;br&gt;</c>, as the PDF output breaks the line there.</summary>
+    private static string EncodeText(string s) =>
+        Encode(s.Replace("\r\n", "\n").Replace('\r', '\n')).Replace("\n", "<br>");
 
     // ── Content extraction helpers ────────────────────────────────────────────
 

@@ -376,6 +376,51 @@ public class PdfRenderingTests
         Assert.Contains("CHART-FALLBACK", doc.GenerateHtml());
     }
 
+    private static bool IsRed(SKColor c) => c.Red > 200 && c.Green < 80 && c.Blue < 80;
+
+    [Fact]
+    public void Chart_LegendThatWraps_StaysInsideTheChartHeight()
+    {
+        const int margin = 40, height = 160;
+        var doc = Document.Create(c => c.Page(p =>
+        {
+            p.MarginAll(margin);
+            var chart = p.Content().Chart().Type(ChartType.Bar).Height(height).Categories(["Q1"]);
+            for (int i = 0; i < 12; i++) chart.AddSeries($"A fairly long series name {i}", [i + 1], "#FF0000");
+        }));
+
+        using var bitmap = Render(doc);
+        bool drawnBelow = false;
+        for (int y = margin + height + 1; y < bitmap.Height && !drawnBelow; y++)
+            for (int x = 0; x < bitmap.Width && !drawnBelow; x++)
+                drawnBelow = bitmap.GetPixel(x, y) != SKColors.White;
+
+        Assert.False(drawnBelow);
+    }
+
+    [Theory]
+    [InlineData(ChartType.Bar)]
+    [InlineData(ChartType.Line)]
+    public void Chart_NonFiniteValues_AreGaps(ChartType type)
+    {
+        const int margin = 40;
+        var doc = Document.Create(c => c.Page(p =>
+        {
+            p.MarginAll(margin);
+            p.Content().Chart().Type(type).Height(200)
+                .AddSeries("Series", [1, double.NaN, 3, double.PositiveInfinity, 2], "#FF0000");
+        }));
+
+        // The finite values still get a scale: the highest one (3) reaches the top of the plot.
+        using var bitmap = Render(doc);
+        bool drawnAtTheTop = false;
+        for (int y = margin; y < margin + 60 && !drawnAtTheTop; y++)
+            for (int x = 0; x < bitmap.Width && !drawnAtTheTop; x++)
+                drawnAtTheTop = IsRed(bitmap.GetPixel(x, y));
+
+        Assert.True(drawnAtTheTop);
+    }
+
     [Fact]
     public void Canvas_CallbackReceivesItsRectangle()
     {

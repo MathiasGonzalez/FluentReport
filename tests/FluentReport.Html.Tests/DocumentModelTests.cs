@@ -97,6 +97,48 @@ public class DocumentModelTests
         Assert.Contains("BETA", html);
     }
 
+    [Fact]
+    public void DerivedSpanStyle_ChangedThroughTheProperty_IsKept()
+    {
+        var text = new TextElement();
+        text.AddSpan("x", s => s.Italic = true);
+
+        text.Spans[0].Style.Bold = true;
+
+        Assert.True(text.Spans[0].Style.Bold);
+        Assert.True(text.Spans[0].Style.Italic);
+    }
+
+    [Fact]
+    public void DerivedSpanStyle_IsTheSameInstance_UntilTheElementStyleChanges()
+    {
+        int derivations = 0;
+        var text = new TextElement();
+        text.AddSpan("x", s => { derivations++; s.Italic = true; });
+
+        var first = text.Spans[0].Style;
+        Assert.Same(first, text.Spans[0].Style);
+        Assert.Equal(1, derivations);
+
+        text.Style.FontSize = 30;
+
+        Assert.Equal(30, text.Spans[0].Style.FontSize);
+        Assert.True(text.Spans[0].Style.Italic);
+        Assert.Equal(2, derivations);
+    }
+
+    [Fact]
+    public void DerivedSpanStyle_OnceChanged_StopsFollowingTheElement()
+    {
+        var text = new TextElement();
+        text.AddSpan("x", _ => { });
+
+        text.Spans[0].Style.FontSize = 8;
+        text.Style.FontSize = 30;
+
+        Assert.Equal(8, text.Spans[0].Style.FontSize);
+    }
+
     private sealed class CustomElement : IElement;
 
     [Fact]

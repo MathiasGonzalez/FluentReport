@@ -58,20 +58,12 @@ internal sealed class DocumentRenderer : IDisposable
             {
                 var (head, tail) = _engine.Split(remaining, width, area, pageIsEmpty: true);
                 pages.Add(new PageLayout(page, head, header, footer, page.Size));
-                remaining = IsEmpty(tail) ? null : tail;
+                remaining = LayoutEngine.IsEmpty(tail) ? null : tail; // a trailing page break adds no blank page
             }
         }
         _engine.TotalPages = pages.Count;
         return pages;
     }
-
-    /// <summary>A column left over by a trailing page break carries nothing to draw.</summary>
-    private static bool IsEmpty(IElement? element) => element switch
-    {
-        null => true,
-        ColumnElement column => column.Items.All(i => i is PageBreakElement || IsEmpty(i) && i is ColumnElement),
-        _ => false
-    };
 
     private void DrawPage(SKCanvas canvas, int index)
     {

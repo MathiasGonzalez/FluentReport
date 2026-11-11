@@ -102,7 +102,7 @@ internal sealed class LayoutEngine : IDisposable
         bool first = true;
         foreach (var item in column.Items)
         {
-            if (item is PageBreakElement) continue;
+            if (IsPageBreak(item)) continue;
             if (!first) total += column.Spacing;
             first = false;
             total += Measure(item, width);
@@ -177,7 +177,8 @@ internal sealed class LayoutEngine : IDisposable
     {
         if (inner.Head == null) return new SplitResult(null, original);
         if (inner.Tail == null) return new SplitResult(original, null);
-        return new SplitResult(clone(inner.Head), clone(inner.Tail));
+        // An empty tail only asks for a new page: decorating it would turn it into content.
+        return new SplitResult(clone(inner.Head), IsEmpty(inner.Tail) ? inner.Tail : clone(inner.Tail));
     }
 
     private SplitResult SplitColumn(ColumnElement column, float width, float available, bool pageIsEmpty)
@@ -188,11 +189,13 @@ internal sealed class LayoutEngine : IDisposable
         for (int i = 0; i < column.Items.Count; i++)
         {
             var item = column.Items[i];
-            if (item is PageBreakElement)
+            if (IsPageBreak(item))
             {
-                if (head.Count == 0) continue; // no blank pages for leading or repeated breaks
+                // No blank pages for leading or repeated breaks. A nested column that starts with a
+                // break still breaks when the enclosing column already put content on this page.
+                if (head.Count == 0 && pageIsEmpty) continue;
                 // An empty tail still tells the enclosing column to start a new page.
-                return new SplitResult(Column(column, head), Rest(column, i + 1) ?? new ColumnElement());
+                return new SplitResult(head.Count > 0 ? Column(column, head) : null, Rest(column, i + 1) ?? new ColumnElement());
             }
 
             float gap = head.Count > 0 ? column.Spacing : 0;
@@ -214,10 +217,12 @@ internal sealed class LayoutEngine : IDisposable
 
             if (head.Count == 0) return new SplitResult(null, column);
 
+            // An empty tail (a page break with nothing after it) has done its job once the page is cut;
+            // kept in the tail it would add a spacing gap at the top of the next page.
             var tail = new List<IElement>();
-            if (part.Tail != null) tail.Add(part.Tail);
+            if (part.Tail != null && !IsEmpty(part.Tail)) tail.Add(part.Tail);
             tail.AddRange(column.Items.Skip(i + 1));
-            return new SplitResult(Column(column, head), tail.Count > 0 ? Column(column, tail) : null);
+            return new SplitResult(Column(column, head), tail.Count > 0 ? Column(column, tail) : new ColumnElement());
         }
 
         return new SplitResult(head.Count == column.Items.Count ? column : Column(column, head), null);
@@ -230,6 +235,31 @@ internal sealed class LayoutEngine : IDisposable
         PaddingElement { Child: { } c } => ContainsPageBreak(c),
         BorderElement { Child: { } c } => ContainsPageBreak(c),
         AlignElement { Child: { } c } => ContainsPageBreak(c),
+        _ => false
+    };
+
+    /// <summary>A page break, bare or decorated (<c>Item().PaddingTop(5).PageBreak()</c>): the decoration is not drawn.</summary>
+    private static bool IsPageBreak(IElement element) => element switch
+    {
+        PageBreakElement => true,
+        PaddingElement { Child: { } c } => IsPageBreak(c),
+        BorderElement { Child: { } c } => IsPageBreak(c),
+        AlignElement { Child: { } c } => IsPageBreak(c),
+        _ => false
+    };
+
+    /// <summary>
+    /// Nothing to draw: page breaks and columns of them, bare or decorated. A split returns such a
+    /// tail when a page break is the last item, to tell the caller to start a new page. A decorated
+    /// column with no page break in it is not empty: its border, background and padding are drawn.
+    /// </summary>
+    public static bool IsEmpty(IElement? element) => element switch
+    {
+        null or PageBreakElement => true,
+        ColumnElement column => column.Items.All(IsEmpty),
+        PaddingElement { Child: { } c } => ContainsPageBreak(c) && IsEmpty(c),
+        BorderElement { Child: { } c } => ContainsPageBreak(c) && IsEmpty(c),
+        AlignElement { Child: { } c } => ContainsPageBreak(c) && IsEmpty(c),
         _ => false
     };
 
@@ -369,7 +399,7 @@ internal sealed class LayoutEngine : IDisposable
                 bool first = true;
                 foreach (var item in column.Items)
                 {
-                    if (item is PageBreakElement) continue;
+                    if (IsPageBreak(item)) continue;
                     if (!first) cy += column.Spacing;
                     first = false;
                     float h = Measure(item, width);
@@ -650,8 +680,26 @@ internal sealed class LayoutEngine : IDisposable
         float plotX = x + axisLeft;
         float plotY = y + titleOffset + padding;
         float plotW = width - axisLeft - padding;
-        float plotH = height - titleOffset - legendHeight - padding - axisBottom - padding * 2;
-        if (plotW <= 0 || plotH <= 0) return;
+        if (plotW <= 0) return;
+
+        // The legend wraps onto as many rows as it needs and the plot gives up that height, so the
+        // chart stays inside its box. The plot keeps a minimum; legend rows beyond it are not drawn.
+        const float minPlotHeight = 40f;
+        float fixedHeight = titleOffset + axisBottom + padding * 3;
+        int legendRows = 1;
+        {
+            float lx = plotX;
+            foreach (var series in chart.Series)
+            {
+                float lw = _fonts.Measure(series.Label, axisStyle);
+                if (lx > plotX && lx + 14 + lw > x + width) { lx = plotX; legendRows++; }
+                lx += 14 + lw + 14;
+            }
+        }
+        int maxLegendRows = Math.Max(1, (int)((height - fixedHeight - minPlotHeight) / legendHeight));
+        legendRows = Math.Min(legendRows, maxLegendRows);
+        float plotH = height - fixedHeight - legendHeight * legendRows;
+        if (plotH <= 0) return;
 
         if (chart.Title != null)
         {
@@ -659,7 +707,8 @@ internal sealed class LayoutEngine : IDisposable
             DrawRun(canvas, chart.Title, x + (width - tw) / 2, y + titleHeight, tw, titleStyle);
         }
 
-        var values = chart.Series.SelectMany(s => s.Values).ToList();
+        // NaN and infinite values are gaps: they have no position on the axis.
+        var values = chart.Series.SelectMany(s => s.Values).Where(double.IsFinite).ToList();
         double max = Math.Max(0, values.DefaultIfEmpty(0).Max());
         double min = Math.Min(0, values.DefaultIfEmpty(0).Min());
         double range = max - min;
@@ -703,20 +752,32 @@ internal sealed class LayoutEngine : IDisposable
                 using var fill = Fill(color);
                 for (int c = 0; c < categories && c < series.Values.Count; c++)
                 {
+                    if (!double.IsFinite(series.Values[c])) continue;
                     float top = ToY(Math.Max(0, series.Values[c]));
                     float bottom = ToY(Math.Min(0, series.Values[c])); // bars grow from zero
-                    canvas.DrawRect(plotX + categoryWidth * c + categoryWidth * 0.1f + barWidth * si, top, barWidth - 1, bottom - top, fill);
+                    canvas.DrawRect(plotX + categoryWidth * c + categoryWidth * 0.1f + barWidth * si, top, Math.Max(0.5f, barWidth - 1), bottom - top, fill);
                 }
             }
             else
             {
                 using var stroke = Stroke(color, 2);
                 using var dot = Fill(color);
-                var points = new SKPoint[Math.Min(categories, series.Values.Count)];
-                for (int c = 0; c < points.Length; c++)
-                    points[c] = new SKPoint(plotX + categoryWidth * c + categoryWidth / 2, ToY(series.Values[c]));
-                canvas.DrawPoints(SKPointMode.Polygon, points, stroke);
-                foreach (var point in points) canvas.DrawCircle(point, 3, dot);
+                // The line breaks at a gap instead of joining the points on either side of it.
+                var run = new List<SKPoint>();
+                void Flush()
+                {
+                    if (run.Count > 1) canvas.DrawPoints(SKPointMode.Polygon, run.ToArray(), stroke);
+                    foreach (var point in run) canvas.DrawCircle(point, 3, dot);
+                    run.Clear();
+                }
+                for (int c = 0; c < categories && c < series.Values.Count; c++)
+                {
+                    if (double.IsFinite(series.Values[c]))
+                        run.Add(new SKPoint(plotX + categoryWidth * c + categoryWidth / 2, ToY(series.Values[c])));
+                    else
+                        Flush();
+                }
+                Flush();
             }
         }
 
@@ -729,12 +790,14 @@ internal sealed class LayoutEngine : IDisposable
 
         // Legend, wrapped onto the available width.
         float legendX = plotX, legendY = plotY + plotH + axisBottom + padding;
+        int legendRow = 1;
         for (int si = 0; si < chart.Series.Count; si++)
         {
             var series = chart.Series[si];
             float lw = _fonts.Measure(series.Label, axisStyle);
             if (legendX > plotX && legendX + 14 + lw > x + width)
             {
+                if (++legendRow > legendRows) break;
                 legendX = plotX;
                 legendY += legendHeight;
             }

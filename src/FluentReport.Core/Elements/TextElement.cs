@@ -6,7 +6,12 @@ namespace FluentReport.Elements;
 public class TextSpan
 {
     private TextStyle? _style;
-    private Func<TextStyle>? _derivedStyle;
+    private TextStyle? _source;
+    private Action<TextStyle>? _configure;
+    private Derivation? _derived;
+
+    /// <summary>A derived style with the versions of it and of its source when it was built.</summary>
+    private sealed record Derivation(TextStyle Style, int StyleVersion, int SourceVersion);
 
     /// <summary>The text; <c>null</c> for a page-number span.</summary>
     public string? StaticText { get; set; }
@@ -17,16 +22,41 @@ public class TextSpan
 
     /// <summary>
     /// The span's effective style. Spans added through <see cref="TextElement.AddSpan(string, Action{TextStyle})"/>
-    /// derive it on every read from the element's current style plus their own overrides, so styling
-    /// applied to the element afterwards still reaches them. Assigning a style fixes it.
+    /// derive it from the element's style plus their own overrides, and derive it again when the
+    /// element's style changes, so styling applied to the element afterwards still reaches them.
+    /// Assigning a style, or changing a property of the returned one, fixes it: the span keeps that
+    /// style and stops following the element.
     /// </summary>
     public TextStyle Style
     {
-        get => _style ?? _derivedStyle?.Invoke() ?? (_style = new TextStyle());
-        set { _style = value; _derivedStyle = null; }
+        get
+        {
+            if (_style != null) return _style;
+            if (_source == null || _configure == null) return _style = new TextStyle();
+
+            var derived = _derived;
+            if (derived != null)
+            {
+                if (derived.Style.Version != derived.StyleVersion)
+                {
+                    // Changed through this property: keep it, as if it had been assigned.
+                    Style = derived.Style;
+                    return derived.Style;
+                }
+                if (_source.Version == derived.SourceVersion) return derived.Style;
+            }
+
+            int sourceVersion = _source.Version;
+            var style = _source.Clone();
+            _configure(style);
+            _derived = new Derivation(style, style.Version, sourceVersion);
+            return style;
+        }
+        set { _style = value; _source = null; _configure = null; _derived = null; }
     }
 
-    internal static TextSpan Derived(Func<TextStyle> style) => new() { _derivedStyle = style };
+    internal static TextSpan Derived(TextStyle source, Action<TextStyle> configure)
+        => new() { _source = source, _configure = configure };
 }
 
 /// <summary>A paragraph made of one or more spans. Wraps to the available width and splits between lines across pages.</summary>
@@ -85,10 +115,5 @@ public class TextElement : IElement
         _spans.Add(span);
     }
 
-    private TextSpan DerivedSpan(Action<TextStyle> configure) => TextSpan.Derived(() =>
-    {
-        var style = Style.Clone();
-        configure(style);
-        return style;
-    });
+    private TextSpan DerivedSpan(Action<TextStyle> configure) => TextSpan.Derived(Style, configure);
 }
