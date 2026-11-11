@@ -213,11 +213,36 @@ public class PaginationTests
         Assert.Single(Assert.IsType<ColumnElement>(pages[1].Content).Items);
     }
 
+    [Fact]
+    public void EmptyDecoratedBox_AfterAPageBreak_IsStillDrawn()
+    {
+        // A box with nothing inside still draws its border and padding: it is not a leftover of the break.
+        var pages = Pages(Doc(p => p.Content().Column(c =>
+        {
+            c.Item().Text("one");
+            c.Item().PageBreak();
+            c.Item().Border(1).Padding(10).Column(_ => { });
+        })));
+
+        Assert.Equal(2, pages.Count);
+        Assert.IsType<BorderElement>(Assert.Single(Assert.IsType<ColumnElement>(pages[1].Content).Items));
+    }
+
+    [Fact]
+    public void DecoratedColumnOfOnlyAPageBreak_AtTheEnd_AddsNoBlankPage()
+        => Assert.Single(Pages(Doc(p => p.Content().Column(c =>
+        {
+            c.Item().Text("one");
+            c.Item().Padding(5).Column(n => n.Item().PageBreak());
+        }))));
+
     // ── Long words ───────────────────────────────────────────────────────────
 
     [Theory]
     [InlineData("\U0001F600")]       // surrogate pair
     [InlineData("e\u0301")]          // letter + combining accent
+    [InlineData("\U0001F469\u200d\U0001F469\u200d\U0001F467")] // ZWJ sequence (family)
+    [InlineData("\U0001F1FA\U0001F1FE")] // flag: two regional indicators
     public void LongWord_IsNeverCutInsideATextElement(string unit)
     {
         var word = string.Concat(Enumerable.Repeat(unit, 60));

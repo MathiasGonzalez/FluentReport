@@ -250,15 +250,16 @@ internal sealed class LayoutEngine : IDisposable
 
     /// <summary>
     /// Nothing to draw: page breaks and columns of them, bare or decorated. A split returns such a
-    /// tail when a page break is the last item, to tell the caller to start a new page.
+    /// tail when a page break is the last item, to tell the caller to start a new page. A decorated
+    /// column with no page break in it is not empty: its border, background and padding are drawn.
     /// </summary>
     public static bool IsEmpty(IElement? element) => element switch
     {
         null or PageBreakElement => true,
         ColumnElement column => column.Items.All(IsEmpty),
-        PaddingElement { Child: { } c } => IsEmpty(c),
-        BorderElement { Child: { } c } => IsEmpty(c),
-        AlignElement { Child: { } c } => IsEmpty(c),
+        PaddingElement { Child: { } c } => ContainsPageBreak(c) && IsEmpty(c),
+        BorderElement { Child: { } c } => ContainsPageBreak(c) && IsEmpty(c),
+        AlignElement { Child: { } c } => ContainsPageBreak(c) && IsEmpty(c),
         _ => false
     };
 
