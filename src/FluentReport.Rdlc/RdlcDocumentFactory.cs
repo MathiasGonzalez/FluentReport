@@ -312,15 +312,15 @@ public sealed class RdlcDocumentFactory
         if (pageW > 0 && pageH > 0)
             page.Size = new PageSize(pageW, pageH);
 
-        float mt = ParseUnit(pageEl.Element(_ns + "TopMargin")?.Value);
-        float mb = ParseUnit(pageEl.Element(_ns + "BottomMargin")?.Value);
-        float ml = ParseUnit(pageEl.Element(_ns + "LeftMargin")?.Value);
-        float mr = ParseUnit(pageEl.Element(_ns + "RightMargin")?.Value);
+        // A margin the report declares is used as written, 0 included (labels, roll-paper tickets).
+        // Only a missing or unreadable one keeps the FluentReport default.
+        float? Margin(string name) =>
+            TryParseUnit(pageEl.Element(_ns + name)?.Value, out var pt) && pt >= 0 ? pt : null;
 
-        if (mt > 0) page.MarginTop = mt;
-        if (mb > 0) page.MarginBottom = mb;
-        if (ml > 0) page.MarginLeft = ml;
-        if (mr > 0) page.MarginRight = mr;
+        if (Margin("TopMargin") is { } mt) page.MarginTop = mt;
+        if (Margin("BottomMargin") is { } mb) page.MarginBottom = mb;
+        if (Margin("LeftMargin") is { } ml) page.MarginLeft = ml;
+        if (Margin("RightMargin") is { } mr) page.MarginRight = mr;
     }
 
     // ── ReportItems dispatcher ────────────────────────────────────────────────
@@ -646,10 +646,21 @@ public sealed class RdlcDocumentFactory
     private TextElement BuildTextFromParagraphs(XElement paragraphsEl, object? row, XElement? boxStyleEl)
     {
         var text = new TextElement();
+        bool firstParagraph = true;
 
         foreach (var paraEl in paragraphsEl.Elements(_ns + "Paragraph"))
         {
             var paraStyleEl = paraEl.Element(_ns + "Style");
+
+            // Each paragraph starts on its own line; an empty one leaves a blank line.
+            if (!firstParagraph)
+            {
+                var breakStyle = new TextStyle();
+                ApplyTextStyle(breakStyle, boxStyleEl, row);
+                ApplyTextStyle(breakStyle, paraStyleEl, row);
+                text.AddSpan("\n", breakStyle);
+            }
+            firstParagraph = false;
 
             foreach (var runEl in paraEl
                 .Elements(_ns + "TextRuns")
@@ -1308,32 +1319,34 @@ public sealed class RdlcDocumentFactory
     // ── Unit parser ───────────────────────────────────────────────────────────
 
     /// <summary>Converts an RDLC length string (e.g. "2.5in", "6cm", "12pt") to points (pt).</summary>
-    internal static float ParseUnit(string? value)
+    internal static float ParseUnit(string? value) => TryParseUnit(value, out var points) ? points : 0f;
+
+    /// <summary>
+    /// Like <see cref="ParseUnit"/>, but tells a length that is missing or unreadable (<c>false</c>)
+    /// from one that is really zero.
+    /// </summary>
+    internal static bool TryParseUnit(string? value, out float points)
     {
-        if (string.IsNullOrWhiteSpace(value)) return 0f;
+        points = 0f;
+        if (string.IsNullOrWhiteSpace(value)) return false;
         value = value.Trim();
 
-        if (value.EndsWith("in", StringComparison.OrdinalIgnoreCase)
-            && float.TryParse(value[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var inVal))
-            return inVal * 72f;
+        (string Suffix, float Factor)[] units =
+        [
+            ("in", 72f), ("cm", 28.3465f), ("mm", 2.83465f), ("pt", 1f),
+            ("px", 0.75f), // 96 dpi → 72 pt
+        ];
+        foreach (var (suffix, factor) in units)
+        {
+            if (value.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)
+                && float.TryParse(value[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var number))
+            {
+                points = number * factor;
+                return float.IsFinite(points);
+            }
+        }
 
-        if (value.EndsWith("cm", StringComparison.OrdinalIgnoreCase)
-            && float.TryParse(value[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var cmVal))
-            return cmVal * 28.3465f;
-
-        if (value.EndsWith("mm", StringComparison.OrdinalIgnoreCase)
-            && float.TryParse(value[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var mmVal))
-            return mmVal * 2.83465f;
-
-        if (value.EndsWith("pt", StringComparison.OrdinalIgnoreCase)
-            && float.TryParse(value[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var ptVal))
-            return ptVal;
-
-        if (value.EndsWith("px", StringComparison.OrdinalIgnoreCase)
-            && float.TryParse(value[..^2], NumberStyles.Float, CultureInfo.InvariantCulture, out var pxVal))
-            return pxVal * 0.75f; // 96 dpi → 72 pt
-
-        return float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var raw) ? raw : 0f;
+        return float.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out points) && float.IsFinite(points);
     }
 
     // ── Color parser ──────────────────────────────────────────────────────────

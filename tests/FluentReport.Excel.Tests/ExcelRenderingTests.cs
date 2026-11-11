@@ -671,4 +671,53 @@ public class ExcelRenderingTests
 
         Assert.Throws<InsufficientExecutionStackException>(() => Document.FromSettings(settings).GenerateExcel());
     }
+
+    // ── Colors and fonts ──────────────────────────────────────────────────────
+
+    private static XLWorkbook Workbook(Action<FluentReport.Builders.ColumnBuilder> content)
+    {
+        var bytes = Document.Create(c => c.Page(p => p.Content().Column(content))).GenerateExcel();
+        return new XLWorkbook(new MemoryStream(bytes));
+    }
+
+    [Fact]
+    public void TransparentBackground_LeavesTheCellUnfilled()
+    {
+        using var workbook = Workbook(col =>
+        {
+            col.Item().Background(FluentReport.Styling.ReportColor.Transparent).Text("clear");
+            col.Item().Text("plain");
+        });
+        var sheet = workbook.Worksheet(1);
+
+        Assert.Equal(sheet.Cell(2, 1).Style.Fill.BackgroundColor, sheet.Cell(1, 1).Style.Fill.BackgroundColor);
+        Assert.Equal(XLFillPatternValues.None, sheet.Cell(1, 1).Style.Fill.PatternType);
+    }
+
+    [Fact]
+    public void TranslucentBackground_IsBlendedOverWhite()
+    {
+        using var workbook = Workbook(col => col.Item().Background("#FF000080").Text("half"));
+        var color = workbook.Worksheet(1).Cell(1, 1).Style.Fill.BackgroundColor.Color;
+
+        Assert.Equal((255, 255, 127, 127), (color.A, color.R, color.G, color.B));
+    }
+
+    [Fact]
+    public void FontFamily_IsWritten_ExceptTheGenericDefault()
+    {
+        using var workbook = Workbook(col =>
+        {
+            col.Item().Text("named").FontFamily("Courier New");
+            col.Item().Text("default");
+            col.Item().Text(t => { t.Span("rich "); t.Span("named", s => s.FontFamily = "Courier New"); });
+        });
+        var sheet = workbook.Worksheet(1);
+
+        Assert.Equal("Courier New", sheet.Cell(1, 1).Style.Font.FontName);
+        Assert.NotEqual("sans-serif", sheet.Cell(2, 1).Style.Font.FontName);
+        var rich = sheet.Cell(3, 1).GetRichText().ToList();
+        Assert.NotEqual("sans-serif", rich[0].FontName);
+        Assert.Equal("Courier New", rich[1].FontName);
+    }
 }

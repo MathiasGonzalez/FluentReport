@@ -131,6 +131,106 @@ public class PaginationTests
         Assert.Equal("after", string.Join("", Texts(pages[1].Content!)));
     }
 
+    // ── Page breaks in nested and decorated containers ───────────────────────
+
+    private static string[] PageTexts(IReadOnlyList<PageLayout> pages)
+        => pages.Select(pg => string.Join("", Texts(pg.Content!))).ToArray();
+
+    [Fact]
+    public void PageBreak_AtTheStartOfANestedColumn_BreaksWhenThePageHasContent()
+    {
+        var pages = Pages(Doc(p => p.Content().Column(c =>
+        {
+            c.Item().Text("one");
+            c.Item().Column(n => { n.Item().PageBreak(); n.Item().Text("two"); });
+        })));
+
+        Assert.Equal(new[] { "one", "two" }, PageTexts(pages));
+    }
+
+    [Fact]
+    public void PageBreak_AtTheStartOfADecoratedNestedColumn_BreaksWhenThePageHasContent()
+    {
+        var pages = Pages(Doc(p => p.Content().Column(c =>
+        {
+            c.Item().Text("one");
+            c.Item().Padding(5).Column(n => { n.Item().PageBreak(); n.Item().Text("two"); });
+        })));
+
+        Assert.Equal(new[] { "one", "two" }, PageTexts(pages));
+    }
+
+    [Fact]
+    public void TrailingPageBreak_InsideADecoratedColumn_AddsNoBlankPage()
+    {
+        static void Content(ColumnBuilder c) { c.Item().Text("one"); c.Item().PageBreak(); }
+
+        Assert.Single(Pages(Doc(p => p.Content().Padding(10).Column(Content))));
+        Assert.Single(Pages(Doc(p => p.Content().Background("#EEEEEE").Column(Content))));
+        Assert.Single(Pages(Doc(p => p.Content().AlignCenter().Column(Content))));
+        Assert.Single(Pages(Doc(p => p.Content().Padding(10).Border(1).Column(o => o.Item().Padding(5).Column(Content)))));
+    }
+
+    [Fact]
+    public void PageBreak_InsideADecoratedColumn_KeepsTheDecorationOnBothPages()
+    {
+        var pages = Pages(Doc(p => p.Content().Padding(10).Column(c =>
+        {
+            c.Item().Text("one");
+            c.Item().PageBreak();
+            c.Item().Text("two");
+        })));
+
+        Assert.Equal(new[] { "one", "two" }, PageTexts(pages));
+        Assert.All(pages, pg => Assert.IsType<PaddingElement>(pg.Content));
+    }
+
+    [Fact]
+    public void DecoratedPageBreak_StillBreaks()
+    {
+        var pages = Pages(Doc(p => p.Content().Column(c =>
+        {
+            c.Item().Text("one");
+            c.Item().PaddingTop(5).PageBreak();
+            c.Item().Text("two");
+        })));
+
+        Assert.Equal(new[] { "one", "two" }, PageTexts(pages));
+    }
+
+    [Fact]
+    public void NestedTrailingPageBreak_LeavesNothingBeforeTheNextItem()
+    {
+        var pages = Pages(Doc(p => p.Content().Column(c =>
+        {
+            c.Spacing(10);
+            c.Item().Padding(5).Column(n => { n.Item().Text("one"); n.Item().PageBreak(); });
+            c.Item().Text("two");
+        })));
+
+        Assert.Equal(new[] { "one", "two" }, PageTexts(pages));
+        // Only "two": an empty leftover of the first item would push it down by the column spacing.
+        Assert.Single(Assert.IsType<ColumnElement>(pages[1].Content).Items);
+    }
+
+    // ── Long words ───────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("\U0001F600")]       // surrogate pair
+    [InlineData("e\u0301")]          // letter + combining accent
+    public void LongWord_IsNeverCutInsideATextElement(string unit)
+    {
+        var word = string.Concat(Enumerable.Repeat(unit, 60));
+        using var fonts = new FontCache(TestFonts.Resolve);
+
+        var block = TextLayout.Layout(new TextElement(word), 50, fonts);
+        var chunks = block.Lines.SelectMany(l => l.Runs).Select(r => r.Text!).ToList();
+
+        Assert.True(chunks.Count > 1);
+        Assert.Equal(word, string.Concat(chunks));
+        Assert.All(chunks, chunk => Assert.Equal(0, chunk.Length % unit.Length));
+    }
+
     [Fact]
     public void EmptyContent_ProducesOnePage()
         => Assert.Single(Pages(Doc(p => p.Header().Text("only a header"))));
