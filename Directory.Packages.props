@@ -4,8 +4,8 @@
     <!-- SkiaSharp 4 finds no system fonts on Linux with NativeAssets.Linux.NoDependencies and returns an empty
          typeface; FontCache then falls back to the bundled DejaVu Sans (src/FluentReport/Fonts).
          SystemFont_HasGlyphs in FluentReport.Tests checks the default font on CI (Ubuntu). -->
-    <PackageVersion Include="SkiaSharp" Version="4.154.0" />
-    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.154.0" />
-    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+    <PackageVersion Include="SkiaSharp" Version="4.156.0" />
+    <PackageVersion Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.156.0" />
+    <PackageVersion Include="xunit.v3" Version="4.0.3" />
   </ItemGroup>
 </Project>
