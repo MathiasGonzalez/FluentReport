@@ -584,3 +584,16 @@ FluentReport can render report definitions (`.rdlc`) and images that come from u
 | Text in Excel output | Written as text values, never as formulas. |
 
 Rendering still takes time and memory proportional to the data. When the input is untrusted, run it with a timeout and limit the size of uploaded files and datasets.
+
+## Verifying packages
+
+Every package is built, tested and published by the [NuGet workflow](https://github.com/MathiasGonzalez/FluentReport/blob/main/.github/workflows/nuget.yml) in this repository, with no long-lived API key: nuget.org accepts the push only from that workflow ([Trusted Publishing](https://learn.microsoft.com/nuget/nuget-org/trusted-publishing)). The workflow also records a signed [build provenance attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations) for each assembly, which names the commit and workflow run that built it.
+
+nuget.org adds its own signature to every `.nupkg` after upload, so verify the assemblies inside the package, which are unchanged. With the [GitHub CLI](https://cli.github.com):
+
+```bash
+unzip -p fluentreport.<version>.nupkg lib/net10.0/FluentReport.dll > FluentReport.dll
+gh attestation verify FluentReport.dll --repo MathiasGonzalez/FluentReport
+```
+
+Packages are found in `~/.nuget/packages/<id>/<version>/` after a restore. The tool package keeps its assemblies under `tools/net10.0/any/`.
