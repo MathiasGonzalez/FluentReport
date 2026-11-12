@@ -31,7 +31,7 @@ Every package is built, tested and published by the [NuGet workflow](.github/wor
 nuget.org adds its own signature to every `.nupkg` after upload, so verify the assemblies inside the package, which are unchanged. With the [GitHub CLI](https://cli.github.com):
 
 ```bash
-unzip -p fluentreport.3.2.1.nupkg lib/net10.0/FluentReport.dll > FluentReport.dll
+unzip -p fluentreport.<version>.nupkg lib/net10.0/FluentReport.dll > FluentReport.dll
 gh attestation verify FluentReport.dll --repo MathiasGonzalez/FluentReport
 ```
 
