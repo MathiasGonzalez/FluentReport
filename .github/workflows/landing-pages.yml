@@ -98,6 +98,7 @@ jobs:
                   <tr><td><a href="https://www.nuget.org/packages/FluentReport.Html"><code>FluentReport.Html</code></a></td><td>HTML/email renderer (inline styles)</td></tr>
                   <tr><td><a href="https://www.nuget.org/packages/FluentReport.Rdlc"><code>FluentReport.Rdlc</code></a></td><td>RDLC/SSRS importer</td></tr>
                   <tr><td><a href="https://www.nuget.org/packages/FluentReport.Core"><code>FluentReport.Core</code></a></td><td>Document model and fluent API</td></tr>
+                  <tr><td><a href="https://www.nuget.org/packages/FluentReport.Cli"><code>FluentReport.Cli</code></a></td><td>Command-line tool: <code>dnx FluentReport.Cli render report.rdlc -o out.pdf</code></td></tr>
                 </tbody>
               </table>
 

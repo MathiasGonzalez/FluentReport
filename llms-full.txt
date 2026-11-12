@@ -15,6 +15,7 @@ Facts to get right when writing code with FluentReport:
 - Receipts on roll paper: `page.ContinuousSize(227)` (80 mm) makes one page as tall as its content instead of a fixed height.
 - Fonts in PDF: the system font by default, the bundled DejaVu Sans when the system has none. For identical output everywhere pass `new PdfOptions { FontResolver = style => style.EffectiveBold ? boldTypeface : regularTypeface }` with `SKTypeface.FromFile(...)`.
 - RDLC: `Document.FromRdlc(path, datasets: new Dictionary<string, IEnumerable<object>> { ["DataSetName"] = rows.Cast<object>() }, parameters: …, options: new RdlcImportOptions { Culture = new CultureInfo("es-UY") })`, then any `Generate*` method. Rows can be POCOs or dictionaries. Use `new RdlcDocumentFactory(...)` and its `Warnings` to see what was not supported.
+- Command line, no project: `dnx FluentReport.Cli render report.rdlc --data DataSetName=rows.json -o out.pdf` (.NET 10 SDK; `-o` extension picks pdf, png, html or xlsx; `-p Name=value` for parameters; `--culture es-UY`). Rows are JSON arrays of objects.
 - Excel skips images; charts, canvases and rotated text render a text fallback in HTML and Excel.
 
 ## Docs
@@ -50,6 +51,7 @@ Facts to get right when writing code with FluentReport:
 | [`FluentReport.Excel`](https://www.nuget.org/packages/FluentReport.Excel) | Excel (.xlsx) renderer (ClosedXML) |
 | [`FluentReport.Rdlc`](https://www.nuget.org/packages/FluentReport.Rdlc) | RDLC / SSRS importer |
 | [`FluentReport.Core`](https://www.nuget.org/packages/FluentReport.Core) | Document model and fluent API, brought in by the packages above |
+| [`FluentReport.Cli`](https://www.nuget.org/packages/FluentReport.Cli) | Command-line tool: renders RDLC reports with JSON data, no project needed |
 
 ```shell
 dotnet add package FluentReport          # PDF
@@ -133,6 +135,20 @@ var invoice = Document.FromRdlc(
 invoice.GeneratePdf("invoice.pdf");
 ```
 
+### Command line
+
+`FluentReport.Cli` renders an RDLC report with JSON data from the terminal, with no project to
+create. With the .NET 10 SDK, `dnx` runs it without installing it:
+
+```shell
+dnx FluentReport.Cli render invoice.rdlc --data Lines=lines.json --culture es-UY -o invoice.pdf
+```
+
+The extension of `-o` picks the format (`.pdf`, `.png`, `.html`, `.xlsx`). Each dataset takes an
+array of JSON objects, one per row; `-p Name=value` sets report parameters. To call it as
+`fluentreport`, install it once with `dotnet tool install -g FluentReport.Cli`. Every option is in
+[its README](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Cli/README.md).
+
 ## Renderer support
 
 | Feature | PDF | HTML | Excel |
@@ -163,7 +179,7 @@ See the generated files in [`samples/FluentReport.Samples/output`](https://githu
 - [Migration to 3.0](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/migration-3.0.md)
 - [Security](https://github.com/MathiasGonzalez/FluentReport/blob/main/SECURITY.md) — reporting vulnerabilities and rendering untrusted reports
 - [UY fiscal document samples](https://github.com/MathiasGonzalez/FluentReport/blob/main/docs/uy-fiscal-samples.md) — salary slip, delivery note, payment receipt
-- Package READMEs: [PDF](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport/README.md) · [Core](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Core/README.md) · [Html](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Html/README.md) · [Excel](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Excel/README.md) · [Rdlc](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Rdlc/README.md)
+- Package READMEs: [PDF](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport/README.md) · [Core](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Core/README.md) · [Html](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Html/README.md) · [Excel](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Excel/README.md) · [Rdlc](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Rdlc/README.md) · [Cli](https://github.com/MathiasGonzalez/FluentReport/blob/main/src/FluentReport.Cli/README.md)
 
 ## Dependencies
 

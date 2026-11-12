@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 env:
-  PACKAGES: FluentReport.Core FluentReport FluentReport.Html FluentReport.Excel FluentReport.Rdlc
+  PACKAGES: FluentReport.Core FluentReport FluentReport.Html FluentReport.Excel FluentReport.Rdlc FluentReport.Cli
 
 jobs:
   publish:

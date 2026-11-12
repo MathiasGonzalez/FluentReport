@@ -14,7 +14,7 @@
 
   <!-- Shared NuGet metadata for the packages under src/. Bump Version to publish: the NuGet workflow reads it. -->
   <PropertyGroup Condition="$(MSBuildProjectDirectory.Contains('$([System.IO.Path]::DirectorySeparatorChar)src$([System.IO.Path]::DirectorySeparatorChar)'))">
-    <Version>3.2.0</Version>
+    <Version>3.2.1</Version>
     <Authors>Mathías González Benítez</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <RepositoryUrl>https://github.com/MathiasGonzalez/FluentReport</RepositoryUrl>

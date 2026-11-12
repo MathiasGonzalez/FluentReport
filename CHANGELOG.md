@@ -1,8 +1,16 @@
 # Changelog
 
-Notable changes to the FluentReport packages. All five packages share one version.
+Notable changes to the FluentReport packages. All six packages share one version.
 
-## Unreleased
+## 3.2.1
+
+### Added
+
+- `FluentReport.Cli`, a command-line tool that renders an RDLC report with JSON data to PDF, PNG,
+  HTML or Excel without creating a project: `dnx FluentReport.Cli render invoice.rdlc --data
+  Lines=lines.json -o invoice.pdf` (.NET 10 SDK), or `fluentreport ...` after
+  `dotnet tool install -g FluentReport.Cli`. Import warnings go to standard error, and the exit code
+  tells a bad argument (2) from a report or data that could not be used (1).
 
 ### Fixed
 
