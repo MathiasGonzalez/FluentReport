@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write   # push the release tag
+      id-token: write   # OIDC token for nuget.org Trusted Publishing and Sigstore
+      attestations: write   # build provenance attestations
 
     steps:
       - name: Checkout
@@ -69,10 +71,37 @@ jobs:
             dotnet pack src/$project/$project.csproj --no-build --configuration Release --output ./nupkgs
           done
 
+      # Signed build provenance (Sigstore) for the packages and the assemblies inside them.
+      # nuget.org adds its repository signature to every .nupkg, which changes the file's hash, but the
+      # DLLs inside stay byte-identical, so consumers verify those: see "Verifying packages" in SECURITY.md.
+      # The tool package (FluentReport.Cli) carries the same DLLs as the library packages.
+      - name: Attest build provenance
+        if: steps.check.outputs.missing != ''
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            nupkgs/*.nupkg
+            src/FluentReport.Core/bin/Release/net10.0/FluentReport.Core.dll
+            src/FluentReport/bin/Release/net10.0/FluentReport.dll
+            src/FluentReport.Html/bin/Release/net10.0/FluentReport.Html.dll
+            src/FluentReport.Excel/bin/Release/net10.0/FluentReport.Excel.dll
+            src/FluentReport.Rdlc/bin/Release/net10.0/FluentReport.Rdlc.dll
+            src/FluentReport.Cli/bin/Release/net10.0/FluentReport.Cli.dll
+
+      # Trusted Publishing: exchanges the GitHub OIDC token for a short-lived nuget.org API key.
+      # The policy on nuget.org trusts this repository and this workflow file only, so no
+      # long-lived API key is stored in the repository secrets.
+      - name: NuGet login (Trusted Publishing)
+        if: steps.check.outputs.missing != ''
+        id: nuget-login
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: mathiasgonzalez
+
       - name: Push to NuGet
         if: steps.check.outputs.missing != ''
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET_FLUENT_API_KEY }}
+          NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
         run: dotnet nuget push ./nupkgs/*.nupkg --api-key "$NUGET_API_KEY" --source https://api.nuget.org/v3/index.json
 
       - name: Tag release
